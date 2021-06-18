@@ -1,5 +1,5 @@
 ﻿using System;
-using OpenSlide.Interop;
+using OpenSlideSharp.Interop;
 
 namespace ConsoleApp1
 {

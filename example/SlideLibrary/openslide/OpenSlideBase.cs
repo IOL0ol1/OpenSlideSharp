@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using BruTile;
 using BruTile.Cache;
-using OpenSlide.Interop;
+using OpenSlideSharp;
 
 namespace SlideLibrary.Openslide
 {

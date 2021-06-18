@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="../../OpenSlideSharp.Common.props" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net35;net40;netstandard2.0;netcoreapp2.1;net5.0</TargetFrameworks>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <PackageId>OpenSlideSharp.runtime.win</PackageId>
+    <PackageTags>openslide image</PackageTags>
+    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/)</PackageReleaseNotes>
+    <Description>.NET bindings for OpenSlide(https://openslide.org/)</Description>
+    <NoWarn>1701;1702;NU5128;</NoWarn>
+    <Platforms>AnyCPU;x86</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="OpenSlideSharp.runtime.win.targets">
+      <PackagePath>buildTransitive\</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="openslide\x86\*.*">
+      <PackagePath>runtimes\win-x86\native\</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="openslide\x64\*.*">
+      <PackagePath>runtimes\win-x64\native\</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </Content>
+  </ItemGroup>
+
+</Project>
+  

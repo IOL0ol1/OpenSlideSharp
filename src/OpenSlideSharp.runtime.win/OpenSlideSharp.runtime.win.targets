@@ -1,0 +1,174 @@
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup>
+    <NativeDlls>$(MSBuildThisFileDirectory)..\runtimes</NativeDlls>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(Platform)' == 'x64' Or '$(Platform)' == 'AnyCPU' ">
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\iconv.dll')" Include="$(NativeDlls)\win-x64\native\iconv.dll">
+      <Link>openslide\x64\iconv.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libcairo-2.dll')" Include="$(NativeDlls)\win-x64\native\libcairo-2.dll">
+      <Link>openslide\x64\libcairo-2.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libffi-6.dll')" Include="$(NativeDlls)\win-x64\native\libffi-6.dll">
+      <Link>openslide\x64\libffi-6.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libgdk_pixbuf-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libgdk_pixbuf-2.0-0.dll">
+      <Link>openslide\x64\libgdk_pixbuf-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libgio-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libgio-2.0-0.dll">
+      <Link>openslide\x64\libgio-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libglib-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libglib-2.0-0.dll">
+      <Link>openslide\x64\libglib-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libgmodule-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libgmodule-2.0-0.dll">
+      <Link>openslide\x64\libgmodule-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libgobject-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libgobject-2.0-0.dll">
+      <Link>openslide\x64\libgobject-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libgthread-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libgthread-2.0-0.dll">
+      <Link>openslide\x64\libgthread-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libintl-8.dll')" Include="$(NativeDlls)\win-x64\native\libintl-8.dll">
+      <Link>openslide\x64\libintl-8.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libjpeg-62.dll')" Include="$(NativeDlls)\win-x64\native\libjpeg-62.dll">
+      <Link>openslide\x64\libjpeg-62.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libopenjp2.dll')" Include="$(NativeDlls)\win-x64\native\libopenjp2.dll">
+      <Link>openslide\x64\libopenjp2.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libopenslide-0.dll')" Include="$(NativeDlls)\win-x64\native\libopenslide-0.dll">
+      <Link>openslide\x64\libopenslide-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libpixman-1-0.dll')" Include="$(NativeDlls)\win-x64\native\libpixman-1-0.dll">
+      <Link>openslide\x64\libpixman-1-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libpng16-16.dll')" Include="$(NativeDlls)\win-x64\native\libpng16-16.dll">
+      <Link>openslide\x64\libpng16-16.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libsqlite3-0.dll')" Include="$(NativeDlls)\win-x64\native\libsqlite3-0.dll">
+      <Link>openslide\x64\libsqlite3-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libtiff-5.dll')" Include="$(NativeDlls)\win-x64\native\libtiff-5.dll">
+      <Link>openslide\x64\libtiff-5.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\libxml2-2.dll')" Include="$(NativeDlls)\win-x64\native\libxml2-2.dll">
+      <Link>openslide\x64\libxml2-2.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\openslide-jni.dll')" Include="$(NativeDlls)\win-x64\native\openslide-jni.dll">
+      <Link>openslide\x64\openslide-jni.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x64\native\zlib1.dll')" Include="$(NativeDlls)\win-x64\native\zlib1.dll">
+      <Link>openslide\x64\zlib1.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  
+  <ItemGroup Condition=" '$(Platform)' == 'x86' Or '$(Platform)' == 'AnyCPU' ">
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\iconv.dll')" Include="$(NativeDlls)\win-x86\native\iconv.dll">
+      <Link>openslide\x86\iconv.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libcairo-2.dll')" Include="$(NativeDlls)\win-x86\native\libcairo-2.dll">
+      <Link>openslide\x86\libcairo-2.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libffi-6.dll')" Include="$(NativeDlls)\win-x86\native\libffi-6.dll">
+      <Link>openslide\x86\libffi-6.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libgdk_pixbuf-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libgdk_pixbuf-2.0-0.dll">
+      <Link>openslide\x86\libgdk_pixbuf-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libgio-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libgio-2.0-0.dll">
+      <Link>openslide\x86\libgio-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libglib-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libglib-2.0-0.dll">
+      <Link>openslide\x86\libglib-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libgmodule-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libgmodule-2.0-0.dll">
+      <Link>openslide\x86\libgmodule-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libgobject-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libgobject-2.0-0.dll">
+      <Link>openslide\x86\libgobject-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libgthread-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libgthread-2.0-0.dll">
+      <Link>openslide\x86\libgthread-2.0-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libintl-8.dll')" Include="$(NativeDlls)\win-x86\native\libintl-8.dll">
+      <Link>openslide\x86\libintl-8.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libjpeg-62.dll')" Include="$(NativeDlls)\win-x86\native\libjpeg-62.dll">
+      <Link>openslide\x86\libjpeg-62.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libopenjp2.dll')" Include="$(NativeDlls)\win-x86\native\libopenjp2.dll">
+      <Link>openslide\x86\libopenjp2.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libopenslide-0.dll')" Include="$(NativeDlls)\win-x86\native\libopenslide-0.dll">
+      <Link>openslide\x86\libopenslide-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libpixman-1-0.dll')" Include="$(NativeDlls)\win-x86\native\libpixman-1-0.dll">
+      <Link>openslide\x86\libpixman-1-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libpng16-16.dll')" Include="$(NativeDlls)\win-x86\native\libpng16-16.dll">
+      <Link>openslide\x86\libpng16-16.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libsqlite3-0.dll')" Include="$(NativeDlls)\win-x86\native\libsqlite3-0.dll">
+      <Link>openslide\x86\libsqlite3-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libtiff-5.dll')" Include="$(NativeDlls)\win-x86\native\libtiff-5.dll">
+      <Link>openslide\x86\libtiff-5.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\libxml2-2.dll')" Include="$(NativeDlls)\win-x86\native\libxml2-2.dll">
+      <Link>openslide\x86\libxml2-2.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\openslide-jni.dll')" Include="$(NativeDlls)\win-x86\native\openslide-jni.dll">
+      <Link>openslide\x86\openslide-jni.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Condition="Exists('$(NativeDlls)\win-x86\native\zlib1.dll')" Include="$(NativeDlls)\win-x86\native\zlib1.dll">
+      <Link>openslide\x86\zlib1.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

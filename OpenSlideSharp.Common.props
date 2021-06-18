@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  
+  <!--- Package information, Version -->
+  <PropertyGroup>
+    <PackageVersion>1.0.0.0</PackageVersion>
+    <Authors>IOL0ol1</Authors>
+    <Copyright>Copyright © 2021-2022</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/IOL0ol1/OpenSlide.Interop</PackageProjectUrl>
+    <PackageIcon>openslide_logo.png</PackageIcon>
+    <RepositoryUrl>https://github.com/IOL0ol1/OpenSlide.Interop.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <None Include="..\..\openslide_logo.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>
