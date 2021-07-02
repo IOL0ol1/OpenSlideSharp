@@ -15,8 +15,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenSlideSharp" Version="1.0.0" />
-    <PackageReference Include="OpenSlideSharp.runtime.win" Version="1.0.0" />
+    <ProjectReference Include="..\OpenSlideSharp.runtime.win\OpenSlideSharp.runtime.win.csproj" />
+    <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />
   </ItemGroup>
 
 </Project>

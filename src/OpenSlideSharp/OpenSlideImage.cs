@@ -16,7 +16,7 @@ namespace OpenSlideSharp
         /// <summary>
         /// openslide_t*
         /// </summary>
-        public IntPtr OpenSlidePtr { get; protected set; }
+        public IntPtr Handle { get; protected set; }
 
 
         /// <summary>
@@ -46,7 +46,7 @@ namespace OpenSlideSharp
         {
             if (handle == IntPtr.Zero)
                 throw new OpenSlideException(new FormatException().Message);
-            OpenSlidePtr = handle;
+            Handle = handle;
             CheckIfThrow(0);
             disposedValue = !isOwner;
         }
@@ -76,7 +76,7 @@ namespace OpenSlideSharp
         {
             get
             {
-                var result = NativeMethods.GetLevelCount(OpenSlidePtr);
+                var result = NativeMethods.GetLevelCount(Handle);
                 return result != -1 ? result : CheckIfThrow(result);
             }
         }
@@ -175,8 +175,8 @@ namespace OpenSlideSharp
         public ImageDimensions GetLevelDimensions(int level)
         {
             ImageDimensions dimensions = new ImageDimensions();
-            NativeMethods.GetLevelDimensions(OpenSlidePtr, level, ref dimensions._width, ref dimensions._height);
-            return !dimensions.IsInvalid ? dimensions : CheckIfThrow(dimensions);
+            NativeMethods.GetLevelDimensions(Handle, level, ref dimensions._width, ref dimensions._height);
+            return dimensions.Height >= 0 && dimensions.Width >= 0 ? dimensions : CheckIfThrow(dimensions);
         }
 
         /// <summary>
@@ -202,7 +202,7 @@ namespace OpenSlideSharp
         ///</return> 
         public double GetLevelDownsample(int level)
         {
-            var result = NativeMethods.GetLevelDownsample(OpenSlidePtr, level);
+            var result = NativeMethods.GetLevelDownsample(Handle, level);
             return result != -1.0d ? result : CheckIfThrow(result);
         }
 
@@ -216,7 +216,7 @@ namespace OpenSlideSharp
         ///</return> 
         public int GetBestLevelForDownsample(double downsample)
         {
-            var result = NativeMethods.GetBestLevelForDownsample(OpenSlidePtr, downsample);
+            var result = NativeMethods.GetBestLevelForDownsample(Handle, downsample);
             return result != -1 ? result : CheckIfThrow(result);
         }
 
@@ -240,7 +240,7 @@ namespace OpenSlideSharp
             var data = new byte[width * height * 4];
             fixed (byte* pdata = data)
             {
-                NativeMethods.ReadRegion(OpenSlidePtr, pdata, x, y, level, width, height);
+                NativeMethods.ReadRegion(Handle, pdata, x, y, level, width, height);
                 CheckIfThrow(0);
             }
             return data;
@@ -253,7 +253,7 @@ namespace OpenSlideSharp
         ///No other threads may be using the object.
         ///After this call returns, the object cannot be used anymore.
         ///</remarks>
-        public void Close() => NativeMethods.Close(OpenSlidePtr);
+        public void Close() => NativeMethods.Close(Handle);
 
 
         /* 
@@ -267,13 +267,13 @@ namespace OpenSlideSharp
         /// <param name="name">property name</param>
         /// <returns></returns>
         [IndexerName("Property")]
-        public string this[string name] => CheckIfThrow(NativeMethods.GetPropertyValue(OpenSlidePtr, name));
+        public string this[string name] => CheckIfThrow(NativeMethods.GetPropertyValue(Handle, name));
 
         /// <summary>
         /// Get the array of property names. 
         /// </summary>
         /// <returns>The array of property names</returns>
-        public string[] GetAllPropertyNames() => CheckIfThrow(NativeMethods.GetPropertyNames(OpenSlidePtr));
+        public string[] GetAllPropertyNames() => CheckIfThrow(NativeMethods.GetPropertyNames(Handle));
 
         /// <summary>
         /// Gets the property value.
@@ -283,7 +283,7 @@ namespace OpenSlideSharp
         /// <returns>True if the property of the specified name exists. Otherwise, false.</returns>
         public bool TryGetProperty(string name, out string value)
         {
-            value = NativeMethods.GetPropertyValue(OpenSlidePtr, name);
+            value = NativeMethods.GetPropertyValue(Handle, name);
             return value is string;
         }
 
@@ -293,9 +293,9 @@ namespace OpenSlideSharp
         /// <typeparam name="T"></typeparam>
         /// <param name="name">The name of the property.</param>
         /// <returns></returns>
-        public T GetProperty<T>(string name) where T : struct
+        public T GetProperty<T>(string name)
         {
-            var value = CheckIfThrow(NativeMethods.GetPropertyValue(OpenSlidePtr, name));
+            var value = CheckIfThrow(NativeMethods.GetPropertyValue(Handle, name));
             return (T)Convert.ChangeType(value, typeof(T));
         }
 
@@ -324,7 +324,7 @@ namespace OpenSlideSharp
         /// Get the array of names of associated images. 
         /// </summary>
         /// <returns>The array of names of associated images.</returns>
-        public string[] GetAllAssociatedImageNames() => CheckIfThrow(NativeMethods.GetAssociatedImageNames(OpenSlidePtr));
+        public string[] GetAllAssociatedImageNames() => CheckIfThrow(NativeMethods.GetAssociatedImageNames(Handle));
 
         /// <summary>
         /// Gets the dimensions of the associated image.
@@ -336,8 +336,8 @@ namespace OpenSlideSharp
         public bool TryGetAssociatedImageDimensions(string name, out ImageDimensions dimensions)
         {
             dimensions = default;
-            NativeMethods.GetAssociatedImageDimensions(OpenSlidePtr, name, ref dimensions._width, ref dimensions._height);
-            return !dimensions.IsInvalid;
+            NativeMethods.GetAssociatedImageDimensions(Handle, name, ref dimensions._width, ref dimensions._height);
+            return dimensions.Width >= 0 && dimensions.Height >= 0;
         }
 
 
@@ -357,7 +357,7 @@ namespace OpenSlideSharp
                 {
                     fixed (byte* pdata = dest)
                     {
-                        NativeMethods.ReadAssociatedImage(OpenSlidePtr, name, pdata);
+                        NativeMethods.ReadAssociatedImage(Handle, name, pdata);
                     }
                     return true;
                 }
@@ -398,7 +398,7 @@ namespace OpenSlideSharp
 
         private T CheckIfThrow<T>(T value)
         {
-            if (NativeMethods.GetError(OpenSlidePtr) is string error)
+            if (NativeMethods.GetError(Handle) is string error)
             {
                 Close();
                 throw new OpenSlideException(error);
@@ -502,17 +502,23 @@ namespace OpenSlideSharp
         }
 
         /// <summary>
-        /// Is invalid.
+        /// 
         /// </summary>
-        public bool IsInvalid => _width < 0 || _height < 0;
-
+        /// <param name="width"></param>
+        /// <param name="height"></param>
+        public void Deconstruct(out long width, out long height)
+        {
+            width = _width;
+            height = _height;
+        }
+ 
         /// <summary>
         /// 
         /// </summary>
         /// <returns></returns>
         public override string ToString()
         {
-            return $"Width:{Width} Height:{Height} IsInvalid:{IsInvalid}";
+            return $"Width:{Width} Height:{Height}";
         }
     }
 }
