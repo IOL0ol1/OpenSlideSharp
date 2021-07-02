@@ -1,18 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text;
+
 using Xunit;
 using Xunit.Abstractions;
 
 namespace OpenSlideSharp.Tests
 {
-    public class UnitTest1
+    public class OpenSlideTest
     {
         protected readonly ITestOutputHelper Output;
 
-        public UnitTest1(ITestOutputHelper outputHelper)
+        public OpenSlideTest(ITestOutputHelper outputHelper)
         {
-            Output = outputHelper;
+             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.CurrentCulture;
+             Output = outputHelper;
         }
 
 
