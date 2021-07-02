@@ -78,8 +78,7 @@ namespace OpenSlideSharp.Interop
         ///<param name="w">The width of the image, or -1 if an error occurred.</param>
         ///<param name="h">The height of the image, or -1 if an error occurred.</param> 
         [DllImport(LibraryName, EntryPoint = "openslide_get_level0_dimensions", CallingConvention = CallingConvention.Cdecl)]
-        public extern static void GetLevel0Dimensions(IntPtr osr,
-            ref long w, ref long h);
+        public extern static void GetLevel0Dimensions(IntPtr osr, out long w, out long h);
 
 
         ///<summary>
@@ -90,8 +89,7 @@ namespace OpenSlideSharp.Interop
         ///<param name="w">The width of the image, or -1 if an error occurred or the level was out of range.</param>
         ///<param name="h">The height of the image, or -1 if an error occurred or the level was out of range.</param> 
         [DllImport(LibraryName, EntryPoint = "openslide_get_level_dimensions", CallingConvention = CallingConvention.Cdecl)]
-        public extern static void GetLevelDimensions(IntPtr osr, int level,
-            ref long w, ref long h);
+        public extern static void GetLevelDimensions(IntPtr osr, int level, out long w, out long h);
 
 
         ///<summary>
@@ -141,11 +139,7 @@ namespace OpenSlideSharp.Interop
         ///
         [DllImport(LibraryName, EntryPoint = "openslide_read_region", CallingConvention = CallingConvention.Cdecl)]
 
-        public extern static unsafe void ReadRegion(IntPtr osr,
-            byte* dest,
-            long x, long y,
-            int level,
-            long w, long h);
+        public extern static unsafe void ReadRegion(IntPtr osr, byte* dest, long x, long y, int level, long w, long h);
 
         ///<summary>
         ///Copy pre-multiplied ARGB data from a whole slide image.
@@ -166,11 +160,7 @@ namespace OpenSlideSharp.Interop
         ///<param name="w">The width of the region. Must be non-negative.</param> 
         ///<param name="h">The height of the region. Must be non-negative.</param> 
         [DllImport(LibraryName, EntryPoint = "openslide_read_region", CallingConvention = CallingConvention.Cdecl)]
-        public extern static unsafe void ReadRegion(IntPtr osr,
-            byte[] dest,
-            long x, long y,
-            int level,
-            long w, long h);
+        public extern static unsafe void ReadRegion(IntPtr osr, byte[] dest, long x, long y, int level, long w, long h);
 
         ///<summary>
         ///Close an OpenSlide object.
@@ -365,7 +355,7 @@ namespace OpenSlideSharp.Interop
         ///pairs. This call provides a list of names as strings
         ///that can be used to read associated images with
         ///<see cref="GetAssociatedImageDimensions
-        ///(IntPtr, string, ref long, ref long)"/> and <see cref=
+        ///(IntPtr, string, out long, out long)"/> and <see cref=
         ///"ReadAssociatedImage(IntPtr, string, byte[])"/>.
         ///</remarks>
         ///<param name="osr">The OpenSlide object.</param> 
@@ -392,10 +382,7 @@ namespace OpenSlideSharp.Interop
         ///<param name="w">The width of the associated image, or -1 if an error occurred.</param>
         ///<param name="h">The height of the associated image, or -1 if an error occurred.</param> 
         [DllImport(LibraryName, EntryPoint = "openslide_get_associated_image_dimensions", CallingConvention = CallingConvention.Cdecl)]
-        public extern static void GetAssociatedImageDimensions(IntPtr osr,
-            [MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))] string name,
-            ref long w,
-            ref long h);
+        public extern static void GetAssociatedImageDimensions(IntPtr osr, [MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))] string name, out long w, out long h);
 
 
         ///<summary>
@@ -407,7 +394,7 @@ namespace OpenSlideSharp.Interop
         ///pointer to enough memory to hold the image, at least (width * 
         ///height * 4) bytes in length.  Get the width and height with
         ///<see cref="GetAssociatedImageDimensions(IntPtr, string,
-        ///ref long, ref long)"/>. This call does nothing if an error occurred.
+        ///out long, out long)"/>. This call does nothing if an error occurred.
         ///</remarks>
         ///<param name="osr">The OpenSlide object.</param> 
         ///<param name="name">The name of the desired associated image. 
@@ -417,9 +404,7 @@ namespace OpenSlideSharp.Interop
         ///<param name="dest">The destination buffer for the ARGB data.</param> 
         ///
         [DllImport(LibraryName, EntryPoint = "openslide_read_associated_image", CallingConvention = CallingConvention.Cdecl)]
-        public extern static unsafe void ReadAssociatedImage(IntPtr osr,
-           [MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))] string name,
-            byte* dest);
+        public extern static unsafe void ReadAssociatedImage(IntPtr osr, [MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))] string name, byte* dest);
 
         ///<summary>
         ///Copy pre-multiplied ARGB data from an associated image.
@@ -430,7 +415,7 @@ namespace OpenSlideSharp.Interop
         ///pointer to enough memory to hold the image, at least (width * 
         ///height * 4) bytes in length.  Get the width and height with
         ///<see cref="GetAssociatedImageDimensions(IntPtr, string,
-        ///ref long, ref long)"/>. This call does nothing if an error occurred.
+        ///out long, out long)"/>. This call does nothing if an error occurred.
         ///</remarks>
         ///<param name="osr">The OpenSlide object.</param> 
         ///<param name="name">The name of the desired associated image. 
@@ -440,9 +425,7 @@ namespace OpenSlideSharp.Interop
         ///<param name="dest">The destination buffer for the ARGB data.</param> 
         ///
         [DllImport(LibraryName, EntryPoint = "openslide_read_associated_image", CallingConvention = CallingConvention.Cdecl)]
-        public extern static unsafe void ReadAssociatedImage(IntPtr osr,
-            [MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))] string name,
-            byte[] dest);
+        public extern static unsafe void ReadAssociatedImage(IntPtr osr, [MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))] string name, byte[] dest);
 
         #endregion
 

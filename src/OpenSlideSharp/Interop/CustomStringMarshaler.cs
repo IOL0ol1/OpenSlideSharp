@@ -36,7 +36,7 @@ namespace OpenSlideSharp.Interop
             if (managedObj is string str)
             {
                 var bytes = new List<byte>(_encoding.GetBytes(str));
-                bytes.Add(0);
+                bytes.Add(0); // '\0'
                 var ansi = bytes.ToArray();
                 _intPtr = Marshal.AllocHGlobal(ansi.Length);
                 Marshal.Copy(ansi, 0, _intPtr, ansi.Length);

@@ -51,10 +51,24 @@ namespace OpenSlideSharp
             disposedValue = !isOwner;
         }
 
+        /// <summary>
+        /// Add .dll directory to PATH
+        /// </summary>
+        /// <param name="path"></param>
+        public static void Initialize(string path = null)
+        {
+            path = string.IsNullOrEmpty(path) ? Path.Combine("openslide", $"{(IntPtr.Size == 8 ? "x64" : "x86")}") : path;
+            if (Directory.Exists(path))
+            {
+                var PATH = Environment.GetEnvironmentVariable("PATH");
+                Environment.SetEnvironmentVariable("PATH", $"{PATH};{Path.Combine(Directory.GetParent(Assembly.GetCallingAssembly().Location)?.FullName, path)}");
+
+            }
+        }
+
         static OpenSlideImage()
         {
-            var path = Environment.GetEnvironmentVariable("PATH");
-            Environment.SetEnvironmentVariable("PATH", $"{path};{Path.Combine(Directory.GetParent(Assembly.GetCallingAssembly().Location)?.FullName, $"dll/{(IntPtr.Size == 8 ? "x64" : "x86")}")}");
+            Initialize();
         }
 
         /// <summary>
@@ -130,7 +144,7 @@ namespace OpenSlideSharp
         ///<summary>
         ///The value of the property containing a slide's objective power, if known.
         ///</summary>
-        public string ObjectivePower => TryGetProperty(NativeMethods.OBJECTIVE_POWER, out var value) ? value : null;
+        public double? ObjectivePower => TryGetProperty(NativeMethods.OBJECTIVE_POWER, out var value) && double.TryParse(value, out var result) ? (double?)result : null;
 
         ///<summary>
         ///The value of the property containing the number of microns per pixel in
@@ -148,25 +162,25 @@ namespace OpenSlideSharp
         ///The value of the property containing the X coordinate of the rectangle
         ///bounding the non-empty region of the slide, if available.
         ///</summary>
-        public string BoundsX => TryGetProperty(NativeMethods.BOUNDS_X, out var value) ? value : null;
+        public long? BoundsX => TryGetProperty(NativeMethods.BOUNDS_X, out var value) && long.TryParse(value, out var result) ? (long?)result : null;
 
         ///<summary>
         ///The value of the property containing the Y coordinate of the rectangle
         ///bounding the non-empty region of the slide, if available.
         ///</summary>
-        public string BoundsY => TryGetProperty(NativeMethods.BOUNDS_Y, out var value) ? value : null;
+        public long? BoundsY => TryGetProperty(NativeMethods.BOUNDS_Y, out var value) && long.TryParse(value, out var result) ? (long?)result : null;
 
         ///<summary>
         ///The value of the property containing the width of the rectangle bounding
         ///the non-empty region of the slide, if available.
         ///</summary>
-        public string BoundsWidth => TryGetProperty(NativeMethods.BOUNDS_WIDTH, out var value) ? value : null;
+        public long? BoundsWidth => TryGetProperty(NativeMethods.BOUNDS_WIDTH, out var value) && long.TryParse(value, out var result) ? (long?)result : null;
 
         ///<summary>
         ///The value of the property containing the height of the rectangle bounding
         ///the non-empty region of the slide, if available.
         ///</summary>
-        public string BoundsHeight => TryGetProperty(NativeMethods.BOUNDS_HEIGHT, out var value) ? value : null;
+        public long? BoundsHeight => TryGetProperty(NativeMethods.BOUNDS_HEIGHT, out var value) && long.TryParse(value, out var result) ? (long?)result : null;
 
         ///<summary>
         ///Get the dimensions of a level.
@@ -175,7 +189,7 @@ namespace OpenSlideSharp
         public ImageDimensions GetLevelDimensions(int level)
         {
             ImageDimensions dimensions = new ImageDimensions();
-            NativeMethods.GetLevelDimensions(Handle, level, ref dimensions._width, ref dimensions._height);
+            NativeMethods.GetLevelDimensions(Handle, level, out dimensions.width, out dimensions.height);
             return dimensions.Height >= 0 && dimensions.Width >= 0 ? dimensions : CheckIfThrow(dimensions);
         }
 
@@ -336,7 +350,7 @@ namespace OpenSlideSharp
         public bool TryGetAssociatedImageDimensions(string name, out ImageDimensions dimensions)
         {
             dimensions = default;
-            NativeMethods.GetAssociatedImageDimensions(Handle, name, ref dimensions._width, ref dimensions._height);
+            NativeMethods.GetAssociatedImageDimensions(Handle, name, out dimensions.width, out dimensions.height);
             return dimensions.Width >= 0 && dimensions.Height >= 0;
         }
 
@@ -477,18 +491,18 @@ namespace OpenSlideSharp
     /// </summary>
     public struct ImageDimensions
     {
-        internal long _width;
-        internal long _height;
+        internal long width;
+        internal long height;
 
         /// <summary>
         /// The width of the image.
         /// </summary>
-        public long Width => _width;
+        public long Width => width;
 
         /// <summary>
         /// The height of the image.
         /// </summary>
-        public long Height => _height;
+        public long Height => height;
 
         /// <summary>
         /// Initialize a new <see cref="ImageDimensions"/> struct.
@@ -497,8 +511,8 @@ namespace OpenSlideSharp
         /// <param name="height">The height of the image.</param>
         public ImageDimensions(long width = -1, long height = -1)
         {
-            _width = width;
-            _height = height;
+            this.width = width;
+            this.height = height;
         }
 
         /// <summary>
@@ -508,10 +522,10 @@ namespace OpenSlideSharp
         /// <param name="height"></param>
         public void Deconstruct(out long width, out long height)
         {
-            width = _width;
-            height = _height;
+            width = this.width;
+            height = this.height;
         }
- 
+
         /// <summary>
         /// 
         /// </summary>
