@@ -20,7 +20,6 @@ namespace OpenSlideSharp.Tests
         {
             string currentDir = Directory.GetCurrentDirectory();
             yield return new object[] { Path.Combine(currentDir, "Assets", "boxes.tiff") };
-            yield return new object[] { Path.Combine(currentDir, "Assets", "CMU-1.tif") };
             yield return new object[] { Path.Combine(currentDir, "Assets", "small.svs") };
         }
 
