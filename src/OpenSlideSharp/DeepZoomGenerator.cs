@@ -104,7 +104,7 @@ namespace OpenSlideSharp
                 return (int)Math.Ceiling(z_lim / (double)_tileSize);
             }
             _t_dimensions = _z_dimemsions.Select(z => new TileDimensions(tiles(z.width), tiles(z.height))).ToArray();
-
+ 
             // Deep Zoom level count
             _dz_levels = _z_dimemsions.Length;
 
@@ -283,17 +283,6 @@ namespace OpenSlideSharp
                 cols = _cols;
                 rows = _rows;
             }
-
-#if !NET35
-            /// <summary>
-            /// 
-            /// </summary>
-            /// <param name="tilePos"></param>
-            public static implicit operator (long col, long row)(TileDimensions tilePos)
-            {
-                return (tilePos.cols, tilePos.rows);
-            }
-#endif
         }
 
 

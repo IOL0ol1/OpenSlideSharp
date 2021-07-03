@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Text;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -15,10 +13,8 @@ namespace OpenSlideSharp.Tests
 
         public OpenSlideTest(ITestOutputHelper outputHelper)
         {
-             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.CurrentCulture;
-             Output = outputHelper;
+            Output = outputHelper;
         }
-
 
         public static IEnumerable<object[]> GetOpenableFiles()
         {
@@ -42,6 +38,7 @@ namespace OpenSlideSharp.Tests
             string version = OpenSlideImage.LibraryVersion;
             Assert.NotNull(version);
             Assert.NotEqual(string.Empty, version);
+            Output.WriteLine(version);
         }
 
         [Theory]
@@ -80,20 +77,6 @@ namespace OpenSlideSharp.Tests
         {
             string currentDir = Directory.GetCurrentDirectory();
             Assert.Throws<OpenSlideException>(() => OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "unopenable.tiff")));
-        }
-
-        [Fact]
-        public void TestOperationsOnClosedHandle()
-        {
-            string currentDir = Directory.GetCurrentDirectory();
-            var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "boxes.tiff"));
-            Assert.NotEmpty(osr.GetAllPropertyNames());
-            Assert.Empty(osr.GetAllAssociatedImageNames());
-            osr.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => osr.LevelCount);
-            Assert.Throws<ObjectDisposedException>(() => osr.ReadRegion(0, 0, 0, 100, 100));
-            Assert.Throws<ObjectDisposedException>(() => osr.GetProperty<string>("openslide.vendor"));
-            Assert.Throws<ObjectDisposedException>(() => { return osr.TryReadAssociatedImage("label", out var dimensions, out var dset) ? dset : null; });
         }
 
         [Fact]
@@ -152,31 +135,32 @@ namespace OpenSlideSharp.Tests
         public void TestReadRegion()
         {
             string currentDir = Directory.GetCurrentDirectory();
-            //using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "boxes.tiff")))
-            //{
-            //    byte[] arr;
-            //    arr = osr.ReadRegionToArray(1, -10, -10, 400, 400);
-            //    Assert.Equal(400 * 400 * 4, arr.Length);
-            //    arr = osr.ReadRegionToArray(4, 0, 0, 100, 100); // Bad level
-            //    Assert.Equal(100 * 100 * 4, arr.Length);
-            //    Assert.Throws<ArgumentOutOfRangeException>(() => { osr.ReadRegionToArray(1, 0, 0, 400, -5); });
-            //}
+            using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "boxes.tiff")))
+            {
+                byte[] arr;
+                arr = osr.ReadRegion(1, -10, -10, 400, 400);
+                Assert.Equal(400 * 400 * 4, arr.Length);
+                arr = osr.ReadRegion(4, 0, 0, 100, 100); // Bad level
+                Assert.Equal(100 * 100 * 4, arr.Length);
+                Assert.Throws<ArgumentOutOfRangeException>(() => { osr.ReadRegion(1, 0, 0, 400, -5); });
+            }
         }
 
         [Fact]
         public void TestAssociatedImages()
         {
             string currentDir = Directory.GetCurrentDirectory();
-            //using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "small.svs")))
-            //{
-            //    Assert.NotEmpty(osr.GetAllAssociatedImageNames());
-            //    byte[] arr;
-            //    arr = osr.ReadAssociatedImageToArray("thumbnail", out var dims);
-            //    Assert.Equal(16, dims.Width);
-            //    Assert.Equal(16, dims.Height);
-            //    Assert.Equal(16 * 16 * 4, arr.Length);
-            //    Assert.Throws<KeyNotFoundException>(() => { osr.ReadAssociatedImageToArray("__missing"); });
-            //}
+            using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "small.svs")))
+            {
+                Assert.NotEmpty(osr.GetAllAssociatedImageNames());
+                if (osr.TryReadAssociatedImage("thumbnail", out var dims, out var arr))
+                {
+                    Assert.Equal(16, dims.Width);
+                    Assert.Equal(16, dims.Height);
+                    Assert.Equal(16 * 16 * 4, arr.Length);
+                    Assert.Equal(false, osr.TryGetAssociatedImageDimensions("__missing",out var tmp));
+                }
+            }
         }
 
         [Fact]
@@ -185,10 +169,10 @@ namespace OpenSlideSharp.Tests
             string currentDir = Directory.GetCurrentDirectory();
             using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "unreadable.svs")))
             {
-                //Assert.Equal("aperio", osr.GetProperty("openslide.vendor", string.Empty));
-                //Assert.Throws<OpenSlideException>(() => { osr.ReadRegionToArray(0, 0, 0, 16, 16); });
-                //// openslide object has turned into an unusable state.
-                //Assert.False(osr.TryGetProperty("", out string value));
+                Assert.Equal("aperio", osr.GetProperty<string>("openslide.vendor"));
+                Assert.Throws<OpenSlideException>(() => { osr.ReadRegion(0, 0, 0, 16, 16); });
+                // openslide object has turned into an unusable state.
+                Assert.False(osr.TryGetProperty("", out string value));
             }
         }
 
@@ -198,10 +182,10 @@ namespace OpenSlideSharp.Tests
             string currentDir = Directory.GetCurrentDirectory();
             using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "unreadable.svs")))
             {
-                //Assert.Equal("aperio", osr.GetProperty("openslide.vendor", string.Empty));
-                //Assert.Throws<OpenSlideException>(() => { osr.ReadAssociatedImageToArray("thumbnail"); });
-                //// openslide object has turned into an unusable state.
-                //Assert.False(osr.TryGetProperty("", out string value));
+                Assert.Equal("aperio", osr.GetProperty<string>("openslide.vendor"));
+                Assert.Equal(true, osr.TryReadAssociatedImage("thumbnail",out var _1,out var _2));
+                // openslide object has turned into an unusable state.
+                Assert.False(osr.TryGetProperty("", out string value));
             }
         }
 

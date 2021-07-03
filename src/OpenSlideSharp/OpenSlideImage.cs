@@ -58,11 +58,11 @@ namespace OpenSlideSharp
         public static void Initialize(string path = null)
         {
             path = string.IsNullOrEmpty(path) ? Path.Combine("openslide", $"{(IntPtr.Size == 8 ? "x64" : "x86")}") : path;
+            path = Path.Combine(Directory.GetParent(Assembly.GetCallingAssembly().Location)?.FullName, path);
             if (Directory.Exists(path))
             {
                 var PATH = Environment.GetEnvironmentVariable("PATH");
-                Environment.SetEnvironmentVariable("PATH", $"{PATH};{Path.Combine(Directory.GetParent(Assembly.GetCallingAssembly().Location)?.FullName, path)}");
-
+                Environment.SetEnvironmentVariable("PATH", $"{PATH};{path}");
             }
         }
 
