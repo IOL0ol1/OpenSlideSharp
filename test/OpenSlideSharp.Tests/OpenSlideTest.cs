@@ -88,19 +88,19 @@ namespace OpenSlideSharp.Tests
                 Assert.Equal(4, osr.LevelCount);
                 long width, height;
 
-                osr.GetLevelDimensions(0).Deconstruct(out width, out height);
+                osr.GetLevelDimension(0).Deconstruct(out width, out height);
                 Assert.Equal(300, width);
                 Assert.Equal(250, height);
 
-                osr.GetLevelDimensions(1).Deconstruct(out width, out height);
+                osr.GetLevelDimension(1).Deconstruct(out width, out height);
                 Assert.Equal(150, width);
                 Assert.Equal(125, height);
 
-                osr.GetLevelDimensions(2).Deconstruct(out width, out height);
+                osr.GetLevelDimension(2).Deconstruct(out width, out height);
                 Assert.Equal(75, width);
                 Assert.Equal(62, height);
 
-                osr.GetLevelDimensions(3).Deconstruct(out width, out height);
+                osr.GetLevelDimension(3).Deconstruct(out width, out height);
                 Assert.Equal(37, width);
                 Assert.Equal(31, height);
 
@@ -121,7 +121,7 @@ namespace OpenSlideSharp.Tests
             string currentDir = Directory.GetCurrentDirectory();
             using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "boxes.tiff")))
             {
-                var props = osr.GetAllPropertyNames();
+                var props = osr.GetPropertyNames();
                 string value = null;
                 Assert.True(osr.TryGetProperty("openslide.vendor", out value));
                 Assert.Equal("generic-tiff", value);
@@ -152,13 +152,13 @@ namespace OpenSlideSharp.Tests
             string currentDir = Directory.GetCurrentDirectory();
             using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "small.svs")))
             {
-                Assert.NotEmpty(osr.GetAllAssociatedImageNames());
-                if (osr.TryReadAssociatedImage("thumbnail", out var dims, out var arr))
+                Assert.NotEmpty(osr.GetAssociatedImageNames());
+                if (osr.TryGetAssociatedImage("thumbnail", out var image))
                 {
-                    Assert.Equal(16, dims.Width);
-                    Assert.Equal(16, dims.Height);
-                    Assert.Equal(16 * 16 * 4, arr.Length);
-                    Assert.Equal(false, osr.TryGetAssociatedImageDimensions("__missing",out var tmp));
+                    Assert.Equal(16, image.Dimensions.Width);
+                    Assert.Equal(16, image.Dimensions.Height);
+                    Assert.Equal(16 * 16 * 4, image.Data.Length);
+                    Assert.False(osr.TryGetAssociatedImageDimensions("__missing",out var tmp));
                 }
             }
         }
@@ -183,7 +183,7 @@ namespace OpenSlideSharp.Tests
             using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "unreadable.svs")))
             {
                 Assert.Equal("aperio", osr.GetProperty<string>("openslide.vendor"));
-                Assert.Equal(true, osr.TryReadAssociatedImage("thumbnail",out var _1,out var _2));
+                Assert.True(osr.TryGetAssociatedImage("thumbnail",out var tmp));
                 // openslide object has turned into an unusable state.
                 Assert.False(osr.TryGetProperty("", out string value));
             }

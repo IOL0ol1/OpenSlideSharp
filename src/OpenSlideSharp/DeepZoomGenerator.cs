@@ -19,8 +19,8 @@ namespace OpenSlideSharp
         private readonly int _overlap;
 
         private Offset _l0_offset;
-        private ImageDimensions[] _l_dimemsions;
-        private ImageDimensions[] _z_dimemsions;
+        private ImageDimension[] _l_dimemsions;
+        private ImageDimension[] _z_dimemsions;
         private TileDimensions[] _t_dimensions;
         private int _dz_levels;
         private int[] _slide_from_dz_level;
@@ -72,8 +72,8 @@ namespace OpenSlideSharp
                 boundsHeight = boundsHeight == 0 ? image.Dimensions.height : boundsHeight;
                 // Dimensions of active area
                 _l_dimemsions = Enumerable.Range(0, image.LevelCount)
-                    .Select(i => image.GetLevelDimensions(i))
-                    .Select(l_size => new ImageDimensions(
+                    .Select(i => image.GetLevelDimension(i))
+                    .Select(l_size => new ImageDimension(
                         (long)Math.Ceiling(l_size.width * boundsWidth / (double)image.Dimensions.width),
                         (long)Math.Ceiling(l_size.height * boundsHeight / (double)image.Dimensions.height)))
                     .ToArray();
@@ -82,18 +82,18 @@ namespace OpenSlideSharp
             {
                 _l0_offset = new Offset(0, 0);
                 _l_dimemsions = Enumerable.Range(0, image.LevelCount)
-                    .Select(i => image.GetLevelDimensions(i))
-                    .Select(l_size => new ImageDimensions(l_size.width, l_size.height))
+                    .Select(i => image.GetLevelDimension(i))
+                    .Select(l_size => new ImageDimension(l_size.width, l_size.height))
                     .ToArray();
             }
             var _l0_dimemsions = _l_dimemsions[0];
             // Deep Zoom level
             var z_size = _l0_dimemsions;
-            var z_dimemsions = new List<ImageDimensions>();
+            var z_dimemsions = new List<ImageDimension>();
             z_dimemsions.Add(z_size);
             while (z_size.width > 1 || z_size.height > 1)
             {
-                z_size = new ImageDimensions(width: Math.Max(1, (long)Math.Ceiling(z_size.width / 2d)), height: Math.Max(1, (long)Math.Ceiling(z_size.height / 2d)));
+                z_size = new ImageDimension(width: Math.Max(1, (long)Math.Ceiling(z_size.width / 2d)), height: Math.Max(1, (long)Math.Ceiling(z_size.height / 2d)));
                 z_dimemsions.Add(z_size);
             }
             z_dimemsions.Reverse();
@@ -132,7 +132,7 @@ namespace OpenSlideSharp
         /// <summary>
         /// A list of (pixels_x, pixels_y) tuples for each Deep Zoom level.
         /// </summary>
-        public ImageDimensions[] LevelDimemsions => _z_dimemsions;
+        public ImageDimension[] LevelDimemsions => _z_dimemsions;
 
         /// <summary>
         /// The total number of Deep Zoom tiles in the image.
