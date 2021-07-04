@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Builder;
@@ -7,10 +6,12 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Primitives;
 
 using MultiSlideServer.Cache;
 
+using OpenSlideSharp;
 namespace MultiSlideServer
 {
     public class Startup
@@ -34,7 +35,7 @@ namespace MultiSlideServer
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
             {
@@ -74,7 +75,7 @@ namespace MultiSlideServer
                 try
                 {
                     response.ContentType = "image/jpeg";
-                    response.Body = await Task.Run(()=> new MemoryStream(dz.GetTile(result.level, result.col, result.row, out var tmp)));
+                    response.Body = await Task.Run(() => dz.GetTileAsJpegStream(result.level, result.col, result.row, out var tmp));
                 }
                 finally
                 {
@@ -84,7 +85,10 @@ namespace MultiSlideServer
 
             app.UseStaticFiles();
 
-            app.UseMvc();
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapRazorPages();
+            });
         }
 
         // OPTIMIZE: Use ReadOnlySpan in .NET Core 2.1

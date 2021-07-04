@@ -1,11 +1,13 @@
-﻿using System.IO;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Primitives;
+
+using OpenSlideSharp;
 
 namespace SingleSlideServer
 {
@@ -29,7 +31,7 @@ namespace SingleSlideServer
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
             {
@@ -55,7 +57,7 @@ namespace SingleSlideServer
                     var provider = context.RequestServices.GetService<ImageProvider>();
                     var response = context.Response;
                     response.ContentType = "image/jpeg";
-                    response.Body = await Task.Run(()=> new MemoryStream(provider.DeepZoomGenerator.GetTile(result.level, result.col, result.row,out var tmp)));
+                    response.Body = await Task.Run(()=> provider.DeepZoomGenerator.GetTileAsJpegStream(result.level, result.col, result.row,out var tmp));
                 });
             });
 
@@ -63,7 +65,10 @@ namespace SingleSlideServer
 
             app.UseStaticFiles();
 
-            app.UseMvc();
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapRazorPages();
+            });
         }
 
         // OPTIMIZE: Use ReadOnlySpan in .NET Core 2.1
