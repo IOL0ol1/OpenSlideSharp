@@ -7,11 +7,13 @@
     <Authors>IOL0ol1</Authors>
     <Copyright>Copyright © 2021-2022</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/IOL0ol1/OpenSlide.Interop</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/IOL0ol1/OpenSlideSharp</PackageProjectUrl>
     <PackageIcon>openslide_logo.png</PackageIcon>
-    <RepositoryUrl>https://github.com/IOL0ol1/OpenSlide.Interop.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/IOL0ol1/OpenSlideSharp.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)\openslidesharp.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
 

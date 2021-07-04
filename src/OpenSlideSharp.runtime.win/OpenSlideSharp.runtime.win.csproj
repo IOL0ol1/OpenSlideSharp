@@ -8,8 +8,8 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <PackageId>OpenSlideSharp.runtime.win</PackageId>
     <PackageTags>openslide image</PackageTags>
-    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/)</PackageReleaseNotes>
-    <Description>.NET bindings for OpenSlide(https://openslide.org/)</Description>
+    <PackageReleaseNotes>OpenSlide(https://openslide.org/) runtime in Windows</PackageReleaseNotes>
+    <Description>OpenSlide(https://openslide.org/) runtime in Windows</Description>
     <NoWarn>1701;1702;NU5128;</NoWarn>
     <Platforms>AnyCPU</Platforms>
   </PropertyGroup>

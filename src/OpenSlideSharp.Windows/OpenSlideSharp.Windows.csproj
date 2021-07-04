@@ -8,13 +8,14 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <PackageId>OpenSlideSharp.Windows</PackageId>
     <PackageTags>openslide image</PackageTags>
-    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/)</PackageReleaseNotes>
-    <Description>.NET bindings for OpenSlide(https://openslide.org/)</Description>
+    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/), All in one package in Windows</PackageReleaseNotes>
+    <Description>.NET bindings for OpenSlide(https://openslide.org/), All in one package in Windows</Description>
     <NoWarn>1701;1702;NU5128;</NoWarn>
     <Platforms>AnyCPU</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\OpenSlideSharp.BitmapExtensions\OpenSlideSharp.BitmapExtensions.csproj" />
     <ProjectReference Include="..\OpenSlideSharp.runtime.win\OpenSlideSharp.runtime.win.csproj" />
     <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />
   </ItemGroup>
