@@ -10,8 +10,8 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OpenSlideSharp</PackageId>
     <PackageTags>openslide image</PackageTags>
-    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/)</PackageReleaseNotes>
-    <Description>.NET bindings for OpenSlide(https://openslide.org/)</Description>
+    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/), include DeepZoomGenerator</PackageReleaseNotes>
+    <Description>.NET bindings for OpenSlide(https://openslide.org/), include DeepZoomGenerator</Description>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
   

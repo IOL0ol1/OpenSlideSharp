@@ -1,4 +1,6 @@
 ﻿// See openslide-python (https://github.com/openslide/openslide-python)
+// See OpenSlideNET (https://github.com/yigolden/OpenSlideNET)
+// *Changed some code supported net3.5.
 
 using System;
 using System.Collections.Generic;
@@ -6,7 +8,6 @@ using System.Linq;
 using System.Text;
 
 
-#if !ET35
 namespace OpenSlideSharp
 {
     /// <summary>
@@ -104,7 +105,7 @@ namespace OpenSlideSharp
                 return (int)Math.Ceiling(z_lim / (double)_tileSize);
             }
             _t_dimensions = _z_dimemsions.Select(z => new TileDimensions(tiles(z.width), tiles(z.height))).ToArray();
- 
+
             // Deep Zoom level count
             _dz_levels = _z_dimemsions.Length;
 
@@ -223,24 +224,23 @@ namespace OpenSlideSharp
         /// <returns></returns>
         public string GetDzi(string format = "jpeg")
         {
-            var (width, height) = _l_dimemsions[0];
+            var tmp = _l_dimemsions[0];
             var sb = new StringBuilder(DziTemplete);
             sb.Replace("{FORMAT}", format);
             sb.Replace("{OVERLAP}", _overlap.ToString());
             sb.Replace("{TILESIZE}", _tileSize.ToString());
-            sb.Replace("{HEIGHT}", height.ToString());
-            sb.Replace("{WIDTH}", width.ToString());
+            sb.Replace("{HEIGHT}", tmp.height.ToString());
+            sb.Replace("{WIDTH}", tmp.width.ToString());
             return sb.ToString();
         }
 
         /// <summary>
-        /// <see cref="GetTileInfo(int, int, int)"/>
+        /// same as <see cref="GetTileInfo(int, int, int)"/>
         /// </summary>
         /// <param name="level"></param>
         /// <param name="col"></param>
         /// <param name="row"></param>
         /// <returns></returns>
-        [Obsolete("Use GetTileInfo instead.")]
         public TileInfo GetTileCoordinates(int level, int col, int row) => GetTileInfo(level, col, row);
 
 
@@ -347,4 +347,3 @@ namespace OpenSlideSharp
         #endregion IDisposable Support
     }
 }
-#endif
