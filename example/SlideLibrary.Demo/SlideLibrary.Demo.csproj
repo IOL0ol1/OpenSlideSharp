@@ -117,12 +117,6 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\SlideLibrary\SlideLibrary.csproj">
-      <Project>{df7430b6-0b80-4597-ae89-31f511574cb4}</Project>
-      <Name>SlideLibrary</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
       <Visible>False</Visible>
       <ProductName>Microsoft .NET Framework 4.7.2 %28x86 And x64%29</ProductName>
@@ -136,6 +130,16 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OpenSlideSharp.BruTile\OpenSlideSharp.BruTile.csproj">
+      <Project>{9da7f592-f964-45cb-9e2e-f8028ae3c956}</Project>
+      <Name>OpenSlideSharp.BruTile</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\src\OpenSlideSharp.runtime.win\OpenSlideSharp.runtime.win.csproj">
+      <Project>{93315949-7b59-46a7-902d-abca19f460c4}</Project>
+      <Name>OpenSlideSharp.runtime.win</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

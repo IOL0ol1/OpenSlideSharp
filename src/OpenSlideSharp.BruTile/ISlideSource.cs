@@ -144,7 +144,6 @@ namespace SlideLibrary
         /// <summary>
         /// Extern image.
         /// </summary>
-        /// <param name="type"></param>
         /// <returns></returns>
         IReadOnlyDictionary<string, byte[]> GetExternImages();
     }
