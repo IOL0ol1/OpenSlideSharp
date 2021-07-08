@@ -31,9 +31,9 @@ jobs:
       uses: carlosperate/download-file-action@v1.0.3
       with:
         # URL of the file to download
-        file-url: $env:OpenSlide_X86_Url
+        file-url: '$env:OpenSlide_X86_Url'
         # New filename to rename the downloaded file
-        file-name: openslide_win32.zip
+        file-name: 'openslide_win32.zip'
         
     - name: Extract openslide_win32.zip
       # You may pin to the exact commit or the version.
@@ -61,9 +61,9 @@ jobs:
       uses: carlosperate/download-file-action@v1.0.3
       with:
         # URL of the file to download
-        file-url: $env:OpenSlide_X64_Url
+        file-url: '$env:OpenSlide_X64_Url'
         # New filename to rename the downloaded file
-        file-name: openslide_win64.zip
+        file-name: 'openslide_win64.zip'
         
     - name: Extract openslide_win64.zip
       # You may pin to the exact commit or the version.
