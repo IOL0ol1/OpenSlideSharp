@@ -45,14 +45,22 @@ jobs:
         pathSource: openslide_win32.zip
         # path to place the extract
         pathTarget: openslide_win32
-        
+    
+    - name: PowerShell script
+      # You may pin to the exact commit or the version.
+      # uses: Amadevus/pwsh-script@1f1751bbf3d1a92127bfc6c32403283625880cbf
+      uses: Amadevus/pwsh-script@v2.0.1
+      with:
+        # PowerShell script to execute in Actions-hydrated context
+        script: ls -n -r     
+    
     - name: Copy openslide_win32 Directory
       # You may pin to the exact commit or the version.
       # uses: MadaraUchiha/copy-action@7ddff6fc153a2ea2cd0fb88ed9750544c051e399
       uses: MadaraUchiha/copy-action@0.0.1
       with:
         # Source file
-        source: openslide_win32/bin/
+        source: openslide_win32/**/bin/
         # Target file
         target: openslide/x86/
  
@@ -82,13 +90,8 @@ jobs:
       uses: MadaraUchiha/copy-action@0.0.1
       with:
         # Source file
-        source: openslide_win64/bin/
+        source: openslide_win64/**/bin/
         # Target file
         target: openslide/x64/
-    - name: PowerShell script
-      # You may pin to the exact commit or the version.
-     # uses: Amadevus/pwsh-script@1f1751bbf3d1a92127bfc6c32403283625880cbf
-      uses: Amadevus/pwsh-script@v2.0.1
-      with:
-        # PowerShell script to execute in Actions-hydrated context
-        script: ls
+        
+
