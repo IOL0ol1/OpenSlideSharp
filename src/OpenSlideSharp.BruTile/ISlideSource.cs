@@ -333,6 +333,7 @@ namespace SlideLibrary
             {
                 try
                 {
+                    if (item.GetIndexParameters().Any()) continue;
                     keys.Add(item.Name, item.GetValue(obj));
                 }
                 catch (Exception) { }

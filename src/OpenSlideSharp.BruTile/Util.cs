@@ -140,17 +140,27 @@ namespace SlideLibrary
 
         public static BgraData Jpeg2Bgra(byte[] jpeg)
         {
-            return new BgraData(jpeg);
+            return new BgraData(jpeg, false);
+        }
+
+        public static BgraData Jpeg2Bgra2(byte[] jpeg)
+        {
+            using (var mat = Mat.ImDecode(jpeg, ImreadModes.Color))
+            {
+                byte[] bgra = new byte[mat.DataEnd.ToInt64() - mat.DataStart.ToInt64()];
+                Marshal.Copy(mat.Data, bgra, 0, bgra.Length);
+                return new BgraData(mat.Width, mat.Height, (int)mat.Step(), bgra, mat.Channels());
+            }
         }
 
         /// <summary>
-        /// Join by <paramref name="srcPixelTiles"/> and cut by <paramref name="srcPixelExtent"/> then scale to <paramref name="dstPixelExtent"/>.
+        /// Join by <paramref name="srcPixelTiles"/> and cut by <paramref name="srcPixelExtent"/> then scale to <paramref name="dstPixelExtent"/>(only height an width is useful).
         /// </summary>
-        /// <param name="srcPixelTiles">tiles</param>
-        /// <param name="srcPixelExtent">output size</param>
-        /// <param name="dstPixelExtent">dst size</param>
-        /// <param name="dstQuality">quality</param>
-        /// <param name="backgroundBGRA">background,default is white</param>
+        /// <param name="srcPixelTiles">tile with tile extent collection</param>
+        /// <param name="srcPixelExtent">canvas extent</param>
+        /// <param name="dstPixelExtent">jpeg output size</param>
+        /// <param name="dstQuality">jpeg output quality</param>
+        /// <param name="backgroundBGRA">background hex code,default is white</param>
         /// <returns></returns>
         public static byte[] Join(IEnumerable<Tuple<Extent, BgraData>> srcPixelTiles, Extent srcPixelExtent, Extent dstPixelExtent, int? dstQuality = 85, uint backgroundBGRA = 0xFFFFFFFF)
         {
@@ -163,7 +173,7 @@ namespace SlideLibrary
                 var canvasHeight = (int)srcPixelExtent.Height;
                 var dstWidth = (int)dstPixelExtent.Width;
                 var dstHeight = (int)dstPixelExtent.Height;
-                var bytesPerPixel = 4;
+                var bytesPerPixel = 3;
                 var pixelFormat = MatType.CV_8UC(bytesPerPixel);
                 using (var canvas = new Mat(canvasHeight, canvasWidth, pixelFormat, new Scalar((int)(backgroundBGRA >> 24 & 0xFF), (int)(backgroundBGRA >> 16 & 0xFF), (int)(backgroundBGRA >> 8 & 0xFF), (int)(backgroundBGRA & 0xFF))))
                 {
@@ -209,7 +219,7 @@ namespace SlideLibrary
     }
     public class Utilities
     {
-        public static int GetLevel(IDictionary<int, Resolution> resolutions, double unitsPerPixel, SampleMode sampleMode)
+        public static int GetLevel(IDictionary<int, Resolution> resolutions, double unitsPerPixel, SampleMode sampleMode = SampleMode.Nearest)
         {
             if (resolutions.Count == 0)
             {
