@@ -440,7 +440,7 @@ namespace OpenSlideSharp.Interop
         ///</summary>
         ///<return>A string describing the OpenSlide version.</return> 
         [DllImport(LibraryName, EntryPoint = "openslide_get_version", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler))]
+        [return: MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof(CustomStringMarshaler), MarshalCookie = "utf-8")]
         public extern static string GetVersion();
         #endregion
 

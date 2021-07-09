@@ -455,7 +455,7 @@ namespace OpenSlideSharp
         ///Get the version of the OpenSlide library.
         ///</summary>
         ///<return>A string describing the OpenSlide version.</return> 
-        public static string LibraryVersion => NativeMethods.GetVersion();
+        public string LibraryVersion => NativeMethods.GetVersion();
 
         #endregion
 
