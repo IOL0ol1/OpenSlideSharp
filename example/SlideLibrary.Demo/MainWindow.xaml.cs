@@ -98,6 +98,7 @@ namespace SlideLibrary.Demo
         /// <param name="slideSource"></param>
         private void InitImage(ISlideSource slideSource)
         {
+            Images.Clear();
             foreach (var item in slideSource.GetExternImages())
             {
                 Images.Add(new KeyValuePair<string, ImageSource>(item.Key, (ImageSource)new ImageSourceConverter().ConvertFrom(item.Value)));
