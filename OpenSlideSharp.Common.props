@@ -13,7 +13,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)\openslidesharp.snk</AssemblyOriginatorKeyFile>
+    <!-- <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)\openslidesharp.snk</AssemblyOriginatorKeyFile> -->
   </PropertyGroup>
 
 
