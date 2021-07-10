@@ -93,7 +93,7 @@
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <materialDesign:Card>
-                                <materialDesign:Flipper Visibility="{Binding TitleImage, Converter={StaticResource NullableToVisibilityConverter}}">
+                                <materialDesign:Flipper>
                                     <materialDesign:Flipper.FrontContent>
                                         <Button Width="200"
                                                 Command="{x:Static materialDesign:Flipper.FlipCommand}"
