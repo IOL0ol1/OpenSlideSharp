@@ -25,73 +25,21 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 5.0.x
-    
-    - name: Download openslide_win32.zip To Workspace
-      # You may pin to the exact commit or the version.
-      # uses: carlosperate/download-file-action@e85e0aa6262f13571d17a4a39687b26981c583dc
-      uses: carlosperate/download-file-action@v1.0.3
-      with:
-        # URL of the file to download
-        file-url: ${{ env.OpenSlide_X86_Url }}
-        # New filename to rename the downloaded file
-        file-name: 'openslide_win32.zip'
-        
-    - name: Extract openslide_win32.zip
-      # You may pin to the exact commit or the version.
-      # uses: DuckSoft/extract-7z-action@6eaaa506b410f047eaa9b22498696aad1e19a834
-      uses: DuckSoft/extract-7z-action@v1.0
-      with:
-        # archive path to extract
-        pathSource: openslide_win32.zip
-        # path to place the extract
-        pathTarget: openslide_win32
-    
+ 
     - name: PowerShell script
       # You may pin to the exact commit or the version.
       # uses: Amadevus/pwsh-script@1f1751bbf3d1a92127bfc6c32403283625880cbf
       uses: Amadevus/pwsh-script@v2.0.1
       with:
         # PowerShell script to execute in Actions-hydrated context
-        script: ls -n -r     
-    
-    - name: Copy openslide_win32 Directory
+        script: ./build/DownloadAndCopy.ps1 -x86 ${{ env.OpenSlide_X86_Url }} -x64 ${{ env.OpenSlide_X64_Url }}
+      
+    - name: PowerShell script1
       # You may pin to the exact commit or the version.
-      # uses: MadaraUchiha/copy-action@7ddff6fc153a2ea2cd0fb88ed9750544c051e399
-      uses: MadaraUchiha/copy-action@0.0.1
+      # uses: Amadevus/pwsh-script@1f1751bbf3d1a92127bfc6c32403283625880cbf
+      uses: Amadevus/pwsh-script@v2.0.1
       with:
-        # Source file
-        source: openslide_win32/**/bin/
-        # Target file
-        target: openslide/x86/
- 
-    - name: Download openslide_win64.zip To Workspace
-      # You may pin to the exact commit or the version.
-      # uses: carlosperate/download-file-action@e85e0aa6262f13571d17a4a39687b26981c583dc
-      uses: carlosperate/download-file-action@v1.0.3
-      with:
-        # URL of the file to download
-        file-url: ${{ env.OpenSlide_X64_Url }}
-        # New filename to rename the downloaded file
-        file-name: 'openslide_win64.zip'
-        
-    - name: Extract openslide_win64.zip
-      # You may pin to the exact commit or the version.
-      # uses: DuckSoft/extract-7z-action@6eaaa506b410f047eaa9b22498696aad1e19a834
-      uses: DuckSoft/extract-7z-action@v1.0
-      with:
-        # archive path to extract
-        pathSource: openslide_win64.zip
-        # path to place the extract
-        pathTarget: openslide_win64
-            
-    - name: Copy openslide_win64 Directory
-      # You may pin to the exact commit or the version.
-      # uses: MadaraUchiha/copy-action@7ddff6fc153a2ea2cd0fb88ed9750544c051e399
-      uses: MadaraUchiha/copy-action@0.0.1
-      with:
-        # Source file
-        source: openslide_win64/**/bin/
-        # Target file
-        target: openslide/x64/
+        # PowerShell script to execute in Actions-hydrated context
+        script: ls .\openslide -Recurse
         
 
