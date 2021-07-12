@@ -463,7 +463,6 @@ namespace OpenSlideSharp
         {
             if (NativeMethods.GetError(Handle) is string error)
             {
-                Close();
                 throw new OpenSlideException(error);
             }
             return value;
