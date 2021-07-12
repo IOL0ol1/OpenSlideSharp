@@ -55,7 +55,7 @@ namespace OpenSlideSharp.Tests
         [MemberData(nameof(GetUnsupportedFiles))]
         public void TestUnsupportedFiles(string fileName)
         {
-            Assert.Throws<OpenSlideException>(() => OpenSlideImage.Open(fileName));
+            Assert.Throws<OpenSlideException>(() => OpenSlideImage.Open(fileName).ReadRegion(0,0,0,1,1));
         }
 
 
