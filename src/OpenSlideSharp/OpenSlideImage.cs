@@ -46,7 +46,7 @@ namespace OpenSlideSharp
             if (handle == IntPtr.Zero)
                 throw new OpenSlideException(new FormatException().Message);
             Handle = handle;
-            CheckIfThrow(0);
+            CheckIfThrow(0, true);
             disposedValue = !isOwner;
         }
 
@@ -459,10 +459,12 @@ namespace OpenSlideSharp
 
         #endregion
 
-        private T CheckIfThrow<T>(T value)
+        private T CheckIfThrow<T>(T value, bool isDispose = false)
         {
             if (NativeMethods.GetError(Handle) is string error)
             {
+                if (isDispose)
+                    Dispose(true);
                 throw new OpenSlideException(error);
             }
             return value;
