@@ -5,8 +5,32 @@
 [![Nuget download](https://img.shields.io/nuget/dt/OpenSlideSharp)](https://www.nuget.org/packages/OpenSlideSharp/)
 
 # OpenSlideSharp
-.NET bindings for OpenSlide (http://openslide.org/).
+.NET bindings for OpenSlide (http://openslide.org/).    
+
 Thanks to @yigolden for his work in [OpenSlideNET](https://github.com/yigolden/OpenSlideNET).
+
+
+## Index
+
+1.  [OpenSlideSharp](/src/OpenSlideSharp)    
+    openslide warpper, include DeepZoomGenerator, but no native *.dll.
+
+2.  [OpenSlideSharp.BitmapExtensions](/src/OpenSlideSharp.BitmapExtensions)    
+    OpenSlideSharp with System.Drawing.Bitmap extensions.    
+    bgra raw data    
+    -ToJepg    
+    -ToPng    
+    -ToBitmap    
+    ...
+
+3.  [OpenSlideSharp.BruTile](/src/OpenSlideSharp.BruTile)    
+    OpenSlideSharp adapter [BruTile](https://github.com/BruTile/BruTile) (OpenSlideImage -> ITileSource).
+
+4.  [OpenSlideSharp.runtime.win](/src/OpenSlideSharp.runtime.win)    
+    OpenSlide runtime, include native *.dll files.
+
+5.  [OpenSlideSharp.Windows](/src/OpenSlideSharp.Windows)    
+    OpenSlideSharp for windows all in one, include [1],[2],[4].
 
 
 
