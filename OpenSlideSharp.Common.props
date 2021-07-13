@@ -3,7 +3,7 @@
   
   <!--- Package information, Version -->
   <PropertyGroup>
-    <PackageVersion>1.0.0.0</PackageVersion>
+    <PackageVersion>1.0.0.1</PackageVersion>
     <Authors>IOL0ol1</Authors>
     <Copyright>Copyright © 2021-2022</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
