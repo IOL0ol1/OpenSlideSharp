@@ -11,14 +11,27 @@
     <PackageReleaseNotes>OpenSlideSharp runtime in Windows</PackageReleaseNotes>
     <Description>OpenSlideSharp runtime in Windows</Description>
     <NoWarn>1701;1702;NU5128;</NoWarn>
-    <Platforms>AnyCPU</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OpenSlideSharp.runtime.win-x64\OpenSlideSharp.runtime.win-x64.csproj" />
-    <ProjectReference Include="..\OpenSlideSharp.runtime.win-x86\OpenSlideSharp.runtime.win-x86.csproj" />
+    <Content Include="OpenSlideSharp.runtime.win.targets">
+      <PackagePath>build\</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="..\..\openslide\x64\*.dll">
+      <Link>openslide\x64\%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-x64\native\</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="..\..\openslide\x86\*.dll">
+      <Link>openslide\x86\%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-x86\native\</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </Content>
   </ItemGroup>
- 
+
 
 </Project>
-  

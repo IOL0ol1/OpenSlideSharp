@@ -8,10 +8,9 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <PackageId>OpenSlideSharp.Windows</PackageId>
     <PackageTags>openslide image</PackageTags>
-    <PackageReleaseNotes>OpenSlideSharp all in one package in Windows</PackageReleaseNotes>
-    <Description>OpenSlideSharp all in one package in Windows</Description>
+    <PackageReleaseNotes>OpenSlideSharp all in one package for Windows</PackageReleaseNotes>
+    <Description>OpenSlideSharp all in one package for Windows</Description>
     <NoWarn>1701;1702;NU5128;</NoWarn>
-    <Platforms>AnyCPU</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
