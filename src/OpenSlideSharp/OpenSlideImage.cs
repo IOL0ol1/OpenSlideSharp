@@ -46,8 +46,8 @@ namespace OpenSlideSharp
             if (handle == IntPtr.Zero)
                 throw new OpenSlideException(new FormatException().Message);
             Handle = handle;
-            CheckIfThrow(0, true);
             disposedValue = !isOwner;
+            CheckIfThrow(0, isOwner);
         }
 
         /// <summary>
@@ -95,7 +95,7 @@ namespace OpenSlideSharp
             }
         }
 
-        private ImageDimension[] _dimensionsRef;
+        private ImageDimension? _dimensionsRef;
         private readonly object _dimensionsSynclock = new object();
 
         /// <summary>
@@ -112,10 +112,10 @@ namespace OpenSlideSharp
                     lock (_dimensionsSynclock)
                     {
                         if (_dimensionsRef == null)
-                            _dimensionsRef = new[] { GetLevelDimension(0) };
+                            _dimensionsRef = GetLevelDimension(0);
                     }
                 }
-                return _dimensionsRef[0];
+                return _dimensionsRef.Value;
             }
         }
 
@@ -293,7 +293,11 @@ namespace OpenSlideSharp
         ///No other threads may be using the object.
         ///After this call returns, the object cannot be used anymore.
         ///</remarks>
-        public void Close() => NativeMethods.Close(Handle);
+        public void Close()
+        {
+            NativeMethods.Close(Handle);
+            Handle = IntPtr.Zero;
+        }
 
 
         /* 
