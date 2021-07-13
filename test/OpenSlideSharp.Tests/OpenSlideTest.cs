@@ -27,8 +27,6 @@ namespace OpenSlideSharp.Tests
         {
             string currentDir = Directory.GetCurrentDirectory();
             yield return new object[] { Path.Combine(currentDir, "Assets", "boxes.png") };
-            yield return new object[] { Path.Combine(currentDir, "Assets", "unopenable.tiff") };
-            yield return new object[] { Path.Combine(currentDir, "Assets", "unreadable.svs") };
         }
 
 
@@ -38,7 +36,6 @@ namespace OpenSlideSharp.Tests
             string version = OpenSlideImage.LibraryVersion;
             Assert.NotNull(version);
             Assert.NotEqual(string.Empty, version);
-            Output.WriteLine(version);
         }
 
         [Theory]
@@ -55,9 +52,8 @@ namespace OpenSlideSharp.Tests
         [MemberData(nameof(GetUnsupportedFiles))]
         public void TestUnsupportedFiles(string fileName)
         {
-            Assert.Throws<OpenSlideException>(() => OpenSlideImage.Open(fileName).ReadRegion(0,0,0,1,1));
+            Assert.Throws<OpenSlideException>(() => OpenSlideImage.Open(fileName));
         }
-
 
         public static IEnumerable<object[]> GetDetectFormatData()
         {
@@ -65,6 +61,7 @@ namespace OpenSlideSharp.Tests
             yield return new object[] { Path.Combine(currentDir, "Assets", "boxes.png"), null };
             yield return new object[] { Path.Combine(currentDir, "Assets", "boxes.tiff"), "generic-tiff" };
         }
+
         [Theory]
         [MemberData(nameof(GetDetectFormatData))]
         public void TestDetectFormat(string fileName, string format)
@@ -77,6 +74,17 @@ namespace OpenSlideSharp.Tests
         {
             string currentDir = Directory.GetCurrentDirectory();
             Assert.Throws<OpenSlideException>(() => OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "unopenable.tiff")));
+        }
+
+        [Fact]
+        public void TestPropertyAndAssociatedImage()
+        {
+            string currentDir = Directory.GetCurrentDirectory();
+            using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "boxes.tiff")))
+            {
+                Assert.NotEmpty(osr.GetPropertyNames());
+                Assert.Empty(osr.GetAssociatedImageNames());
+            }
         }
 
         [Fact]
@@ -158,7 +166,7 @@ namespace OpenSlideSharp.Tests
                     Assert.Equal(16, image.Dimensions.Width);
                     Assert.Equal(16, image.Dimensions.Height);
                     Assert.Equal(16 * 16 * 4, image.Data.Length);
-                    Assert.False(osr.TryGetAssociatedImageDimensions("__missing",out var tmp));
+                    Assert.False(osr.TryGetAssociatedImageDimensions("__missing", out var tmp));
                 }
             }
         }
@@ -183,7 +191,7 @@ namespace OpenSlideSharp.Tests
             using (var osr = OpenSlideImage.Open(Path.Combine(currentDir, "Assets", "unreadable.svs")))
             {
                 Assert.Equal("aperio", osr.GetProperty<string>("openslide.vendor"));
-                Assert.True(osr.TryGetAssociatedImage("thumbnail",out var tmp));
+                Assert.True(osr.TryGetAssociatedImage("thumbnail", out var tmp));
                 // openslide object has turned into an unusable state.
                 Assert.False(osr.TryGetProperty("", out string value));
             }
