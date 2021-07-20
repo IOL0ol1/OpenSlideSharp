@@ -10,6 +10,10 @@
 
 Thanks to @yigolden for his work in [OpenSlideNET](https://github.com/yigolden/OpenSlideNET).
 
+Nuget    
+```ps
+Install-Package OpenSlideSharp.Windows -Version 1.0.0.1
+```
 
 ## Index
 
