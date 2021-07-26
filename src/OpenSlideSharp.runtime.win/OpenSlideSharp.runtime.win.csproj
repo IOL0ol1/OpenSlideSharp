@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <Content Include="OpenSlideSharp.runtime.win.targets">
-      <PackagePath>build\</PackagePath>
+      <PackagePath>buildtransitive\</PackagePath>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <Pack>true</Pack>
     </Content>
