@@ -1,17 +1,20 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
+
 using Mapsui.UI.Wpf;
+
 using Microsoft.Xaml.Behaviors;
 
 namespace SlideLibrary.Demo
 {
     /// <summary>
-    /// Show cursor world position.
+    /// Viewport info.
     /// </summary>
-    public class WorldPositionBehavior : Behavior<MapControl>
+    public class ViewportBehavior : Behavior<MapControl>
     {
         protected override void OnAttached()
         {
-            base.OnAttached(); 
+            base.OnAttached();
             AssociatedObject.Viewport.ViewportChanged += ViewportViewportChanged;
             AssociatedObject.MouseMove += AssociatedObjectOnMouseMove;
         }
@@ -22,10 +25,16 @@ namespace SlideLibrary.Demo
             AssociatedObject.MouseMove -= AssociatedObjectOnMouseMove;
         }
 
+        private bool isViewportChanged = true;
+
         private void ViewportViewportChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(Resolution))
+            {
+                isViewportChanged = true;
                 Resolution = AssociatedObject.Viewport.Resolution;
+                isViewportChanged = false;
+            }
         }
 
         private void AssociatedObjectOnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
@@ -33,11 +42,11 @@ namespace SlideLibrary.Demo
             var screenPosition = e.GetPosition(AssociatedObject);
             var worldPosition = AssociatedObject.Viewport.ScreenToWorld(screenPosition.X, screenPosition.Y);
             WorldPosition = new Point(worldPosition.X, -worldPosition.Y); // OSM coordinate system,opposite number of y-axis.
-            WorldPositionString = $"{WorldPosition.X:F2},{WorldPosition.Y:F2}";
+            PixelPosition = new Point(worldPosition.X / Resolution, -worldPosition.Y / Resolution);
         }
 
         /// <summary>
-        /// World position.
+        /// World position(um).
         /// </summary>
         public Point WorldPosition
         {
@@ -47,23 +56,24 @@ namespace SlideLibrary.Demo
 
         // Using a DependencyProperty as the backing store for MyProperty.  This enables animation, styling, binding, etc...
         public static readonly DependencyProperty WorldPositionProperty =
-            DependencyProperty.Register("WorldPosition", typeof(Point), typeof(WorldPositionBehavior), new PropertyMetadata(new Point()));
+            DependencyProperty.Register("WorldPosition", typeof(Point), typeof(ViewportBehavior), new PropertyMetadata(new Point()));
+
 
         /// <summary>
-        /// World position string.
+        /// Pixel postion(pixel).
         /// </summary>
-        public string WorldPositionString
+        public Point PixelPosition
         {
-            get { return (string)GetValue(WorldPositionStringProperty); }
-            set { SetValue(WorldPositionStringProperty, value); }
+            get { return (Point)GetValue(PixelPositionProperty); }
+            set { SetValue(PixelPositionProperty, value); }
         }
 
-        // Using a DependencyProperty as the backing store for WorldPositionString.  This enables animation, styling, binding, etc...
-        public static readonly DependencyProperty WorldPositionStringProperty =
-            DependencyProperty.Register("WorldPositionString", typeof(string), typeof(WorldPositionBehavior), new PropertyMetadata("0,0"));
+        // Using a DependencyProperty as the backing store for PixelPosition.  This enables animation, styling, binding, etc...
+        public static readonly DependencyProperty PixelPositionProperty =
+            DependencyProperty.Register("PixelPosition", typeof(Point), typeof(ViewportBehavior), new PropertyMetadata(new Point()));
 
         /// <summary>
-        /// Resolution(um/pixel)
+        /// Resolution(um/pixel).
         /// </summary>
         public double Resolution
         {
@@ -73,6 +83,12 @@ namespace SlideLibrary.Demo
 
         // Using a DependencyProperty as the backing store for Resolution.  This enables animation, styling, binding, etc...
         public static readonly DependencyProperty ResolutionProperty =
-            DependencyProperty.Register("Resolution", typeof(double), typeof(WorldPositionBehavior), new PropertyMetadata(0d));
+            DependencyProperty.Register("Resolution", typeof(double), typeof(ViewportBehavior), new PropertyMetadata(1d, (_1, _2) =>
+             {
+                 if (_1 is ViewportBehavior behavior && behavior.isViewportChanged == false && _2.NewValue is double value && value > 0)
+                 {
+                     behavior.AssociatedObject.Navigator.ZoomTo(value);
+                 }
+             }));
     }
 }

@@ -7,8 +7,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:wpf="clr-namespace:Mapsui.UI.Wpf;assembly=Mapsui.UI.Wpf"
-        TextElement.FontSize="14"
-        TextElement.FontWeight="Medium"
+        Style="{StaticResource MaterialDesignWindow}"
         mc:Ignorable="d">
     <Window.Resources>
         <ResourceDictionary>
@@ -16,6 +15,7 @@
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Flipper.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <local:DelayLoadConverter x:Key="DelayLoadConverter" />
+            <local:PointConverter x:Key="PointConverter" />
         </ResourceDictionary>
     </Window.Resources>
     <Grid>
@@ -27,7 +27,7 @@
         <Grid HorizontalAlignment="Stretch">
             <wpf:MapControl x:Name="MainMap">
                 <b:Interaction.Behaviors>
-                    <local:WorldPositionBehavior Resolution="{Binding ElementName=ResolutionText, Path=Text, Mode=TwoWay}" WorldPosition="{Binding ElementName=MouseCoordinates, Path=Text, Mode=OneWayToSource}" />
+                    <local:ViewportBehavior x:Name="ViewportInfo" />
                 </b:Interaction.Behaviors>
             </wpf:MapControl>
             <StackPanel>
@@ -52,8 +52,7 @@
                         </materialDesign:Flipper.FrontContent>
                         <materialDesign:Flipper.BackContent>
                             <Grid>
-                                <wpf:MapControl x:Name="PreviewMap"
-                                                Width="200"
+                                <wpf:MapControl x:Name="PreviewMap" Width="200"
                                                 Height="200">
                                     <wpf:MapControl.Resources>
                                         <DiscreteObjectKeyFrame x:Key="proxy" Value="{x:Reference Name=MainMap}" />
@@ -62,12 +61,10 @@
                                         <local:PreviewBehavior MapControl="{Binding Source={StaticResource proxy}, Converter={StaticResource DelayLoadConverter}}" />
                                     </b:Interaction.Behaviors>
                                 </wpf:MapControl>
-                                <Button HorizontalAlignment="Left"
-                                        VerticalAlignment="Top"
+                                <Button HorizontalAlignment="Left" VerticalAlignment="Top"
                                         Command="{x:Static materialDesign:Flipper.FlipCommand}"
                                         Style="{StaticResource MaterialDesignToolForegroundButton}">
-                                    <materialDesign:PackIcon HorizontalAlignment="Right"
-                                                             Background="#40000000"
+                                    <materialDesign:PackIcon HorizontalAlignment="Right" Background="#20000000"
                                                              Kind="ArrowLeft" />
                                 </Button>
                             </Grid>
@@ -102,15 +99,12 @@
                                     </materialDesign:Flipper.FrontContent>
                                     <materialDesign:Flipper.BackContent>
                                         <Grid>
-                                            <Image Width="200"
-                                                   Height="200"
+                                            <Image Width="200" Height="200"
                                                    Source="{Binding Value}" />
-                                            <Button HorizontalAlignment="Left"
-                                                    VerticalAlignment="Top"
+                                            <Button HorizontalAlignment="Left" VerticalAlignment="Top"
                                                     Command="{x:Static materialDesign:Flipper.FlipCommand}"
                                                     Style="{StaticResource MaterialDesignToolForegroundButton}">
-                                                <materialDesign:PackIcon HorizontalAlignment="Right"
-                                                                         Background="#40000000"
+                                                <materialDesign:PackIcon HorizontalAlignment="Right" Background="#20000000"
                                                                          Kind="ArrowLeft" />
                                             </Button>
                                         </Grid>
@@ -130,14 +124,27 @@
                 </Grid.RowDefinitions>
                 <materialDesign:Card Margin="5" Opacity="0.7">
                     <StackPanel Margin="5">
-                        <TextBlock x:Name="MouseCoordinates" />
-                        <TextBlock x:Name="ResolutionText" Text="0" />
+                        <TextBlock Text="{Binding ElementName=ViewportInfo, Path=Resolution, StringFormat={}{0:F4} um/pixel, Mode=OneWay}" ToolTip="Current resolution" />
+                        <TextBlock ToolTip="Current mouse pixel position">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0:F4} pixel,{1:F4} pixel">
+                                    <Binding ElementName="ViewportInfo" Path="PixelPosition.X" />
+                                    <Binding ElementName="ViewportInfo" Path="PixelPosition.Y" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                        <TextBlock ToolTip="Current mouse world position">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0:F4} um,{1:F4} um">
+                                    <Binding ElementName="ViewportInfo" Path="WorldPosition.X" />
+                                    <Binding ElementName="ViewportInfo" Path="WorldPosition.Y" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
                     </StackPanel>
                 </materialDesign:Card>
-                <materialDesign:Card Grid.Row="1"
-                                     Margin="5"
-                                     HorizontalAlignment="Right"
-                                     Opacity="0.7">
+                <materialDesign:Card Grid.Row="1" Margin="5"
+                                     HorizontalAlignment="Right" Opacity="0.7">
                     <ListBox x:Name="LayerList" Grid.IsSharedSizeScope="True">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
@@ -147,58 +154,108 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <CheckBox Content="{Binding Name}" IsChecked="{Binding Enabled}" />
-                                    <Slider Grid.Column="1"
-                                            MinWidth="100"
-                                            Margin="5,0"
-                                            VerticalAlignment="Center"
-                                            Maximum="1"
-                                            Minimum="0"
-                                            SmallChange="0.1"
+                                    <Slider Name="Zoom" Grid.Column="1"
+                                            MinWidth="100" Margin="5,0"
+                                            VerticalAlignment="Center" Maximum="1"
+                                            Minimum="0" SmallChange="0.1"
                                             Value="{Binding Opacity}" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </materialDesign:Card>
-                <materialDesign:Card Grid.Row="2"
-                                     Margin="5"
-                                     HorizontalAlignment="Right"
-                                     VerticalAlignment="Stretch"
+                <materialDesign:Card Grid.Row="2" Margin="5"
+                                     HorizontalAlignment="Right" VerticalAlignment="Stretch"
                                      Opacity="0.7">
-                    <Slider Margin="10"
-                            Maximum="32"
-                            Minimum="0.03125"
-                            Orientation="Vertical"
-                            TickPlacement="BottomRight">
-                        <b:Interaction.Behaviors>
-                            <local:ZoomBehavior MapControl="{Binding ElementName=MainMap}" />
-                        </b:Interaction.Behaviors>
-                    </Slider>
+                    <Slider Margin="10" Maximum="32"
+                            Minimum="0.03125" Orientation="Vertical"
+                            TickPlacement="BottomRight"
+                            Value="{Binding ElementName=ViewportInfo, Path=Resolution}" />
                 </materialDesign:Card>
             </Grid>
         </Grid>
-        <GridSplitter Grid.Column="1"
-                      Width="3"
+        <GridSplitter Grid.Column="1" Width="3"
                       HorizontalAlignment="Center" />
-        <Grid Grid.Column="2">
+        <Grid Grid.Column="2" Grid.IsSharedSizeScope="True">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <StackPanel>
-                <Button Margin="5"
-                        Click="Open_Click"
-                        Content="Open..." />
-                <Button Margin="5"
-                        Click="Random_Click"
-                        Content="Random" />
-                <Button Margin="5"
-                        Click="Explorer_Click"
-                        Content="Exe Directory..." />
+                <Button Margin="5" Click="Open_Click"
+                        Content="Open..." ToolTip="Open slide file" />
+                <Button Margin="5" Click="Random_Click"
+                        Content="Random" ToolTip="Random goto" />
+                <materialDesign:Card Margin="5" materialDesign:ShadowAssist.ShadowDepth="Depth1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="PART_SharedSizeGroup0" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Margin="5,0" VerticalAlignment="Center"
+                                 materialDesign:TextFieldAssist.UnderlineBrush="Transparent" BorderBrush="Transparent">
+                            <TextBox.Text>
+                                <Binding Converter="{StaticResource PointConverter}"
+                                         Path="CenterPixel" UpdateSourceTrigger="PropertyChanged">
+                                    <Binding.ValidationRules>
+                                        <local:NavigatorValidationRule />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </TextBox.Text>
+                        </TextBox>
+                        <Button Grid.Column="1" materialDesign:ButtonAssist.CornerRadius="0"
+                                materialDesign:ShadowAssist.ShadowEdges="None" Click="CenterOnPixel_Click"
+                                Content="CenterOn(pixel)" />
+                    </Grid>
+                </materialDesign:Card>
+                <materialDesign:Card Margin="5" materialDesign:ShadowAssist.ShadowDepth="Depth1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="PART_SharedSizeGroup0" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Margin="5,0" VerticalAlignment="Center"
+                                 materialDesign:TextFieldAssist.UnderlineBrush="Transparent" BorderBrush="Transparent">
+                            <TextBox.Text>
+                                <Binding Converter="{StaticResource PointConverter}"
+                                         Path="CenterWorld" UpdateSourceTrigger="PropertyChanged">
+                                    <Binding.ValidationRules>
+                                        <local:NavigatorValidationRule />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </TextBox.Text>
+                        </TextBox>
+                        <Button Grid.Column="1" materialDesign:ButtonAssist.CornerRadius="0"
+                                materialDesign:ShadowAssist.ShadowEdges="None" Click="CenterOnWorld_Click"
+                                Content="CenterOn(um)" />
+                    </Grid>
+                </materialDesign:Card>
+                <materialDesign:Card Margin="5" materialDesign:ShadowAssist.ShadowDepth="Depth1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="PART_SharedSizeGroup0" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Margin="5,0" VerticalAlignment="Center"
+                                 materialDesign:TextFieldAssist.UnderlineBrush="Transparent" BorderBrush="Transparent">
+                            <TextBox.Text>
+                                <Binding Path="Resolution" UpdateSourceTrigger="PropertyChanged">
+                                    <Binding.ValidationRules>
+                                        <local:NavigatorValidationRule DataLength="1" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </TextBox.Text>
+                        </TextBox>
+                        <Button Grid.Column="1" materialDesign:ButtonAssist.CornerRadius="0"
+                                materialDesign:ShadowAssist.ShadowEdges="None" Click="ZoomTo_Click"
+                                Content="ZoomTo(um/pixel)" />
+                    </Grid>
+                </materialDesign:Card>
+                <Button Margin="5" Click="Explorer_Click"
+                        Content="Exe Directory..." ToolTip="Open process directory" />
             </StackPanel>
-            <ListView Grid.Row="1"
-                      BorderThickness="1"
-                      ItemsSource="{Binding Info}" />
+            <ListView Grid.Row="1" BorderThickness="1"
+                      ItemsSource="{Binding Infos}" />
         </Grid>
     </Grid>
 </Window>

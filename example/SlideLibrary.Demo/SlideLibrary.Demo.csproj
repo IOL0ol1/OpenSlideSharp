@@ -80,10 +80,11 @@
     </ApplicationDefinition>
     <Compile Include="Behaviors\PreviewBehavior.cs" />
     <Compile Include="Converters\DelayLoadConverter.cs" />
+    <Compile Include="Converters\PointConverter.cs" />
     <Compile Include="Mapsui\SlideSliceLayer.cs" />
     <Compile Include="Mapsui\SlideTileLayer.cs" />
-    <Compile Include="Behaviors\WorldPositionBehavior.cs" />
-    <Compile Include="Behaviors\ZoomBehavior.cs" />
+    <Compile Include="Behaviors\ViewportBehavior.cs" />
+    <Compile Include="ValidationRules\NavigatorValidationRule.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

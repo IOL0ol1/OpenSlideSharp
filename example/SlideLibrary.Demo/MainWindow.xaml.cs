@@ -7,8 +7,11 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
+
 using Mapsui.Fetcher;
+
 using Microsoft.Win32;
+
 using Point = Mapsui.Geometries.Point;
 
 namespace SlideLibrary.Demo
@@ -24,19 +27,32 @@ namespace SlideLibrary.Demo
             DataContext = this;
         }
 
-        private double resolution = 0;
-        /// <summary>
-        /// Resolution(um/pixel).
-        /// </summary>
+
+        private Point centerPixel = new Point(0, 0);
+        public Point CenterPixel
+        {
+            get { return centerPixel; }
+            set { SetProperty(ref centerPixel, value); }
+        }
+
+
+        private Point centerWorld = new Point(0, 0);
+        public Point CenterWorld
+        {
+            get { return centerWorld; }
+            set { SetProperty(ref centerWorld, value); }
+        }
+
+
+        private double resolution = 1;
         public double Resolution
         {
             get { return resolution; }
             set { SetProperty(ref resolution, value); }
         }
 
-        public ObservableCollection<KeyValuePair<string, object>> Info { get; } = new ObservableCollection<KeyValuePair<string, object>>();
+        public ObservableCollection<KeyValuePair<string, object>> Infos { get; } = new ObservableCollection<KeyValuePair<string, object>>();
         public ObservableCollection<KeyValuePair<string, ImageSource>> Images { get; } = new ObservableCollection<KeyValuePair<string, ImageSource>>();
-
 
         private ISlideSource _slideSource;
         private Random random = new Random();
@@ -59,7 +75,7 @@ namespace SlideLibrary.Demo
                 InitPreview(_slideSource);
                 InitImage(_slideSource);
                 InitInfo(_slideSource);
-                
+
 
             }
         }
@@ -73,6 +89,12 @@ namespace SlideLibrary.Demo
             MainMap.Map.Layers.Clear();
             MainMap.Map.Layers.Add(new SlideTileLayer(_slideSource, dataFetchStrategy: new MinimalDataFetchStrategy()));
             MainMap.Map.Layers.Add(new SlideSliceLayer(_slideSource) { Enabled = false, Opacity = 0.5 });
+
+            var center = MainMap.Viewport.Center;
+            Resolution = MainMap.Viewport.Resolution;
+            CenterWorld = new Point(center.X, -center.Y);
+            CenterPixel = new Point((int)(center.X / Resolution), (int)(-center.Y / Resolution));
+
         }
 
         /// <summary>
@@ -112,17 +134,16 @@ namespace SlideLibrary.Demo
         private void InitInfo(ISlideSource slideSource)
         {
             Title = slideSource.Source;
-            Info.Clear();
+            Infos.Clear();
             foreach (var item in slideSource.ExternInfo)
             {
-                Info.Add(item);
+                Infos.Add(item);
             }
-            Info.Add(new KeyValuePair<string, object>("--Layer--", "-Resolution(um/pixel)-"));
+            Infos.Add(new KeyValuePair<string, object>("--Layer--", "-Resolution(um/pixel)-"));
             foreach (var item in slideSource.Schema.Resolutions)
             {
-                Info.Add(new KeyValuePair<string, object>(item.Key.ToString(), item.Value.UnitsPerPixel));
+                Infos.Add(new KeyValuePair<string, object>(item.Key.ToString(), item.Value.UnitsPerPixel));
             }
-            Resolution = slideSource.MinUnitsPerPixel;
             LayerList.ItemsSource = MainMap.Map.Layers.Reverse();
         }
 
@@ -146,6 +167,23 @@ namespace SlideLibrary.Demo
         private void Explorer_Click(object sender, RoutedEventArgs e)
         {
             Process.Start("explorer.exe", LibraryInfo.AssemblyDirectory);
+        }
+
+
+        private void CenterOnPixel_Click(object sender, RoutedEventArgs e)
+        {
+            var resolution = MainMap.Viewport.Resolution;
+            MainMap.Navigator.CenterOn(new Point(CenterPixel.X * resolution, -CenterPixel.Y * resolution));
+        }
+
+        private void CenterOnWorld_Click(object sender, RoutedEventArgs e)
+        {
+            MainMap.Navigator.CenterOn(new Point(CenterWorld.X, -CenterWorld.Y));
+        }
+
+        private void ZoomTo_Click(object sender, RoutedEventArgs e)
+        {
+            MainMap.Navigator.ZoomTo(Resolution);
         }
     }
 
