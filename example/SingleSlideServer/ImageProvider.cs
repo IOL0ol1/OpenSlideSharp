@@ -1,27 +1,38 @@
-﻿using Microsoft.Extensions.Options;
+﻿using System;
+using Microsoft.Extensions.Options;
 using OpenSlideSharp;
-using System;
 
 namespace SingleSlideServer
 {
     public class ImageProvider : IDisposable
     {
-        private OpenSlideImage _image;
         private DeepZoomGenerator _generator;
 
         public ImageProvider(IOptions<ImageOption> options)
         {
-            var path = options.Value.Path;
-            _image = OpenSlideImage.Open(path);
-            _generator = new DeepZoomGenerator(_image, tileSize: 254, overlap: 1);
+            _generator = new DeepZoomGenerator(OpenSlideImage.Open(options.Value.Path), tileSize: 254, overlap: 1);
         }
 
         public DeepZoomGenerator DeepZoomGenerator => _generator;
 
+        private bool disposedValue;
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    _generator.Dispose();
+                }
+
+                disposedValue = true;
+            }
+        }
+
         public void Dispose()
         {
-            _generator.Dispose();
-            _image.Dispose();
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }

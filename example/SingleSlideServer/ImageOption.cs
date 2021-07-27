@@ -2,6 +2,6 @@
 {
     public class ImageOption
     {
-        public string Path { get; set; } = "image.tiff";
+        public string Path { get; set; } 
     }
 }

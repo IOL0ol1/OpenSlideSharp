@@ -75,7 +75,7 @@ namespace MultiSlideServer
                 try
                 {
                     response.ContentType = "image/jpeg";
-                    response.Body = await Task.Run(() => dz.GetTileAsJpegStream(result.level, result.col, result.row, out var tmp));
+                    await dz.GetTileAsJpegStream(result.level, result.col, result.row, out var tmp).CopyToAsync(response.Body);
                 }
                 finally
                 {
@@ -84,12 +84,14 @@ namespace MultiSlideServer
             });
 
             app.UseStaticFiles();
+            app.UseRouting();
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapRazorPages();
+                endpoints.MapControllers();
             });
         }
+
 
         // OPTIMIZE: Use ReadOnlySpan in .NET Core 2.1
         // expression: /{level}/{col}_{row}.jpeg

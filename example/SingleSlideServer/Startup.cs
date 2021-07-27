@@ -57,21 +57,19 @@ namespace SingleSlideServer
                     var provider = context.RequestServices.GetService<ImageProvider>();
                     var response = context.Response;
                     response.ContentType = "image/jpeg";
-                    response.Body = await Task.Run(()=> provider.DeepZoomGenerator.GetTileAsJpegStream(result.level, result.col, result.row,out var tmp));
+                    await provider.DeepZoomGenerator.GetTileAsJpegStream(result.level, result.col, result.row, out var tmp).CopyToAsync(response.Body);
                 });
             });
 
             app.UseDefaultFiles();
-
             app.UseStaticFiles();
-
+            app.UseRouting();
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapRazorPages();
+                endpoints.MapControllers();
             });
         }
 
-        // OPTIMIZE: Use ReadOnlySpan in .NET Core 2.1
         // expression: /{level}/{col}_{row}.jpeg
         private static bool TryParseDeepZoom(string expression, out (int level, int col, int row, string format) result)
         {

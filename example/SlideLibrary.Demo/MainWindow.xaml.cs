@@ -75,8 +75,6 @@ namespace SlideLibrary.Demo
                 InitPreview(_slideSource);
                 InitImage(_slideSource);
                 InitInfo(_slideSource);
-
-
             }
         }
 
@@ -93,7 +91,7 @@ namespace SlideLibrary.Demo
             var center = MainMap.Viewport.Center;
             Resolution = MainMap.Viewport.Resolution;
             CenterWorld = new Point(center.X, -center.Y);
-            CenterPixel = new Point((int)(center.X / Resolution), (int)(-center.Y / Resolution));
+            CenterPixel = new Point(center.X / Resolution, -center.Y / Resolution);
 
         }
 
