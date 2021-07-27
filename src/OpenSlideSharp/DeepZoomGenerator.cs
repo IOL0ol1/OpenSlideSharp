@@ -91,13 +91,13 @@ namespace OpenSlideSharp
         /// </summary>
         public int LevelCount => _layers.Length;
 
-        private IEnumerable<ImageDimension> _levelTilesCache;
+        private IEnumerable<TileDimensions> _levelTilesCache;
 
         /// <summary>
         /// The number of tiles in each level.
         /// </summary>
-        public IEnumerable<ImageDimension> LevelTiles
-            => _levelTilesCache != null ? _levelTilesCache : _levelTilesCache = _layers.Select(l => new ImageDimension((int)((l.LayerWidth + _tileSize - 1) / _tileSize), (int)((l.LayerHeight + _tileSize - 1) / _tileSize)));
+        public IEnumerable<TileDimensions> LevelTiles
+            => _levelTilesCache != null ? _levelTilesCache : _levelTilesCache = _layers.Select(l => new TileDimensions((int)((l.LayerWidth + _tileSize - 1) / _tileSize), (int)((l.LayerHeight + _tileSize - 1) / _tileSize)));
 
         private IEnumerable<ImageDimension> _levelDimensionsCache;
 
@@ -324,5 +324,46 @@ namespace OpenSlideSharp
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
         }
+    }
+
+    /// <summary>
+    /// Tile position
+    /// </summary>
+    public struct TileDimensions
+    {
+        internal int cols;
+        internal int rows;
+
+        /// <summary>
+        /// tile col
+        /// </summary>
+        public int Cols => cols;
+        /// <summary>
+        /// tile row
+        /// </summary>
+        public int Rows => rows;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="_cols">cols</param>
+        /// <param name="_rows">rows</param>
+        public TileDimensions(int _cols, int _rows)
+        {
+            cols = _cols;
+            rows = _rows;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="cols"></param>
+        /// <param name="rows"></param>
+        public void Deconstruct(out int cols, out int rows)
+        {
+            cols = this.cols;
+            rows = this.rows;
+        }
+
     }
 }

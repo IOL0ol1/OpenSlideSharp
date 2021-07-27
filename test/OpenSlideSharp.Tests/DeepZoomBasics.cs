@@ -18,7 +18,7 @@ namespace OpenSlideSharp.Tests
                 Assert.Equal(10, dz.LevelCount);
                 Assert.Equal(11, dz.TileCount);
                 Assert.Equal(new (int, int)[] { (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (2, 1) }, dz.LevelTiles.Select(_ => (_.Cols, _.Rows)));
-                Assert.Equal(new (long, long)[] { (1, 1), (2, 1), (3, 2), (5, 4), (10, 8), (19, 16), (38, 32), (75, 63), (150, 125), (300, 250) }, dz.LevelDimemsions.Select(_ => (_.Width, _.Height)));
+                Assert.Equal(new (long, long)[] { (1, 1), (2, 1), (3, 2), (5, 4), (10, 8), (19, 16), (38, 32), (75, 63), (150, 125), (300, 250) }, dz.LevelDimensions.Select(_ => (_.Width, _.Height)));
             }
         }
 
