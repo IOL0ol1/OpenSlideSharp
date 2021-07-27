@@ -25,15 +25,10 @@ namespace OpenSlideSharp
         {
             if (image == null) throw new NullReferenceException();
             var data = image.ReadRegion(level, x, y, width, height);
-            var bitmap = new Bitmap((int)width, (int)height);
-            var bitmapData = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            var bytesPerLine = (int)Math.Min(width * 4, bitmapData.Stride);
-            for (int i = 0; i < bitmap.Height; i++)
+            fixed (byte* scan0 = data)
             {
-                Marshal.Copy(data, (int)width * 4 * i, (IntPtr)((byte*)bitmapData.Scan0 + (bitmapData.Stride * i)), bytesPerLine);
+                return new Bitmap((int)width, (int)height, (int)width * 4, PixelFormat.Format32bppArgb, (IntPtr)scan0);
             }
-            bitmap.UnlockBits(bitmapData);
-            return bitmap;
         }
 
         /// <summary>

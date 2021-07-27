@@ -253,11 +253,8 @@ namespace OpenSlideSharp
                 throw new ArgumentOutOfRangeException(nameof(height));
 
             var data = new byte[width * height * 4];
-            fixed (byte* pdata = data)
-            {
-                NativeMethods.ReadRegion(Handle, pdata, x, y, level, width, height);
-                CheckIfThrow(0);
-            }
+            NativeMethods.ReadRegion(Handle, data, x, y, level, width, height);
+            CheckIfThrow(0);
             return data;
         }
 
@@ -269,20 +266,18 @@ namespace OpenSlideSharp
         /// <param name="y">The top left y-coordinate, in the level 0 reference frame.</param>
         /// <param name="width">The width of the region. Must be non-negative.</param>
         /// <param name="height">The height of the region. Must be non-negative.</param>
-        /// <param name="data">The pixel data of this region.</param>
+        /// <param name="data">The BGRA pixel data of this region.</param>
         /// <returns></returns>
         public unsafe bool TryReadRegion(int level, long x, long y, long width, long height, out byte[] data)
         {
-            data = new byte[width * height * 4];
+            data = null;
             if (width <= 0) return false;
             if (height <= 0) return false;
 
-            fixed (byte* pdata = data)
-            {
-                NativeMethods.ReadRegion(Handle, pdata, x, y, level, width, height);
-                if (NativeMethods.GetError(Handle) is string error)
-                    return false;
-            }
+            data = new byte[width * height * 4];
+            NativeMethods.ReadRegion(Handle, data, x, y, level, width, height);
+            if (NativeMethods.GetError(Handle) is string)
+                return false;
             return true;
         }
 

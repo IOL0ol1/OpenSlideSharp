@@ -104,35 +104,31 @@ namespace SlideLibrary
         /// <param name="height">height</param>
         /// <param name="dstWidth">dst width</param>
         /// <param name="dstHeight">dst height</param>
+        /// <param name="quality">jpeg quality</param>
         /// <returns></returns>
-        public static byte[] Raw2Jpeg(byte[] raw, int bytesPerPixel, int bytesPerLine, int width, int height, int dstWidth = 0, int dstHeight = 0)
+        public static unsafe byte[] Raw2Jpeg(byte[] raw, int bytesPerPixel, int bytesPerLine, int width, int height, int dstWidth = 0, int dstHeight = 0, int? quality = null)
         {
             if (raw == null) return null;
             if (bytesPerPixel != 3 && bytesPerPixel != 4) throw new ArgumentException(nameof(bytesPerPixel));
             var pixel = bytesPerPixel == 3 ? PixelFormat.Format24bppRgb : PixelFormat.Format32bppRgb;
-            using (var bmp = new Bitmap(width, height))
+            fixed (byte* scan0 = raw)
             {
-                var data = bmp.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, pixel);
-                var lineSize = Math.Min(bytesPerLine, data.Stride);
-                for (int i = 0; i < height; i++)
+                using (var bmp = new Bitmap(width, height, bytesPerLine, pixel, (IntPtr)scan0))
                 {
-                    Marshal.Copy(raw, bytesPerLine * i, data.Scan0 + data.Stride * i, lineSize);
-                }
-                bmp.UnlockBits(data);
 
-                // fill
-                if ((dstWidth <= 0 && dstHeight <= 0) || (dstWidth == width && dstHeight == height))
-                {
-                    return bmp.ToArray(ImageFormat.Jpeg);
-                }
-                else
-                {
-                    using (var dstImage = new Bitmap(dstWidth, dstHeight))
-                    using (var g = Graphics.FromImage(dstImage))
+                    if ((dstWidth <= 0 && dstHeight <= 0) || (dstWidth == width && dstHeight == height))
                     {
-                        g.Clear(Color.White);
-                        g.DrawImage(bmp, new Point(0, 0));
-                        return dstImage.ToArray(ImageFormat.Jpeg);
+                        return bmp.ToArray(ImageFormat.Jpeg, quality);
+                    }
+                    else  // fill
+                    {
+                        using (var dstImage = new Bitmap(dstWidth, dstHeight))
+                        using (var g = Graphics.FromImage(dstImage))
+                        {
+                            g.Clear(Color.White);
+                            g.DrawImage(bmp, new Point(0, 0));
+                            return dstImage.ToArray(ImageFormat.Jpeg, quality);
+                        }
                     }
                 }
             }
@@ -142,17 +138,7 @@ namespace SlideLibrary
         {
             return new BgraData(jpeg, false);
         }
-
-        public static BgraData Jpeg2Bgra2(byte[] jpeg)
-        {
-            using (var mat = Mat.ImDecode(jpeg, ImreadModes.Color))
-            {
-                byte[] bgra = new byte[mat.DataEnd.ToInt64() - mat.DataStart.ToInt64()];
-                Marshal.Copy(mat.Data, bgra, 0, bgra.Length);
-                return new BgraData(mat.Width, mat.Height, (int)mat.Step(), bgra, mat.Channels());
-            }
-        }
-
+ 
         /// <summary>
         /// Join by <paramref name="srcPixelTiles"/> and cut by <paramref name="srcPixelExtent"/> then scale to <paramref name="dstPixelExtent"/>(only height an width is useful).
         /// </summary>

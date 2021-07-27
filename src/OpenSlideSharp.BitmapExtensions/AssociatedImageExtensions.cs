@@ -19,15 +19,10 @@ namespace OpenSlideSharp
         public unsafe static Bitmap ToBitmap(this AssociatedImage image)
         {
             if (image == null) throw new NullReferenceException();
-            var bitmap = new Bitmap((int)image.Dimensions.Width, (int)image.Dimensions.Height);
-            var bitmapData = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            var bytesPerLine = (int)Math.Min(image.Dimensions.Width * 4, bitmapData.Stride);
-            for (int i = 0; i < bitmap.Height; i++)
+            fixed (byte* scan0 = image.Data)
             {
-                Marshal.Copy(image.Data, (int)image.Dimensions.Width * 4 * i, (IntPtr)((byte*)bitmapData.Scan0 + (bitmapData.Stride * i)), bytesPerLine);
+                return new Bitmap((int)image.Dimensions.Width, (int)image.Dimensions.Height, (int)image.Dimensions.Width * 4, PixelFormat.Format32bppArgb, (IntPtr)scan0);
             }
-            bitmap.UnlockBits(bitmapData);
-            return bitmap;
         }
 
         /// <summary>

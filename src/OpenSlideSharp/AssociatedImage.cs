@@ -22,7 +22,7 @@
         public ImageDimension Dimensions { get; private set; }
 
         /// <summary>
-        /// Associated image argb data
+        /// Associated image ARGB data
         /// </summary>
         public byte[] Data { get; private set; }
     }
