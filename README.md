@@ -37,6 +37,6 @@ Install-Package OpenSlideSharp.Windows -Version 1.0.0.1
 5.  [OpenSlideSharp.Windows](/src/OpenSlideSharp.Windows)    
     OpenSlideSharp for windows all in one, include [1],[2],[4].
 
-
-
- 
+## Others
+The GIS (Geographic Information System) suite (include layer, editor) makes it easy to develop features related to medical image slides.    
+So, i think it would be better to use [openlayer](https://openlayers.org/) or [Leaflet](https://leafletjs.com/) for web.    
