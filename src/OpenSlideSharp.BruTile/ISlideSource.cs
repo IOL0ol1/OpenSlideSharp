@@ -6,10 +6,10 @@ using System.Linq;
 using BruTile;
 using BruTile.Cache;
 
-using SlideLibrary.Openslide;
+using OpenCvSharp;
 
 
-namespace SlideLibrary
+namespace OpenSlideSharp.BruTile
 {
 
     public abstract class SlideSourceBase : ISlideSource, IDisposable
@@ -49,22 +49,22 @@ namespace SlideLibrary
 
         public double MinUnitsPerPixel { get; protected set; }
 
-        protected MemoryCache<BgraData> _bgraCache = new MemoryCache<BgraData>();
+        protected MemoryCache<Mat> _bgraCache = new MemoryCache<Mat>();
 
         public virtual byte[] GetSlice(SliceInfo sliceInfo)
         {
             if (sliceInfo.Extent.Intersects(Schema.Extent) && sliceInfo.Resolution != 0)
             {
-                var curLevel = Utilities.GetLevel(Schema.Resolutions, sliceInfo.Resolution, sliceInfo.Parame.SampleMode);
+                var curLevel = TileUtil.GetLevel(Schema.Resolutions, sliceInfo.Resolution, sliceInfo.Parame.SampleMode);
                 var curUnitsPerPixel = Schema.Resolutions[curLevel].UnitsPerPixel;
                 var tileInfos = Schema.GetTileInfos(sliceInfo.Extent, curLevel);
 
-                Func<TileInfo, BgraData> getOrInsterCache = new Func<TileInfo, BgraData>(_ =>
+                Func<TileInfo, Mat> getOrInsterCache = new Func<TileInfo, Mat>(_ =>
                  {
                      var cache = _bgraCache.Find(_.Index);
                      if (cache == null)
                      {
-                         cache = ImageUtil.Jpeg2Bgra(GetTile(_));
+                         cache = Mat.ImDecode(GetTile(_));
                          _bgraCache.Add(_.Index, cache);
                      }
                      return cache;

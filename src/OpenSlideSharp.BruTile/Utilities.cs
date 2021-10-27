@@ -1,96 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 
 using BruTile;
 
 using OpenCvSharp;
 
-using TurboJpegWrapper;
-
 using Point = System.Drawing.Point;
 
-namespace SlideLibrary
+namespace OpenSlideSharp.BruTile
 {
-    public static class LibraryInfo
-    {
-        public static string AssemblyLocation => Assembly.GetCallingAssembly().Location;
-        public static string AssemblyDirectory => Directory.GetParent(AssemblyLocation)?.FullName;
-    }
-
-    public class BgraData
-    {
-        static BgraData()
-        {
-            var directoryName = Path.GetDirectoryName(typeof(ImageUtil).Assembly.Location);
-            var platformName = $"win-{(Environment.Is64BitProcess ? "x64" : "x86")}";
-            var dllPath = Path.Combine(directoryName, platformName);
-            TJInitializer.Initialize(dllPath, logger: _ => Trace.TraceInformation(_));
-        }
-
-
-        public BgraData(int width, int height, int stride, byte[] bgraData, int bytesPerPixel)
-        {
-            Width = width;
-            Height = height;
-            Stride = stride;
-            Data = bgraData;
-            BytePerPixel = bytesPerPixel;
-        }
-
-        public BgraData(byte[] jpegData, bool isConvert2Bgra = true)
-        {
-            using (var jpegDecode = new TJDecompressor())
-            {
-                var bgra = jpegDecode.Decompress(jpegData, isConvert2Bgra ? TJPixelFormats.TJPF_BGRA : TJPixelFormats.TJPF_BGR, TJFlags.NONE);
-                Width = bgra.Width;
-                Height = bgra.Height;
-                Stride = bgra.RowBytes;
-                Data = bgra.Data;
-                BytePerPixel = isConvert2Bgra ? 4 : 3;
-            }
-        }
-
-        /// <summary>
-        /// Pixel width
-        /// </summary>
-        public int Width { get; private set; }
-
-        /// <summary>
-        /// Pixel height.
-        /// </summary>
-        public int Height { get; private set; }
-
-        /// <summary>
-        /// Byte count per line
-        /// </summary>
-        public int Stride { get; private set; }
-
-        /// <summary>
-        /// Byte count per pixel
-        /// </summary>
-        public int BytePerPixel { get; private set; }
-
-        /// <summary>
-        /// data
-        /// </summary>
-        public byte[] Data { get; private set; }
-
-        public byte[] ToJpeg(int quality = 100)
-        {
-            using (var jpegEncode = new TJCompressor())
-            {
-                return jpegEncode.Compress(Data, Stride, Width, Height, BytePerPixel == 4 ? TJPixelFormats.TJPF_BGRA : TJPixelFormats.TJPF_BGR, TJSubsamplingOptions.TJSAMP_420, quality, TJFlags.NONE);
-            }
-        }
-    }
-
     public class ImageUtil
     {
 
@@ -106,7 +29,7 @@ namespace SlideLibrary
         /// <param name="dstHeight">dst height</param>
         /// <param name="quality">jpeg quality</param>
         /// <returns></returns>
-        public static unsafe byte[] Raw2Jpeg(byte[] raw, int bytesPerPixel, int bytesPerLine, int width, int height, int dstWidth = 0, int dstHeight = 0, int? quality = null)
+        public static unsafe byte[] GetJpeg(byte[] raw, int bytesPerPixel, int bytesPerLine, int width, int height, int dstWidth = 0, int dstHeight = 0, int? quality = null)
         {
             if (raw == null) return null;
             if (bytesPerPixel != 3 && bytesPerPixel != 4) throw new ArgumentException(nameof(bytesPerPixel));
@@ -134,11 +57,7 @@ namespace SlideLibrary
             }
         }
 
-        public static BgraData Jpeg2Bgra(byte[] jpeg)
-        {
-            return new BgraData(jpeg, false);
-        }
- 
+
         /// <summary>
         /// Join by <paramref name="srcPixelTiles"/> and cut by <paramref name="srcPixelExtent"/> then scale to <paramref name="dstPixelExtent"/>(only height an width is useful).
         /// </summary>
@@ -148,7 +67,7 @@ namespace SlideLibrary
         /// <param name="dstQuality">jpeg output quality</param>
         /// <param name="backgroundBGRA">background hex code,default is white</param>
         /// <returns></returns>
-        public static byte[] Join(IEnumerable<Tuple<Extent, BgraData>> srcPixelTiles, Extent srcPixelExtent, Extent dstPixelExtent, int? dstQuality = 85, uint backgroundBGRA = 0xFFFFFFFF)
+        public static byte[] Join(IEnumerable<Tuple<Extent, Mat>> srcPixelTiles, Extent srcPixelExtent, Extent dstPixelExtent, int? dstQuality = 85, uint backgroundBGRA = 0xFFFFFFFF)
         {
             if (srcPixelTiles == null || !srcPixelTiles.Any()) return null;
             try
@@ -175,7 +94,7 @@ namespace SlideLibrary
                         var canvasOffsetPixelX = (int)(intersect.MinX - srcPixelExtent.MinX);
                         var canvasOffsetPixelY = (int)(intersect.MinY - srcPixelExtent.MinY);
 
-                        using (var tileMat = new Mat((int)tileExtent.Height, (int)tileExtent.Width, pixelFormat, tileRawData.Data, tileRawData.Stride))
+                        using (var tileMat = new Mat((int)tileExtent.Height, (int)tileExtent.Width, pixelFormat, tileRawData.Data, tileRawData.Step()))
                         {
                             var tileRegion = new Mat(tileMat, new Rect(tileOffsetPixelX, tileOffsetPixelY, (int)intersect.Width, (int)intersect.Height));
                             var canvasRegion = new Mat(canvas, new Rect(canvasOffsetPixelX, canvasOffsetPixelY, (int)intersect.Width, (int)intersect.Height));
@@ -203,7 +122,8 @@ namespace SlideLibrary
             }
         }
     }
-    public class Utilities
+
+    public class TileUtil
     {
         public static int GetLevel(IDictionary<int, Resolution> resolutions, double unitsPerPixel, SampleMode sampleMode = SampleMode.Nearest)
         {

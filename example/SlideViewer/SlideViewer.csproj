@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworks>net48;netcoreapp3.1</TargetFrameworks>
+    <UseWPF>true</UseWPF>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BruTile" Version="4.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Mapsui.Wpf" Version="3.0.1" />
+    <PackageReference Include="MaterialDesignThemes" Version="4.2.1" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.37" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OpenSlideSharp.BruTile\OpenSlideSharp.BruTile.csproj" />
+    <ProjectReference Include="..\..\src\OpenSlideSharp.runtime.win\OpenSlideSharp.runtime.win.csproj" />
+  </ItemGroup>
+
+</Project>

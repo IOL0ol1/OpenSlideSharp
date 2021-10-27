@@ -6,9 +6,7 @@ using System.Linq;
 using BruTile;
 using BruTile.Cache;
 
-using OpenSlideSharp;
-
-namespace SlideLibrary.Openslide
+namespace OpenSlideSharp.BruTile
 {
     public class OpenSlideBase : SlideSourceBase
     {
@@ -16,12 +14,6 @@ namespace SlideLibrary.Openslide
         private readonly bool _enableCache;
         private readonly Action<string> _logger;
         private readonly MemoryCache<byte[]> _tileCache = new MemoryCache<byte[]>();
-
-        static OpenSlideBase()
-        {
-            var path = Environment.GetEnvironmentVariable("PATH");
-            Environment.SetEnvironmentVariable("PATH", $"{path};{Path.Combine(LibraryInfo.AssemblyDirectory, "openslide", Environment.Is64BitProcess ? "x64" : "x86")}");
-        }
 
         public OpenSlideBase(string source, bool enableCache = true, Action<string> logger = null)
         {
@@ -35,7 +27,7 @@ namespace SlideLibrary.Openslide
             var height = SlideImage.Dimensions.Height * MinUnitsPerPixel;
             var width = SlideImage.Dimensions.Width * MinUnitsPerPixel;
             ExternInfo = GetInfo();
-            Schema = new TileSchemaFixed
+            Schema = new TileSchema
             {
                 YAxis = YAxis.OSM,
                 Format = "jpg",
@@ -60,7 +52,7 @@ namespace SlideLibrary.Openslide
             foreach (var item in SlideImage.GetAssociatedImages())
             {
                 var dim = item.Value.Dimensions;
-                images.Add(item.Key, ImageUtil.Raw2Jpeg(item.Value.Data, 4, 4 * (int)dim.Width, (int)dim.Width, (int)dim.Height));
+                images.Add(item.Key, ImageUtil.GetJpeg(item.Value.Data, 4, 4 * (int)dim.Width, (int)dim.Width, (int)dim.Height));
             }
             return images;
         }
@@ -77,7 +69,7 @@ namespace SlideLibrary.Openslide
             var curTileWidth = (int)(tileInfo.Extent.MaxX > Schema.Extent.Width ? tileWidth - (tileInfo.Extent.MaxX - Schema.Extent.Width) / r : tileWidth);
             var curTileHeight = (int)(-tileInfo.Extent.MinY > Schema.Extent.Height ? tileHeight - (-tileInfo.Extent.MinY - Schema.Extent.Height) / r : tileHeight);
             var bgraData = SlideImage.ReadRegion(tileInfo.Index.Level, (long)curLevelOffsetXPixel, (long)curLevelOffsetYPixel, curTileWidth, curTileHeight);
-            var dst = ImageUtil.Raw2Jpeg(bgraData, 4, curTileWidth * 4, curTileWidth, curTileHeight, tileWidth, tileHeight);
+            var dst = ImageUtil.GetJpeg(bgraData, 4, curTileWidth * 4, curTileWidth, curTileHeight, tileWidth, tileHeight);
             if (_enableCache && dst != null)
                 _tileCache.Add(tileInfo.Index, dst);
             return dst;

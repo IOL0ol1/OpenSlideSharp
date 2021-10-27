@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
@@ -11,6 +13,8 @@ using System.Windows.Media;
 using Mapsui.Fetcher;
 
 using Microsoft.Win32;
+
+using OpenSlideSharp.BruTile;
 
 using Point = Mapsui.Geometries.Point;
 
@@ -164,7 +168,9 @@ namespace SlideLibrary.Demo
         /// <param name="e"></param>
         private void Explorer_Click(object sender, RoutedEventArgs e)
         {
-            Process.Start("explorer.exe", LibraryInfo.AssemblyDirectory);
+            var assemblyLocation = Assembly.GetCallingAssembly().Location;
+            var assemblyDirectory = Directory.GetParent(assemblyLocation)?.FullName;
+            Process.Start("explorer.exe", assemblyDirectory);
         }
 
 
