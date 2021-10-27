@@ -21,6 +21,7 @@ Install-Package OpenSlideSharp.Windows -Version 1.0.0.1
     openslide warpper, include DeepZoomGenerator, but no native *.dll.
 
 2.  [OpenSlideSharp.BitmapExtensions](/src/OpenSlideSharp.BitmapExtensions)    
+    **NOTE: Manual install "libgdiplus" for linux to support System.Drawing.Bitmap**    
     OpenSlideSharp with System.Drawing.Bitmap extensions.    
     bgra raw data    
     -ToJepg    
