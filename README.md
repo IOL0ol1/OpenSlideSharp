@@ -41,3 +41,7 @@ Install-Package OpenSlideSharp.Windows -Version 1.0.0.1
 ## Others
 The GIS (Geographic Information System) suite (include layer, editor) makes it easy to develop features related to medical image slides.    
 So, i think it would be better to use [openlayer](https://openlayers.org/) or [Leaflet](https://leafletjs.com/) for web.    
+
+## Example 
+A slide viewer by [Mapsui](https://github.com/Mapsui/Mapsui)    
+![mapsui](./preview.gif)
