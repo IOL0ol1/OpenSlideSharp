@@ -12,7 +12,7 @@ Thanks to @yigolden for his work in [OpenSlideNET](https://github.com/yigolden/O
 
 Nuget    
 ```ps
-Install-Package OpenSlideSharp.Windows -Version 1.0.0.1
+Install-Package OpenSlideSharp.Windows -Version 1.0.1.3
 ```
 
 ## Index
