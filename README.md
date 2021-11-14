@@ -44,4 +44,5 @@ So, i think it would be better to use [openlayer](https://openlayers.org/) or [L
 
 ## Example 
 A slide viewer by [Mapsui](https://github.com/Mapsui/Mapsui)    
+Download [hear](https://github.com/IOL0ol1/OpenSlideSharp/releases)    
 ![mapsui](./preview.gif)
