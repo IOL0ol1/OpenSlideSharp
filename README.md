@@ -38,11 +38,13 @@ Install-Package OpenSlideSharp.Windows -Version 1.0.1.3
 5.  [OpenSlideSharp.Windows](/src/OpenSlideSharp.Windows)    
     OpenSlideSharp for windows all in one, include [1],[2],[4].
 
-## Others
-The GIS (Geographic Information System) suite (include layer, editor) makes it easy to develop features related to medical image slides.    
-So, i think it would be better to use [openlayer](https://openlayers.org/) or [Leaflet](https://leafletjs.com/) for web.    
+## Suggestion
+1.  The GIS (Geographic Information System) suite (include layer, editor) makes it easy to develop features related to medical image slides. It would be better to use [openlayer](https://openlayers.org/) or [Leaflet](https://leafletjs.com/) for web.    
+
+2.  If you want to customize a digital medical imaging format, Perhaps refer to the implementation of MBTiles, using the SQLite database. Sometimes it is necessary to encrypt the data, and that's okay, use a SQLCipher database(compatible with sqlite). Databases are highly scalable and easy to use.
+
 
 ## Example 
 A slide viewer by [Mapsui](https://github.com/Mapsui/Mapsui)    
-Download [hear](https://github.com/IOL0ol1/OpenSlideSharp/releases)    
+Download [here](https://github.com/IOL0ol1/OpenSlideSharp/releases)    
 ![mapsui](./preview.gif)
