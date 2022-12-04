@@ -12,7 +12,7 @@ Thanks to @yigolden for his work in [OpenSlideNET](https://github.com/yigolden/O
 
 Nuget    
 ```ps
-Install-Package OpenSlideSharp.Windows -Version 1.0.1.3
+Install-Package OpenSlideSharp.Windows -Version 1.1.0
 ```
 
 ## Index
@@ -29,14 +29,22 @@ Install-Package OpenSlideSharp.Windows -Version 1.0.1.3
     -ToBitmap    
     ...
 
-3.  [OpenSlideSharp.BruTile](/src/OpenSlideSharp.BruTile)    
+3.  [OpenSlideSharp.OpencvExtensions](/src/OpenSlideSharp.OpencvExtensions)       
+    OpenSlideSharp with OpenCV mat extensions.    
+    bgra raw data    
+    -ToJepg    
+    -ToPng    
+    -ToMat    
+    ...
+
+4.  [OpenSlideSharp.BruTile](/src/OpenSlideSharp.BruTile)    
     OpenSlideSharp adapter [BruTile](https://github.com/BruTile/BruTile) (OpenSlideImage -> ITileSource).
 
-4.  [OpenSlideSharp.runtime.win](/src/OpenSlideSharp.runtime.win)    
+5.  [OpenSlideSharp.runtime.win](/src/OpenSlideSharp.runtime.win)    
     OpenSlide runtime, include native *.dll files.
 
-5.  [OpenSlideSharp.Windows](/src/OpenSlideSharp.Windows)    
-    OpenSlideSharp for windows all in one, include [1],[2],[4].
+6.  [OpenSlideSharp.Windows](/src/OpenSlideSharp.Windows)    
+    OpenSlideSharp for windows all in one, include [1],[2],[5].
 
 ## Suggestion
 1.  The GIS (Geographic Information System) suite (include layer, editor) makes it easy to develop features related to medical image slides. It would be better to use [openlayer](https://openlayers.org/) or [Leaflet](https://leafletjs.com/) for web.    
