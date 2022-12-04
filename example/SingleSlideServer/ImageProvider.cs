@@ -1,6 +1,6 @@
-﻿using System;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using OpenSlideSharp;
+using System;
 
 namespace SingleSlideServer
 {

@@ -1,9 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
+﻿
+/* 项目“SlideViewer (netcoreapp3.1)”的未合并的更改
+在此之前:
+using System;
+在此之后:
+using Mapsui.Geometries;
+using System;
+*/
+using Mapsui.Geometries;
+using System;
 using System.Globalization;
 using System.Windows.Data;
-
-using Mapsui.Geometries;
 
 namespace SlideLibrary.Demo
 {

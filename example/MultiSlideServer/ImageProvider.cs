@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Options;
 using MultiSlideServer.Cache;
 using OpenSlideSharp;
-using System;
 using System.Collections.Generic;
 
 namespace MultiSlideServer
@@ -53,6 +52,6 @@ namespace MultiSlideServer
             dz.Dispose();
             return dz;
         }
- 
+
     }
 }

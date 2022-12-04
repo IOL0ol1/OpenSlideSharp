@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30406.217
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33110.190
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6EE7C68C-65D9-4290-81AE-09BA58C857CD}"
 EndProject
@@ -25,7 +25,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenSlideSharp.BitmapExtens
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenSlideSharp.BruTile", "src\OpenSlideSharp.BruTile\OpenSlideSharp.BruTile.csproj", "{9DA7F592-F964-45CB-9E2E-F8028AE3C956}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlideViewer", "example\SlideViewer\SlideViewer.csproj", "{11D9A92F-2314-407B-A392-18B2290E4972}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SlideViewer", "example\SlideViewer\SlideViewer.csproj", "{11D9A92F-2314-407B-A392-18B2290E4972}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenSlideSharp.OpencvExtensions", "src\OpenSlideSharp.OpencvExtensions\OpenSlideSharp.OpencvExtensions.csproj", "{4322CA50-F9C6-4619-8A8F-9D99E5906CCB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -69,6 +71,10 @@ Global
 		{11D9A92F-2314-407B-A392-18B2290E4972}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{11D9A92F-2314-407B-A392-18B2290E4972}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{11D9A92F-2314-407B-A392-18B2290E4972}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4322CA50-F9C6-4619-8A8F-9D99E5906CCB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4322CA50-F9C6-4619-8A8F-9D99E5906CCB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4322CA50-F9C6-4619-8A8F-9D99E5906CCB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4322CA50-F9C6-4619-8A8F-9D99E5906CCB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -83,6 +89,7 @@ Global
 		{695DED59-4106-424A-9831-2227F0B35BAE} = {6EE7C68C-65D9-4290-81AE-09BA58C857CD}
 		{9DA7F592-F964-45CB-9E2E-F8028AE3C956} = {6EE7C68C-65D9-4290-81AE-09BA58C857CD}
 		{11D9A92F-2314-407B-A392-18B2290E4972} = {C3C9459E-1461-4480-B551-AAED7BDAD940}
+		{4322CA50-F9C6-4619-8A8F-9D99E5906CCB} = {6EE7C68C-65D9-4290-81AE-09BA58C857CD}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6D55D41F-7887-4787-BD15-17389C769282}

@@ -1,16 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-
-using BruTile;
-
+﻿using BruTile;
 using OpenCvSharp;
-
-using Point = System.Drawing.Point;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Range = OpenCvSharp.Range;
 
 namespace OpenSlideSharp.BruTile
 {
@@ -20,7 +13,7 @@ namespace OpenSlideSharp.BruTile
         /// <summary>
         /// BGR/BGRA convert to jpeg
         /// </summary>
-        /// <param name="raw">BGR/BGRA</param>
+        /// <param name="bgraBytes">BGR/BGRA</param>
         /// <param name="bytesPerPixel">bytes per pixel</param>
         /// <param name="bytesPerLine">bytes per line</param>
         /// <param name="width">width</param>
@@ -28,35 +21,64 @@ namespace OpenSlideSharp.BruTile
         /// <param name="dstWidth">dst width</param>
         /// <param name="dstHeight">dst height</param>
         /// <param name="quality">jpeg quality</param>
+        /// <param name="background">background color for transparent if <paramref name="bytesPerPixel"/> == 4</param>
         /// <returns></returns>
-        public static unsafe byte[] GetJpeg(byte[] raw, int bytesPerPixel, int bytesPerLine, int width, int height, int dstWidth = 0, int dstHeight = 0, int? quality = null)
+        public static unsafe byte[] GetJpeg(byte[] bgraBytes, int bytesPerPixel, int bytesPerLine, int width, int height, int dstWidth = 0, int dstHeight = 0, int? quality = null, uint background = 0xFFFFFFFF)
         {
-            if (raw == null) return null;
+            if (bgraBytes == null) return null;
             if (bytesPerPixel != 3 && bytesPerPixel != 4) throw new ArgumentException(nameof(bytesPerPixel));
-            var pixel = bytesPerPixel == 3 ? PixelFormat.Format24bppRgb : PixelFormat.Format32bppRgb;
-            fixed (byte* scan0 = raw)
+            var prms = quality != null ? new int[] { (int)ImwriteFlags.JpegQuality, quality.Value } : null;
+            var pixel = MatType.CV_8UC(bytesPerPixel);
+            fixed (byte* scan0 = bgraBytes)
             {
-                using (var bmp = new Bitmap(width, height, bytesPerLine, pixel, (IntPtr)scan0))
+                using (var src = new Mat(height, width, pixel, (IntPtr)scan0, bytesPerLine))
                 {
-
+                    // black transparent to background
+                    if (pixel.Channels == 4)
+                    {
+                        unchecked
+                        {
+                            src.ForEachAsInt32((_i, _p) =>
+                            {
+                                if (*_i == 0) *_i = (Int32)(background);
+                            });
+                        }
+                    }
                     if ((dstWidth <= 0 && dstHeight <= 0) || (dstWidth == width && dstHeight == height))
                     {
-                        return bmp.ToArray(ImageFormat.Jpeg, quality);
+                        return src.ToBytes(".jpg", prms);
                     }
-                    else  // fill
+                    else  // fill 
                     {
-                        using (var dstImage = new Bitmap(dstWidth, dstHeight))
-                        using (var g = Graphics.FromImage(dstImage))
+                        var scalar = new Scalar((int)(background >> 24 & 0xFF), (int)(background >> 16 & 0xFF), (int)(background >> 8 & 0xFF), (int)(background & 0xFF));
+                        using (var dst = new Mat(dstHeight, dstWidth, pixel, scalar))
                         {
-                            g.Clear(Color.White);
-                            g.DrawImage(bmp, new Point(0, 0));
-                            return dstImage.ToArray(ImageFormat.Jpeg, quality);
+                            DrawImage(src, dst);
+                            return dst.ToBytes(".jpg", prms);
                         }
                     }
                 }
             }
         }
 
+        /// <summary>
+        /// Fill the source image with adaptive scaling to the target image
+        /// </summary>
+        /// <param name="src"></param>
+        /// <param name="dst"></param>
+        private static void DrawImage(Mat src, Mat dst)
+        {
+            var fx = (double)dst.Width / src.Width;
+            var fy = (double)dst.Height / src.Height;
+            var fmin = Math.Min(fx, fy);
+            using (var srcResized = src.Resize(new Size(src.Width * fmin, src.Height * fmin)))
+            {
+                using (var sub = new Mat(dst, new Rect(0, 0, srcResized.Width, srcResized.Height)))
+                {
+                    srcResized.CopyTo(sub);
+                }
+            }
+        }
 
         /// <summary>
         /// Join by <paramref name="srcPixelTiles"/> and cut by <paramref name="srcPixelExtent"/> then scale to <paramref name="dstPixelExtent"/>(only height an width is useful).
@@ -125,6 +147,15 @@ namespace OpenSlideSharp.BruTile
 
     public class TileUtil
     {
+        /// <summary>
+        /// To ensure image quality, try to use high-resolution level downsampling to low-resolution level 
+        /// </summary>
+        /// <param name="resolutions"></param>
+        /// <param name="unitsPerPixel"></param>
+        /// <param name="sampleMode"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="Exception"></exception>
         public static int GetLevel(IDictionary<int, Resolution> resolutions, double unitsPerPixel, SampleMode sampleMode = SampleMode.Nearest)
         {
             if (resolutions.Count == 0)
@@ -179,40 +210,4 @@ namespace OpenSlideSharp.BruTile
             }
         }
     }
-
-    public static class BitmapEx
-    {
-        private static IDictionary<Guid, IList<ImageCodecInfo>> encoders = new Dictionary<Guid, IList<ImageCodecInfo>>();
-
-        static BitmapEx()
-        {
-            ImageCodecInfo[] array = ImageCodecInfo.GetImageEncoders();
-            foreach (var coder in array)
-            {
-                if (encoders.ContainsKey(coder.FormatID))
-                    encoders[coder.FormatID].Add(coder);
-                else
-                    encoders[coder.FormatID] = new List<ImageCodecInfo>(new[] { coder });
-            }
-        }
-
-        public static byte[] ToArray(this Image bitmap, ImageFormat format, int? quality = null)
-        {
-            using (var ms = new MemoryStream())
-            {
-                EncoderParameters parameters = quality.HasValue ? new EncoderParameters() { Param = new[] { new EncoderParameter(Encoder.Quality, quality.Value) } } : null;
-                bitmap.Save(ms, format?.FindCodec(), parameters);
-                return ms.GetBuffer();
-            }
-        }
-
-        public static ImageCodecInfo FindCodec(this ImageFormat format)
-        {
-            if (encoders.ContainsKey(format.Guid))
-                return encoders[format.Guid].FirstOrDefault();
-
-            return null;
-        }
-    }
-
 }

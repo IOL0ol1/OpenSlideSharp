@@ -3,7 +3,7 @@
   <Import Project="$(SolutionDir)/OpenSlideSharp.Common.props" />
   
   <PropertyGroup>
-    <TargetFrameworks>net35;netstandard2.0;netstandard2.1;net5.0</TargetFrameworks>
+    <TargetFrameworks>net35;netstandard2.0;netstandard2.1</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -12,27 +12,20 @@
     <PackageReleaseNotes>OpenSlideSharp bitmap extensions</PackageReleaseNotes>
     <Description>OpenSlideSharp bitmap extensions</Description>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    <Version>1.1.0</Version>
   </PropertyGroup>
-
- 
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="System.Drawing.Common">
-      <Version>5.0.2</Version>
+      <Version>[5.0.0,)</Version>
     </PackageReference>
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
     <PackageReference Include="System.Drawing.Common">
-      <Version>5.0.2</Version>
+      <Version>[5.0.0,)</Version>
     </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net5.0'">
-    <PackageReference Include="System.Drawing.Common">
-      <Version>5.0.2</Version>
-    </PackageReference>
-  </ItemGroup>
+  </ItemGroup> 
 
   <ItemGroup>
     <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />

@@ -1,9 +1,7 @@
-﻿using System.Linq;
-using System.Text;
-
-using Microsoft.AspNetCore.Mvc;
-
+﻿using Microsoft.AspNetCore.Mvc;
 using MultiSlideServer.Cache;
+using System.Linq;
+using System.Text;
 
 namespace MultiSlideServer.Controllers
 {

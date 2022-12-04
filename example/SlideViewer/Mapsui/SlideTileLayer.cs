@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
-using BruTile;
-
+﻿using BruTile;
 using Mapsui.Fetcher;
 using Mapsui.Layers;
 using Mapsui.Providers;
 using Mapsui.Rendering;
-
 using OpenSlideSharp.BruTile;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SlideLibrary.Demo
 {

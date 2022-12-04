@@ -5,7 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 
-namespace OpenSlideSharp
+namespace OpenSlideSharp.BitmapExtensions
 {
     /// <summary>
     /// 
@@ -38,7 +38,7 @@ namespace OpenSlideSharp
             if (bitmap == null) throw new NullReferenceException();
             var ms = new MemoryStream();
             EncoderParameters parameters = quality.HasValue ? new EncoderParameters() { Param = new[] { new EncoderParameter(Encoder.Quality, quality.Value) } } : null;
-            bitmap.Save(ms, (format??ImageFormat.Jpeg).FindCodec(), parameters);
+            bitmap.Save(ms, (format ?? ImageFormat.Jpeg).FindCodec(), parameters);
             ms.Seek(0, SeekOrigin.Begin);
             return ms;
         }

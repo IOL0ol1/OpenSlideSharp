@@ -1,9 +1,10 @@
-﻿using System;
+﻿using OpenCvSharp;
+using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 
-namespace OpenSlideSharp.BitmapExtensions
+namespace OpenSlideSharp.OpencvExtensions
 {
     /// <summary>
     /// 
@@ -11,7 +12,7 @@ namespace OpenSlideSharp.BitmapExtensions
     public static class OpenSlideImageExtensions
     {
         /// <summary>
-        /// Read region bitmap.
+        /// Read region mat.
         /// </summary>
         /// <param name="image"></param>
         /// <param name="level"></param>
@@ -20,13 +21,13 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="width"></param>
         /// <param name="height"></param>
         /// <returns></returns>
-        public unsafe static Bitmap ReadRegionImage(this OpenSlideImage image, int level, long x, long y, long width, long height)
+        public unsafe static Mat ReadRegionImage(this OpenSlideImage image, int level, long x, long y, long width, long height)
         {
             if (image == null) throw new NullReferenceException();
             var data = image.ReadRegion(level, x, y, width, height);
             fixed (byte* scan0 = data)
             {
-                return new Bitmap((int)width, (int)height, (int)width * 4, PixelFormat.Format32bppArgb, (IntPtr)scan0);
+                return new Mat((int)height, (int)width, MatType.CV_8UC4, (IntPtr)scan0, (int)width * 4);
             }
         }
 
@@ -39,11 +40,12 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="y"></param>
         /// <param name="width"></param>
         /// <param name="height"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">For JPEG, it can be a quality from 0 to 100 (the higher is the better). Default
+        /// value is 95.</param>
         /// <returns></returns>
         public unsafe static MemoryStream ReadRegionJpegStream(this OpenSlideImage image, int level, long x, long y, long width, long height, int? quality = null)
         {
-            return ReadRegionImage(image, level, x, y, width, height).ToStream(ImageFormat.Jpeg, quality);
+            return new MemoryStream(ReadRegionJpeg(image, level, x, y, width, height, quality));
         }
 
         /// <summary>
@@ -55,15 +57,14 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="y"></param>
         /// <param name="width"></param>
         /// <param name="height"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">For JPEG, it can be a quality from 0 to 100 (the higher is the better). Default
+        /// value is 95.</param>
         /// <returns></returns>
 
         public unsafe static byte[] ReadRegionJpeg(this OpenSlideImage image, int level, long x, long y, long width, long height, int? quality = null)
         {
-            using (var ms = ReadRegionJpegStream(image, level, x, y, width, height, quality))
-            {
-                return ms.ToArray();
-            }
+            var prms = quality != null ? new int[] { (int)ImwriteFlags.JpegQuality, quality.Value } : null;
+            return ReadRegionImage(image, level, x, y, width, height).ToBytes(".jpg", prms);
         }
 
         /// <summary>
@@ -75,11 +76,14 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="y"></param>
         /// <param name="width"></param>
         /// <param name="height"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">        
+        /// For PNG, it can be the compression level from 0 to 9. A higher value means a
+        /// smaller size and longer compression time. Default value is 3.
+        /// </param>
         /// <returns></returns>
         public unsafe static MemoryStream ReadRegionPngStream(this OpenSlideImage image, int level, long x, long y, long width, long height, int? quality = null)
         {
-            return ReadRegionImage(image, level, x, y, width, height).ToStream(ImageFormat.Png, quality);
+            return new MemoryStream(ReadRegionPng(image, level, x, y, width, height, quality));
         }
 
         /// <summary>
@@ -91,14 +95,14 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="y"></param>
         /// <param name="width"></param>
         /// <param name="height"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">        
+        /// For PNG, it can be the compression level from 0 to 9. A higher value means a
+        /// smaller size and longer compression time. Default value is 3.</param>
         /// <returns></returns>
         public unsafe static byte[] ReadRegionPng(this OpenSlideImage image, int level, long x, long y, long width, long height, int? quality = null)
         {
-            using (var ms = ReadRegionPngStream(image, level, x, y, width, height, quality))
-            {
-                return ms.ToArray();
-            }
+            var prms = quality != null ? new int[] { (int)ImwriteFlags.PngCompression, quality.Value } : null;
+            return ReadRegionImage(image, level, x, y, width, height).ToBytes(".png", prms);
         }
 
         /// <summary>
@@ -108,7 +112,7 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="maxWidth"></param>
         /// <param name="maxHeight"></param>
         /// <returns></returns>
-        public static Bitmap GenerateThumbnailImage(this OpenSlideImage image, int maxWidth, int maxHeight)
+        public static Mat GenerateThumbnailImage(this OpenSlideImage image, int maxWidth, int maxHeight)
         {
             if (image == null) throw new NullReferenceException();
 
@@ -134,10 +138,9 @@ namespace OpenSlideSharp.BitmapExtensions
                 targetHeight = maxHeight;
             }
 
-            using (var bitmap = ReadRegionImage(image, level, 0, 0, levelWidth, levelHeight))
-            {
-                return new Bitmap(bitmap, new Size(targetWidth, targetHeight));
-            }
+            var bitmap = ReadRegionImage(image, level, 0, 0, levelWidth, levelHeight);
+            bitmap.Resize(targetWidth, targetHeight);
+            return bitmap;
         }
 
         /// <summary>
@@ -148,16 +151,12 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="maxHeight"></param>
         /// <param name="targetWidth"></param>
         /// <param name="targetHeight"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">For JPEG, it can be a quality from 0 to 100 (the higher is the better). Default
+        /// value is 95.</param>
         /// <returns></returns>
         public static MemoryStream GenerateThumbnailJpegStream(this OpenSlideImage image, int maxWidth, int maxHeight, out int targetWidth, out int targetHeight, int? quality = null)
         {
-            using (var bitmap = GenerateThumbnailImage(image, maxWidth, maxHeight))
-            {
-                targetWidth = bitmap.Width;
-                targetHeight = bitmap.Height;
-                return bitmap.ToStream(ImageFormat.Jpeg, quality);
-            }
+            return new MemoryStream(GenerateThumbnailJpeg(image, maxWidth, maxHeight, out targetWidth, out targetHeight, quality));
         }
 
         /// <summary>
@@ -168,13 +167,17 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="maxHeight"></param>
         /// <param name="targetWidth"></param>
         /// <param name="targetHeight"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">For JPEG, it can be a quality from 0 to 100 (the higher is the better). Default
+        /// value is 95.</param>
         /// <returns></returns>
         public static byte[] GenerateThumbnailJpeg(this OpenSlideImage image, int maxWidth, int maxHeight, out int targetWidth, out int targetHeight, int? quality = null)
         {
-            using (var ms = GenerateThumbnailJpegStream(image, maxWidth, maxHeight, out targetWidth, out targetHeight, quality))
+            using (var bitmap = GenerateThumbnailImage(image, maxWidth, maxHeight))
             {
-                return ms.ToArray();
+                targetWidth = bitmap.Width;
+                targetHeight = bitmap.Height;
+                var prms = quality != null ? new int[] { (int)ImwriteFlags.JpegQuality, quality.Value } : null;
+                return bitmap.ToBytes(".jpg", prms);
             }
         }
 
@@ -186,16 +189,14 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="maxHeight"></param>
         /// <param name="targetWidth"></param>
         /// <param name="targetHeight"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">
+        /// For PNG, it can be the compression level from 0 to 9. A higher value means a
+        /// smaller size and longer compression time. Default value is 3.
+        /// </param>
         /// <returns></returns>
         public static MemoryStream GenerateThumbnailPngStream(this OpenSlideImage image, int maxWidth, int maxHeight, out int targetWidth, out int targetHeight, int? quality = null)
         {
-            using (var bitmap = GenerateThumbnailImage(image, maxWidth, maxHeight))
-            {
-                targetWidth = bitmap.Width;
-                targetHeight = bitmap.Height;
-                return bitmap.ToStream(ImageFormat.Png, quality);
-            }
+            return new MemoryStream(GenerateThumbnailPng(image, maxWidth, maxHeight, out targetWidth, out targetHeight, quality));
         }
 
         /// <summary>
@@ -206,13 +207,19 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="maxHeight"></param>
         /// <param name="targetWidth"></param>
         /// <param name="targetHeight"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">        
+        /// For PNG, it can be the compression level from 0 to 9. A higher value means a
+        /// smaller size and longer compression time. Default value is 3.
+        /// </param>
         /// <returns></returns>
         public static byte[] GenerateThumbnailPng(this OpenSlideImage image, int maxWidth, int maxHeight, out int targetWidth, out int targetHeight, int? quality = null)
         {
-            using (var ms = GenerateThumbnailPngStream(image, maxWidth, maxHeight, out targetWidth, out targetHeight, quality))
+            using (var bitmap = GenerateThumbnailImage(image, maxWidth, maxHeight))
             {
-                return ms.ToArray();
+                targetWidth = bitmap.Width;
+                targetHeight = bitmap.Height;
+                var prms = quality != null ? new int[] { (int)ImwriteFlags.PngCompression, quality.Value } : null;
+                return bitmap.ToBytes(".png", prms);
             }
         }
     }

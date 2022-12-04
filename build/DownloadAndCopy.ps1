@@ -1,8 +1,8 @@
 
 
 param(
-[string]$x86="https://github.com/openslide/openslide-winbuild/releases/download/v20171122/openslide-win32-20171122.zip",
-[string]$x64="https://github.com/openslide/openslide-winbuild/releases/download/v20171122/openslide-win64-20171122.zip",
+[string]$x86="https://github.com/openslide/openslide-winbuild/releases/download/v20221111/openslide-win32-20221111.zip",
+[string]$x64="https://github.com/openslide/openslide-winbuild/releases/download/v20221111/openslide-win64-20221111.zip",
 [string]$x86Output="..\openslide\x86\",
 [string]$x64Output="..\openslide\x64\")
 

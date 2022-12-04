@@ -3,7 +3,6 @@
   
   <!--- Package information, Version -->
   <PropertyGroup>
-    <PackageVersion>1.0.1.4</PackageVersion>
     <Authors>IOL0ol1</Authors>
     <Copyright>Copyright © 2021-2022</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

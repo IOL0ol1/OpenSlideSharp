@@ -1,10 +1,9 @@
-﻿using System;
-using System.Drawing;
-using System.Drawing.Imaging;
+﻿using OpenCvSharp;
+using System;
 using System.IO;
 using static OpenSlideSharp.DeepZoomGenerator;
 
-namespace OpenSlideSharp.BitmapExtensions
+namespace OpenSlideSharp.OpencvExtensions
 {
     /// <summary>
     /// 
@@ -19,13 +18,15 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="col"></param>
         /// <param name="row"></param>
         /// <param name="tileInfo"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">For JPEG, it can be a quality from 0 to 100 (the higher is the better). Default
+        /// value is 95.</param>
         /// <returns></returns>
         public static byte[] GetTileAsJpeg(this DeepZoomGenerator generator, int level, int col, int row, out TileInfo tileInfo, int? quality = null)
         {
-            using (var ms = GetTileAsJpegStream(generator, level, col, row, out tileInfo, quality))
+            using (var mat = GetTileImage(generator, level, col, row, out tileInfo))
             {
-                return ms.ToArray();
+                var prms = quality != null ? new int[] { (int)ImwriteFlags.JpegQuality, quality.Value } : null;
+                return mat.ToBytes(".jpg", prms);
             }
         }
 
@@ -37,12 +38,12 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="col"></param>
         /// <param name="row"></param>
         /// <param name="tileInfo"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">For JPEG, it can be a quality from 0 to 100 (the higher is the better). Default
+        /// value is 95.</param>
         /// <returns></returns>
         public static MemoryStream GetTileAsJpegStream(this DeepZoomGenerator generator, int level, int col, int row, out TileInfo tileInfo, int? quality = null)
         {
-            return GetTileImage(generator, level, col, row, out tileInfo).ToStream(ImageFormat.Jpeg, quality);
-
+            return new MemoryStream(GetTileAsJpeg(generator, level, col, row, out tileInfo, quality));
         }
 
         /// <summary>
@@ -53,13 +54,17 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="col"></param>
         /// <param name="row"></param>
         /// <param name="tileInfo"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">        
+        /// For PNG, it can be the compression level from 0 to 9. A higher value means a
+        /// smaller size and longer compression time. Default value is 3.
+        /// </param>
         /// <returns></returns>
         public static byte[] GetTileAsPng(this DeepZoomGenerator generator, int level, int col, int row, out TileInfo tileInfo, int? quality = null)
         {
-            using (var ms = GetTileAsPngStream(generator, level, col, row, out tileInfo, quality))
+            using (var mat = GetTileImage(generator, level, col, row, out tileInfo))
             {
-                return ms.ToArray();
+                var prms = quality != null ? new int[] { (int)ImwriteFlags.PngCompression, quality.Value } : null;
+                return mat.ToBytes(".png", prms);
             }
         }
 
@@ -71,15 +76,17 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="col"></param>
         /// <param name="row"></param>
         /// <param name="tileInfo"></param>
-        /// <param name="quality"></param>
+        /// <param name="quality">        
+        /// For PNG, it can be the compression level from 0 to 9. A higher value means a
+        /// smaller size and longer compression time. Default value is 3.</param>
         /// <returns></returns>
         public static MemoryStream GetTileAsPngStream(this DeepZoomGenerator generator, int level, int col, int row, out TileInfo tileInfo, int? quality = null)
         {
-            return GetTileImage(generator, level, col, row, out tileInfo).ToStream(ImageFormat.Png, quality);
+            return new MemoryStream(GetTileAsPng(generator, level, col, row, out tileInfo, quality));
         }
 
         /// <summary>
-        /// Get tile image stream.
+        /// Get tile mat.
         /// </summary>
         /// <param name="generator"></param>
         /// <param name="level"></param>
@@ -87,14 +94,14 @@ namespace OpenSlideSharp.BitmapExtensions
         /// <param name="row"></param>
         /// <param name="tileInfo"></param>
         /// <returns></returns>
-        public unsafe static Bitmap GetTileImage(this DeepZoomGenerator generator, int level, int col, int row, out TileInfo tileInfo)
+        public unsafe static Mat GetTileImage(this DeepZoomGenerator generator, int level, int col, int row, out TileInfo tileInfo)
         {
             if (generator == null)
                 throw new NullReferenceException();
             var raw = generator.GetTile(level, col, row, out tileInfo);
             fixed (byte* scan0 = raw)
             {
-                return new Bitmap((int)tileInfo.Width, (int)tileInfo.Height, (int)tileInfo.Width * 4, PixelFormat.Format32bppArgb, (IntPtr)scan0);
+                return new Mat((int)tileInfo.Height, (int)tileInfo.Width, MatType.CV_8UC4, (IntPtr)scan0, (int)tileInfo.Width * 4);
             }
         }
     }

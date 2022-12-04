@@ -13,8 +13,8 @@
       <Link>openslide\x64\libcairo-2.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Condition="Exists('$(NativeDlls)\win-x64\native\libffi-6.dll')" Include="$(NativeDlls)\win-x64\native\libffi-6.dll">
-      <Link>openslide\x64\libffi-6.dll</Link>
+    <Content Condition="Exists('$(NativeDlls)\win-x64\native\libffi-8.dll')" Include="$(NativeDlls)\win-x64\native\libffi-8.dll">
+      <Link>openslide\x64\libffi-8.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x64\native\libgdk_pixbuf-2.0-0.dll')" Include="$(NativeDlls)\win-x64\native\libgdk_pixbuf-2.0-0.dll">
@@ -57,6 +57,10 @@
       <Link>openslide\x64\libopenslide-0.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Condition="Exists('$(NativeDlls)\win-x64\native\libpcre2-8-0.dll')" Include="$(NativeDlls)\win-x64\native\libpcre2-8-0.dll">
+      <Link>openslide\x64\libpcre2-8-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x64\native\libpixman-1-0.dll')" Include="$(NativeDlls)\win-x64\native\libpixman-1-0.dll">
       <Link>openslide\x64\libpixman-1-0.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
@@ -69,8 +73,16 @@
       <Link>openslide\x64\libsqlite3-0.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Condition="Exists('$(NativeDlls)\win-x64\native\libssp-0.dll')" Include="$(NativeDlls)\win-x64\native\libssp-0.dll">
+      <Link>openslide\x64\libssp-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x64\native\libtiff-5.dll')" Include="$(NativeDlls)\win-x64\native\libtiff-5.dll">
       <Link>openslide\x64\libtiff-5.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="Exists('$(NativeDlls)\win-x64\native\libwinpthread-1.dll')" Include="$(NativeDlls)\win-x64\native\libwinpthread-1.dll">
+      <Link>openslide\x64\libwinpthread-1.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x64\native\libxml2-2.dll')" Include="$(NativeDlls)\win-x64\native\libxml2-2.dll">
@@ -96,8 +108,8 @@
       <Link>openslide\x86\libcairo-2.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Condition="Exists('$(NativeDlls)\win-x86\native\libffi-6.dll')" Include="$(NativeDlls)\win-x86\native\libffi-6.dll">
-      <Link>openslide\x86\libffi-6.dll</Link>
+    <Content Condition="Exists('$(NativeDlls)\win-x86\native\libffi-8.dll')" Include="$(NativeDlls)\win-x86\native\libffi-8.dll">
+      <Link>openslide\x86\libffi-8.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x86\native\libgdk_pixbuf-2.0-0.dll')" Include="$(NativeDlls)\win-x86\native\libgdk_pixbuf-2.0-0.dll">
@@ -140,6 +152,10 @@
       <Link>openslide\x86\libopenslide-0.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Condition="Exists('$(NativeDlls)\win-x86\native\libpcre2-8-0.dll')" Include="$(NativeDlls)\win-x86\native\libpcre2-8-0.dll">
+      <Link>openslide\x86\libpcre2-8-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x86\native\libpixman-1-0.dll')" Include="$(NativeDlls)\win-x86\native\libpixman-1-0.dll">
       <Link>openslide\x86\libpixman-1-0.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
@@ -152,8 +168,16 @@
       <Link>openslide\x86\libsqlite3-0.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Condition="Exists('$(NativeDlls)\win-x86\native\libssp-0.dll')" Include="$(NativeDlls)\win-x86\native\libssp-0.dll">
+      <Link>openslide\x86\libssp-0.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x86\native\libtiff-5.dll')" Include="$(NativeDlls)\win-x86\native\libtiff-5.dll">
       <Link>openslide\x86\libtiff-5.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="Exists('$(NativeDlls)\win-x86\native\libwinpthread-1.dll')" Include="$(NativeDlls)\win-x86\native\libwinpthread-1.dll">
+      <Link>openslide\x86\libwinpthread-1.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Condition="Exists('$(NativeDlls)\win-x86\native\libxml2-2.dll')" Include="$(NativeDlls)\win-x86\native\libxml2-2.dll">

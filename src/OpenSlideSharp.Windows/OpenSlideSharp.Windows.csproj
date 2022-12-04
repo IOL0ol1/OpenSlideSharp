@@ -3,7 +3,7 @@
   <Import Project="$(SolutionDir)/OpenSlideSharp.Common.props" />
 
   <PropertyGroup>
-    <TargetFrameworks>net35;netstandard2.0;netstandard2.1;net5.0-windows</TargetFrameworks>
+    <TargetFrameworks>net35;netstandard2.0;netstandard2.1</TargetFrameworks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <PackageId>OpenSlideSharp.Windows</PackageId>
@@ -11,11 +11,12 @@
     <PackageReleaseNotes>OpenSlideSharp all in one package for Windows</PackageReleaseNotes>
     <Description>OpenSlideSharp all in one package for Windows</Description>
     <NoWarn>1701;1702;NU5128;</NoWarn>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\OpenSlideSharp.BitmapExtensions\OpenSlideSharp.BitmapExtensions.csproj" />
-    <ProjectReference Include="..\OpenSlideSharp.runtime.win\OpenSlideSharp.runtime.win.csproj" />
+    <ProjectReference Include="..\OpenSlideSharp.runtime.win\OpenSlideSharp.runtime.win.csproj"/>
     <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />
   </ItemGroup>
 

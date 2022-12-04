@@ -1,4 +1,11 @@
-﻿using System;
+﻿using Mapsui;
+using Mapsui.Geometries;
+using Mapsui.Layers;
+using Mapsui.Providers;
+using Mapsui.Styles;
+using Mapsui.UI.Wpf;
+using Microsoft.Xaml.Behaviors;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -7,13 +14,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
-using Mapsui;
-using Mapsui.Geometries;
-using Mapsui.Layers;
-using Mapsui.Providers;
-using Mapsui.Styles;
-using Mapsui.UI.Wpf;
-using Microsoft.Xaml.Behaviors;
 using Bitmap = System.Drawing.Bitmap;
 using Point = Mapsui.Geometries.Point;
 

@@ -8,11 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BruTile" Version="4.0.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="Mapsui.Wpf" Version="3.0.2" />
-    <PackageReference Include="MaterialDesignThemes" Version="4.2.1" />
-    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.39" />
+    <PackageReference Include="BruTile" Version="[4.0.0,5)" />
+    <PackageReference Include="Newtonsoft.Json" Version="[13.0.1,)" />
+    <PackageReference Include="Mapsui.Wpf" Version="[3.0.2,4)" />
+    <PackageReference Include="MaterialDesignThemes" Version="[4.2.1,5)" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="[1.1.39,2)" />
+    <PackageReference Include="OpenCvSharp4.Windows" Version="[4.6.0.20220608,)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,30 +1,28 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <Import Project="$(SolutionDir)/OpenSlideSharp.Common.props" />
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>1701;1702;1591;NU1603</NoWarn>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageId>OpenSlideSharp.BruTile</PackageId>
-    <PackageTags>openslide image brutile</PackageTags>
-    <PackageReleaseNotes>OpenSlideSharp for BruTile</PackageReleaseNotes>
-    <Description>OpenSlideSharp for BruTile</Description>
+    <PackageId>OpenSlideSharp.OpenCVExtensions</PackageId>
+    <PackageTags>openslide image</PackageTags>
+    <PackageReleaseNotes>OpenSlideSharp opencv extensions</PackageReleaseNotes>
+    <Description>OpenSlideSharp opencv mat extensions</Description>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Version>1.1.0</Version>
   </PropertyGroup>
 
+
   <ItemGroup>
-    <PackageReference Include="BruTile" Version="[4,5)" />
     <PackageReference Include="OpenCvSharp4.Windows" Version="[4.3.0.20200405,)" />
   </ItemGroup>
+
 
   <ItemGroup>
     <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />
   </ItemGroup>
-
-
 
 </Project>

@@ -1,12 +1,10 @@
-﻿using System;
+﻿using BruTile;
+using BruTile.Cache;
+using OpenCvSharp;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-
-using BruTile;
-using BruTile.Cache;
-
-using OpenCvSharp;
 
 
 namespace OpenSlideSharp.BruTile

@@ -1,10 +1,9 @@
-﻿using System;
+﻿using OpenSlideSharp.Interop;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-
-using OpenSlideSharp.Interop;
 
 namespace OpenSlideSharp
 {
@@ -57,12 +56,15 @@ namespace OpenSlideSharp
         /// <exception cref="OpenSlideException"/>
         public static void Initialize(string path = null)
         {
-            path = string.IsNullOrEmpty(path) ? Path.Combine("openslide", $"{(IntPtr.Size == 8 ? "x64" : "x86")}") : path;
-            path = Path.Combine(Directory.GetParent(Assembly.GetCallingAssembly().Location)?.FullName, path);
+            var openslide = Path.Combine(Directory.GetParent(Assembly.GetCallingAssembly().Location)?.FullName, Path.Combine("openslide", $"{(IntPtr.Size == 8 ? "x64" : "x86")}"));
+            path = string.IsNullOrEmpty(path) ? openslide : path;
             if (Directory.Exists(path))
             {
                 var PATH = Environment.GetEnvironmentVariable("PATH");
-                Environment.SetEnvironmentVariable("PATH", $"{PATH};{path}");
+                if (!PATH.ToUpper().Contains(path.ToUpper()))
+                {
+                    Environment.SetEnvironmentVariable("PATH", $"{PATH};{path}");
+                }
             }
         }
         static OpenSlideImage()

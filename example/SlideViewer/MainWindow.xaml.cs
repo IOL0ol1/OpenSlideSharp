@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Mapsui.Fetcher;
+using Microsoft.Win32;
+using OpenSlideSharp.BruTile;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -9,13 +12,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
-
-using Mapsui.Fetcher;
-
-using Microsoft.Win32;
-
-using OpenSlideSharp.BruTile;
-
 using Point = Mapsui.Geometries.Point;
 
 namespace SlideLibrary.Demo

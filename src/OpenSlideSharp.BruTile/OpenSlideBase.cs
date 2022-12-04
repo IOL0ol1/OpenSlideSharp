@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-
-using BruTile;
+﻿using BruTile;
 using BruTile.Cache;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace OpenSlideSharp.BruTile
 {
@@ -89,8 +87,8 @@ namespace OpenSlideSharp.BruTile
         {
             for (int i = 0; i < SlideImage.LevelCount; i++)
             {
-                bool useInternalWidth = int.TryParse(ExternInfo[$"openslide.level[{i}].tile-width"].ToString(), out var w) && w >= tileWidth;
-                bool useInternalHeight = int.TryParse(ExternInfo[$"openslide.level[{i}].tile-height"].ToString(), out var h) && h >= tileHeight;
+                bool useInternalWidth = int.TryParse(ExternInfo.TryGetValue($"openslide.level[{i}].tile-width", out var _w) ? (string)_w : null, out var w) && w >= tileWidth;
+                bool useInternalHeight = int.TryParse(ExternInfo.TryGetValue($"openslide.level[{i}].tile-height", out var _h) ? (string)_h : null, out var h) && h >= tileHeight;
 
                 bool useInternalSize = useInternalHeight && useInternalWidth;
                 var tw = useInternalSize ? w : tileWidth;
