@@ -69,11 +69,21 @@ namespace OpenSlideSharp.OpencvExtensions
             var fx = (double)dst.Width / src.Width;
             var fy = (double)dst.Height / src.Height;
             var fmin = Math.Min(fx, fy);
-            using (var srcResized = src.Resize(new Size(src.Width * fmin, src.Height * fmin)))
+            if (fmin < 1) // src > dst
             {
-                using (var sub = new Mat(dst, new Rect(0, 0, srcResized.Width, srcResized.Height)))
+                using (var srcResized = src.Resize(new Size(src.Width * fmin, src.Height * fmin)))
                 {
-                    srcResized.CopyTo(sub);
+                    using (var sub = new Mat(dst, new Rect(0, 0, srcResized.Width, srcResized.Height)))
+                    {
+                        srcResized.CopyTo(sub);
+                    }
+                }
+            }
+            else // src <= dst
+            {
+                using (var sub = new Mat(dst, new Rect(0, 0, src.Width, src.Height)))
+                {
+                    src.CopyTo(sub);
                 }
             }
         }

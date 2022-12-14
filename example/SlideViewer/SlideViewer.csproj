@@ -5,6 +5,7 @@
     <TargetFrameworks>net48;netcoreapp3.1</TargetFrameworks>
     <UseWPF>true</UseWPF>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Version>1.1.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

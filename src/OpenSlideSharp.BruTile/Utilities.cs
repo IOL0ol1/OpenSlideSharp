@@ -3,7 +3,6 @@ using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Range = OpenCvSharp.Range;
 
 namespace OpenSlideSharp.BruTile
 {
@@ -53,6 +52,7 @@ namespace OpenSlideSharp.BruTile
                         var scalar = new Scalar((int)(background >> 24 & 0xFF), (int)(background >> 16 & 0xFF), (int)(background >> 8 & 0xFF), (int)(background & 0xFF));
                         using (var dst = new Mat(dstHeight, dstWidth, pixel, scalar))
                         {
+                            src.SaveImage($"{Guid.NewGuid()}.jpg");
                             DrawImage(src, dst);
                             return dst.ToBytes(".jpg", prms);
                         }
@@ -71,11 +71,21 @@ namespace OpenSlideSharp.BruTile
             var fx = (double)dst.Width / src.Width;
             var fy = (double)dst.Height / src.Height;
             var fmin = Math.Min(fx, fy);
-            using (var srcResized = src.Resize(new Size(src.Width * fmin, src.Height * fmin)))
+            if (fmin < 1) // src > dst
             {
-                using (var sub = new Mat(dst, new Rect(0, 0, srcResized.Width, srcResized.Height)))
+                using (var srcResized = src.Resize(new Size(src.Width * fmin, src.Height * fmin)))
                 {
-                    srcResized.CopyTo(sub);
+                    using (var sub = new Mat(dst, new Rect(0, 0, srcResized.Width, srcResized.Height)))
+                    {
+                        srcResized.CopyTo(sub);
+                    }
+                }
+            }
+            else // src <= dst
+            {
+                using (var sub = new Mat(dst, new Rect(0, 0, src.Width, src.Height)))
+                {
+                    src.CopyTo(sub);
                 }
             }
         }

@@ -13,7 +13,7 @@
     <PackageReleaseNotes>OpenSlideSharp for BruTile</PackageReleaseNotes>
     <Description>OpenSlideSharp for BruTile</Description>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
