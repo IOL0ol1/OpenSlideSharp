@@ -1,13 +1,4 @@
 ﻿using Mapsui.UI.Wpf;
-
-/* 项目“SlideViewer (netcoreapp3.1)”的未合并的更改
-在此之前:
-using Microsoft.Xaml.Behaviors;
-在此之后:
-using Microsoft.Xaml.Behaviors;
-using System;
-using System.Windows;
-*/
 using Microsoft.Xaml.Behaviors;
 using System.Windows;
 
