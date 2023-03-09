@@ -2,6 +2,7 @@
 using OpenCvSharp;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace OpenSlideSharp.BruTile
@@ -39,7 +40,7 @@ namespace OpenSlideSharp.BruTile
                         {
                             src.ForEachAsInt32((_i, _p) =>
                             {
-                                if (*_i == 0) *_i = (Int32)(background);
+                                if ((*_i & 0xFF000000) != 0xFF000000) *_i = (Int32)(background); // alpha is not 0xff
                             });
                         }
                     }
@@ -52,7 +53,6 @@ namespace OpenSlideSharp.BruTile
                         var scalar = new Scalar((int)(background >> 24 & 0xFF), (int)(background >> 16 & 0xFF), (int)(background >> 8 & 0xFF), (int)(background & 0xFF));
                         using (var dst = new Mat(dstHeight, dstWidth, pixel, scalar))
                         {
-                            src.SaveImage($"{Guid.NewGuid()}.jpg");
                             DrawImage(src, dst);
                             return dst.ToBytes(".jpg", prms);
                         }
