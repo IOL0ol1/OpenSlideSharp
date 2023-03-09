@@ -2,7 +2,6 @@
 using OpenCvSharp;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 namespace OpenSlideSharp.BruTile
