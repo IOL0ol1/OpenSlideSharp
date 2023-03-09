@@ -11,7 +11,7 @@
     <PackageReleaseNotes>OpenSlideSharp all in one package for Windows</PackageReleaseNotes>
     <Description>OpenSlideSharp all in one package for Windows</Description>
     <NoWarn>1701;1702;NU5128;</NoWarn>
-    <Version>1.1.0</Version>
+    <Version>1.1.2</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -12,7 +12,7 @@
     <PackageReleaseNotes>OpenSlideSharp bitmap extensions</PackageReleaseNotes>
     <Description>OpenSlideSharp bitmap extensions</Description>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <Version>1.1.0</Version>
+    <Version>1.1.2</Version>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
