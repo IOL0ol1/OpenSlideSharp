@@ -10,14 +10,12 @@ namespace OpenSlideSharp.BruTile
     {
         public readonly OpenSlideImage SlideImage;
         private readonly bool _enableCache;
-        private readonly Action<string> _logger;
         private readonly MemoryCache<byte[]> _tileCache = new MemoryCache<byte[]>();
 
-        public OpenSlideBase(string source, bool enableCache = true, Action<string> logger = null)
+        public OpenSlideBase(string source, bool enableCache = true)
         {
             Source = source;
             _enableCache = enableCache;
-            _logger = logger;
             SlideImage = OpenSlideImage.Open(source);
             var minUnitsPerPixel = SlideImage.MicronsPerPixelX ?? SlideImage.MicronsPerPixelY ?? 1;
             MinUnitsPerPixel = UseRealResolution ? minUnitsPerPixel : 1;
