@@ -7,12 +7,12 @@
 
 
 # Note
-For the latest interfaces, please use `OpenSlideSharp.Interop`.
-It is automatically generated via ClangSharpPInvokeGenerator and a custom Source Generator.
-**You can create an issue to trigger an update.**
-You need to download the OpenSlide DLL yourself.
-**Contributions are welcome.**
-Nuget    
+For the latest interfaces, please use `OpenSlideSharp.Interop`.               
+It is automatically generated via ClangSharpPInvokeGenerator and a custom Source Generator.              
+**You can create an issue to trigger an update.**            
+You need to download the OpenSlide DLL yourself.        
+**Contributions are welcome.**            
+Nuget          
 ```ps
 Install-Package OpenSlideSharp.Interop -Version 1.1.0
 ```
