@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
+		<LangVersion>latest</LangVersion>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageId>OpenSlideSharp.Interop</PackageId>
+		<PackageTags>openslide image</PackageTags>
+		<PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/), ClangSharpPInvokeGenerator auto generater</PackageReleaseNotes>
+		<Description>.NET bindings for OpenSlide(https://openslide.org/), ClangSharpPInvokeGenerator auto generater</Description>
+		<AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+		<Version>1.1.2</Version>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="System.Memory" Version="4.6.3" /> 
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\OpenSlideSharp.SourceGenerator\OpenSlideSharp.SourceGenerator.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,71 @@
+name: Generate bindings and publish Interop
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+  issues:
+    types: [opened]
+
+jobs:
+  generate-and-publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.x'
+
+      - name: Run Download script and generate bindings
+        working-directory: generation
+        shell: pwsh
+        run: |
+          ./Download.ps1
+          dotnet tool restore
+          dotnet ClangSharpPInvokeGenerator "@GenerateOpenSlide.rsp"
+
+      - name: Update csproj Version to current date-hour
+        shell: pwsh
+        run: |
+          $csproj = 'src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj'
+          if (-not (Test-Path $csproj)) {
+            Write-Host "CSProj not found: $csproj"; exit 0
+          }
+          [xml]$xml = Get-Content $csproj
+          $pg = $xml.Project.PropertyGroup | Where-Object { $_.Version }
+          if (-not $pg) { $pg = $xml.Project.PropertyGroup[0] }
+          if (-not $pg.Version) {
+            $vNode = $xml.CreateElement('Version')
+            $vNode.InnerText = ''
+            $pg.AppendChild($vNode) | Out-Null
+          }
+          $now = Get-Date -Format 'yyyyMMddHH'
+          $version = $pg.Version.InnerText
+          if ($version -and $version -match '\.') {
+            $parts = $version.Split('.')
+            $parts[-1] = $now
+            $new = $parts -join '.'
+          } else {
+            $new = "1.0.$now"
+          }
+          $pg.Version.InnerText = $new
+          $xml.Save($csproj)
+          Write-Host "Updated $csproj to $new"
+          
+      - name: Pack OpenSlideSharp.Interop
+        run: |
+          dotnet restore src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj
+          dotnet pack src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj -c Release -o ./nupkgs
+
+      - name: Publish NuGet
+        run: |
+          $nupkgs = Get-ChildItem -Path ".\nupkgs\" -Filter "*.nupkg" -Recurse
+          foreach ($nupkg in $nupkgs) {
+            dotnet nuget push $nupkg.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+          }
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

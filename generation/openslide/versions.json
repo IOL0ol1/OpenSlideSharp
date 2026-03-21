@@ -1,0 +1,130 @@
+{
+  "versions": [
+    {
+      "display": "OpenSlide",
+      "id": "openslide",
+      "type": "primary",
+      "version": "v4.0.0-377-g0338fcf"
+    },
+    {
+      "display": "cairo",
+      "id": "cairo",
+      "type": "dependency",
+      "version": "1.18.4-2"
+    },
+    {
+      "display": "gdk-pixbuf",
+      "id": "gdk-pixbuf",
+      "type": "dependency",
+      "version": "2.44.5-1"
+    },
+    {
+      "display": "glib",
+      "id": "glib",
+      "type": "dependency",
+      "version": "2.88.0-1"
+    },
+    {
+      "display": "libdicom",
+      "id": "libdicom",
+      "type": "dependency",
+      "version": "1.2.0-1"
+    },
+    {
+      "display": "libffi",
+      "id": "libffi",
+      "type": "dependency",
+      "version": "3.5.2-2"
+    },
+    {
+      "display": "libjpeg-turbo",
+      "id": "libjpeg-turbo",
+      "type": "dependency",
+      "version": "3.1.3-1"
+    },
+    {
+      "display": "libpng",
+      "id": "libpng",
+      "type": "dependency",
+      "version": "1.6.55-1"
+    },
+    {
+      "display": "libtiff",
+      "id": "libtiff",
+      "type": "dependency",
+      "version": "4.7.1-3"
+    },
+    {
+      "display": "libxml2",
+      "id": "libxml2",
+      "type": "dependency",
+      "version": "2.15.2-1"
+    },
+    {
+      "display": "OpenJPEG",
+      "id": "libopenjp2",
+      "type": "dependency",
+      "version": "2.5.4-1"
+    },
+    {
+      "display": "PCRE2",
+      "id": "pcre2",
+      "type": "dependency",
+      "version": "10.47-3"
+    },
+    {
+      "display": "pixman",
+      "id": "pixman",
+      "type": "dependency",
+      "version": "0.46.4-1"
+    },
+    {
+      "display": "proxy-libintl",
+      "id": "proxy-libintl",
+      "type": "dependency",
+      "version": "0.5-1"
+    },
+    {
+      "display": "SQLite",
+      "id": "sqlite3",
+      "type": "dependency",
+      "version": "3.52.0-1"
+    },
+    {
+      "display": "uthash",
+      "id": "uthash",
+      "type": "dependency",
+      "version": "2.3.0-2"
+    },
+    {
+      "display": "zlib-ng",
+      "id": "zlib-ng",
+      "type": "dependency",
+      "version": "2.3.3-1"
+    },
+    {
+      "display": "Zstandard",
+      "id": "zstd",
+      "type": "dependency",
+      "version": "1.5.7-3"
+    },
+    {
+      "display": "Binutils",
+      "id": "binutils",
+      "type": "tool",
+      "version": "GNU ld (Gentoo 2.46.0 p1) 2.46.0"
+    },
+    {
+      "display": "GCC",
+      "id": "gcc",
+      "type": "tool",
+      "version": "(Gentoo 15.2.1_p20260214 p5) 15.2.1 20260214"
+    },
+    {
+      "display": "MinGW-w64",
+      "id": "mingw-w64",
+      "type": "tool",
+      "version": "13.0.0"
+    }
+  ]
+}
