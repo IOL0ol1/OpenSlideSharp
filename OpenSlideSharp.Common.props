@@ -15,12 +15,12 @@
 
 
   <ItemGroup>
-    <None Include="$(SolutionDir)\openslide_logo.png">
+    <None Include="openslide_logo.png">
       <Visible>false</Visible>
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-	  <None Include="$(SolutionDir)\README.md">
+	  <None Include="README.md">
 		  <Visible>false</Visible>
 		  <Pack>True</Pack>
 		  <PackagePath></PackagePath>
