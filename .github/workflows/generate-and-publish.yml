@@ -83,7 +83,7 @@ jobs:
 
       # Push NuGet packages to NuGet.org ONLY when running on main branch
       - name: Push package to NuGet.org
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         shell: pwsh
         run: |
           # Find all generated nupkg files (exclude symbol packages)
