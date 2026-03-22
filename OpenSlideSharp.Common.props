@@ -4,14 +4,14 @@
   <!--- Package information, Version -->
   <PropertyGroup>
     <Authors>IOL0ol1</Authors>
-    <Copyright>Copyright © 2021-2022</Copyright>
+    <Copyright>Copyright © 2021-2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/IOL0ol1/OpenSlideSharp</PackageProjectUrl>
-    <PackageIcon>openslide_logo.png</PackageIcon>
+    <PackageIcon>openslide_logo.png</PackageIcon>g
     <RepositoryUrl>https://github.com/IOL0ol1/OpenSlideSharp.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <SignAssembly>true</SignAssembly>
+    <!--<SignAssembly>true</SignAssembly>-->
     <!-- <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)\openslidesharp.snk</AssemblyOriginatorKeyFile> -->
   </PropertyGroup>
 
@@ -22,6 +22,11 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+	  <None Include="$(SolutionDir)\README.md">
+		  <Visible>false</Visible>
+		  <Pack>True</Pack>
+		  <PackagePath></PackagePath>
+	  </None>
   </ItemGroup>
 
 </Project>
