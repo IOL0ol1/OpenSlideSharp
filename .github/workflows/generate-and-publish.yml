@@ -18,7 +18,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '10.x'
+          dotnet-version: '8.x'
 
       - name: Run download and generate bindings
         shell: pwsh
@@ -39,19 +39,15 @@ jobs:
             exit 1
           }
 
-          # Load XML with proper whitespace preservation
+          # Load XML with whitespace preservation
           $xml = New-Object System.Xml.XmlDocument
           $xml.PreserveWhitespace = $true
           $xml.Load($csproj)
 
-          # MSBuild namespace required for modern SDK-style csproj
-          $nsManager = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-          $nsManager.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003")
-
-          # Select first PropertyGroup that contains Version, otherwise use first PropertyGroup
-          $pg = $xml.SelectSingleNode("//msbuild:PropertyGroup[msbuild:Version]", $nsManager)
+          # Find PropertyGroup without namespace (works for most SDK-style projects)
+          $pg = $xml.SelectSingleNode("//PropertyGroup[Version]")
           if (-not $pg) {
-            $pg = $xml.SelectSingleNode("//msbuild:PropertyGroup[1]", $nsManager)
+            $pg = $xml.SelectSingleNode("//PropertyGroup[1]")
           }
 
           if (-not $pg) {
@@ -60,13 +56,13 @@ jobs:
           }
 
           # Get existing Version node or create a new one
-          $versionNode = $pg.SelectSingleNode("msbuild:Version", $nsManager)
+          $versionNode = $pg.SelectSingleNode("Version")
           if (-not $versionNode) {
-            $versionNode = $xml.CreateElement("Version", $nsManager.LookupNamespace("msbuild"))
+            $versionNode = $xml.CreateElement("Version")
             $pg.AppendChild($versionNode) | Out-Null
           }
 
-          # Generate new build number based on current time
+          # Generate new version number
           $now = Get-Date -Format 'yyyyMMddHH'
           $version = $versionNode.InnerText.Trim()
 
@@ -78,7 +74,7 @@ jobs:
             $newVersion = "1.0.$now"
           }
 
-          # Update and save the project file
+          # Update and save project file
           $versionNode.InnerText = $newVersion
           $xml.Save($csproj)
           Write-Host "Updated $csproj to version $newVersion"
