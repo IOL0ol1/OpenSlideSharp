@@ -1,5 +1,7 @@
+# Generate bindings and publish Interop
 name: Generate bindings and publish Interop
 
+# Trigger workflow on push to any branch and manual dispatch
 on:
   push:
     branches:
@@ -10,15 +12,18 @@ jobs:
   generate-and-publish:
     runs-on: windows-latest
     steps:
+      # Check out the source code from repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      # Set up .NET 8 SDK for build and packaging
+      - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.x'
 
-      - name: Run download and generate bindings
+      # Download dependencies and generate interop bindings via ClangSharp
+      - name: Download dependencies & generate bindings
         shell: pwsh
         run: |
           cd generation
@@ -26,56 +31,67 @@ jobs:
           dotnet tool restore
           dotnet ClangSharpPInvokeGenerator "@GenerateOpenSlide.rsp"
 
-      - name: Update csproj Version with timestamp
+      # Update project version with valid NuGet version string (4-segment, all parts ≤65535)
+      - name: Update csproj version with valid build number
         shell: pwsh
         run: |
-          # Path to the project file
-          $csproj = 'src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj'
-          if (-not (Test-Path $csproj)) { Write-Error "CSProj not found"; exit 1 }
+          # Define path to the target csproj file
+          $csprojPath = 'src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj'
 
-          # Load XML while preserving whitespace
-          $xml = New-Object System.Xml.XmlDocument
-          $xml.PreserveWhitespace = $true
-          $xml.Load($csproj)
-
-          # Select PropertyGroup that contains Version or use the first one
-          $pg = $xml.SelectSingleNode("//PropertyGroup[Version]") ?? $xml.SelectSingleNode("//PropertyGroup[1]")
-          if (-not $pg) { Write-Error "No PropertyGroup found"; exit 1 }
-
-          # Get or create Version node
-          $versionNode = $pg.SelectSingleNode("Version") ?? $pg.AppendChild($xml.CreateElement("Version"))
-
-          # Generate new version suffix
-          $now = Get-Date -Format 'yyyyMMddHHmm'
-          $version = $versionNode.InnerText.Trim()
-
-          # Replace last part of version with timestamp
-          if ($version -match '\.') {
-            $parts = $version -split '\.'
-            $parts[-1] = $now
-            $newVersion = $parts -join '.'
-          } else {
-            $newVersion = "1.0.$now"
+          # Validate csproj file exists
+          if (-not (Test-Path $csprojPath)) {
+            Write-Error "Project file not found at path: $csprojPath"
+            exit 1
           }
 
-          # Save updated version
-          $versionNode.InnerText = $newVersion
-          $xml.Save($csproj)
-          Write-Host "Updated to version $newVersion"
+          # Load XML project file and preserve whitespace formatting
+          $xmlDoc = New-Object System.Xml.XmlDocument
+          $xmlDoc.PreserveWhitespace = $true
+          $xmlDoc.Load($csprojPath)
 
-      # Build only - NuGet package is auto-generated on build (GeneratePackageOnBuild)
-      - name: Build (auto-generate nupkg)
+          # Select PropertyGroup with Version node or first PropertyGroup as fallback
+          $propertyGroup = $xmlDoc.SelectSingleNode("//PropertyGroup[Version]") ?? $xmlDoc.SelectSingleNode("//PropertyGroup[1]")
+          if (-not $propertyGroup) {
+            Write-Error "No valid PropertyGroup found in project file"
+            exit 1
+          }
+
+          # Get existing Version node or create new one if missing
+          $versionNode = $propertyGroup.SelectSingleNode("Version")
+          if (-not $versionNode) {
+            $versionNode = $xmlDoc.CreateElement("Version")
+            $propertyGroup.AppendChild($versionNode) | Out-Null
+          }
+
+          # Generate valid NuGet version: Major.Minor.DaysSinceBaseDate.RunNumber
+          # All parts ≤ 65535 to comply with NuGet version rules
+          $baseDate = Get-Date "2025-01-01"
+          $currentDate = Get-Date
+          $daysSinceBase = ($currentDate - $baseDate).Days
+          $buildRunNumber = $env:GITHUB_RUN_NUMBER
+          $validVersion = "1.0.$daysSinceBase.$buildRunNumber"
+
+          # Update version and save changes to csproj
+          $versionNode.InnerText = $validVersion
+          $xmlDoc.Save($csprojPath)
+          Write-Host "Successfully updated project version to: $validVersion"
+
+      # Build project - NuGet package auto-generated via GeneratePackageOnBuild in csproj
+      - name: Build project & generate NuGet package
         run: |
-          dotnet build src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj -c Release
+          dotnet build src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj -c Release --no-incremental
 
-      # Push packages to NuGet.org only on main branch
-      - name: Push to NuGet.org
+      # Push NuGet packages to NuGet.org ONLY when running on main branch
+      - name: Push package to NuGet.org
         if: github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
-          $nupkgs = Get-ChildItem -Recurse -Filter "*.nupkg" | Where-Object { $_.FullName -notmatch "symbols" }
-          foreach ($pkg in $nupkgs) {
-            dotnet nuget push $pkg.FullName `
+          # Find all generated nupkg files (exclude symbol packages)
+          $nugetPackages = Get-ChildItem -Recurse -Filter "*.nupkg" | Where-Object { $_.Name -notmatch "\.symbols\." }
+
+          # Push each package to NuGet.org with skip duplicate option
+          foreach ($package in $nugetPackages) {
+            dotnet nuget push $package.FullName `
               --api-key ${{ secrets.NUGET_API_KEY }} `
               --source https://api.nuget.org/v3/index.json `
               --skip-duplicate
