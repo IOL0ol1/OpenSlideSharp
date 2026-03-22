@@ -10,6 +10,7 @@
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/IOL0ol1/OpenSlideSharp</PackageProjectUrl>
 		<PackageIcon>openslide_logo.png</PackageIcon>
+		<ReadmeFile>README.md</ReadmeFile>
 		<RepositoryUrl>https://github.com/IOL0ol1/OpenSlideSharp.git</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
