@@ -12,7 +12,7 @@ jobs:
   generate-and-publish:
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup .NET
@@ -20,7 +20,7 @@ jobs:
         with:
           dotnet-version: '10.x'
 
-      - name: Run Download script and generate bindings
+      - name: Run download and generate bindings
         shell: pwsh
         run: |
           cd generation
@@ -28,48 +28,73 @@ jobs:
           dotnet tool restore
           dotnet ClangSharpPInvokeGenerator "@GenerateOpenSlide.rsp"
 
-      - name: Update csproj Version to current date-hour
+      - name: Update csproj Version with timestamp
         shell: pwsh
         run: |
+          # Path to the csproj file
           $csproj = 'src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj'
-          if (-not (Test-Path $csproj)) {
-            Write-Host "CSProj not found: $csproj"; exit 0
-          }
-          [xml]$xml = Get-Content $csproj
-          $pg = ($xml.Project.PropertyGroup | Where-Object { $_.Version }) | Select-Object -First 1
-          if (-not $pg) { $pg = $xml.Project.PropertyGroup[0] }
 
-          $versionNode = $pg.Version
+          if (-not (Test-Path $csproj)) {
+            Write-Error "CSProj not found: $csproj"
+            exit 1
+          }
+
+          # Load XML with proper whitespace preservation
+          $xml = New-Object System.Xml.XmlDocument
+          $xml.PreserveWhitespace = $true
+          $xml.Load($csproj)
+
+          # MSBuild namespace required for modern SDK-style csproj
+          $nsManager = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+          $nsManager.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003")
+
+          # Select first PropertyGroup that contains Version, otherwise use first PropertyGroup
+          $pg = $xml.SelectSingleNode("//msbuild:PropertyGroup[msbuild:Version]", $nsManager)
+          if (-not $pg) {
+            $pg = $xml.SelectSingleNode("//msbuild:PropertyGroup[1]", $nsManager)
+          }
+
+          if (-not $pg) {
+            Write-Error "No PropertyGroup found in csproj"
+            exit 1
+          }
+
+          # Get existing Version node or create a new one
+          $versionNode = $pg.SelectSingleNode("msbuild:Version", $nsManager)
           if (-not $versionNode) {
-            $versionNode = $xml.CreateElement('Version')
-            $versionNode.InnerText = ''
+            $versionNode = $xml.CreateElement("Version", $nsManager.LookupNamespace("msbuild"))
             $pg.AppendChild($versionNode) | Out-Null
           }
-          if ($versionNode -is [System.Array]) { $versionNode = $versionNode[0] }
 
+          # Generate new build number based on current time
           $now = Get-Date -Format 'yyyyMMddHH'
-          $version = $versionNode.InnerText
-          if ($version -and $version -match '\.') {
-            $parts = $version.Split('.')
+          $version = $versionNode.InnerText.Trim()
+
+          if ($version -match '\.') {
+            $parts = $version -split '\.'
             $parts[-1] = $now
-            $new = $parts -join '.'
+            $newVersion = $parts -join '.'
           } else {
-            $new = "1.0.$now"
+            $newVersion = "1.0.$now"
           }
-          $versionNode.InnerText = $new
+
+          # Update and save the project file
+          $versionNode.InnerText = $newVersion
           $xml.Save($csproj)
-          Write-Host "Updated $csproj to $new"
-          
-      - name: Pack OpenSlideSharp.Interop
+          Write-Host "Updated $csproj to version $newVersion"
+
+      - name: Pack NuGet package
         run: |
           dotnet restore src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj
           dotnet pack src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj -c Release -o ./nupkgs
 
-      - name: Publish NuGet
+      - name: Push to NuGet.org
+        if: github.ref == 'refs/heads/main'
         run: |
-          $nupkgs = Get-ChildItem -Path ".\nupkgs\" -Filter "*.nupkg" -Recurse
-          foreach ($nupkg in $nupkgs) {
-            dotnet nuget push $nupkg.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+          $nupkgs = Get-ChildItem -Path "./nupkgs" -Filter "*.nupkg"
+          foreach ($pkg in $nupkgs) {
+            dotnet nuget push $pkg.FullName `
+              --api-key ${{ secrets.NUGET_API_KEY }} `
+              --source https://api.nuget.org/v3/index.json `
+              --skip-duplicate
           }
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
