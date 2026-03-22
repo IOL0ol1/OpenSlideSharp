@@ -1,12 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-	<Import Project="../../OpenSlideSharp.Common.props" />
-	
+ 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
 		<LangVersion>latest</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<Authors>IOL0ol1</Authors>
+		<Copyright>Copyright © 2021-2026</Copyright>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/IOL0ol1/OpenSlideSharp</PackageProjectUrl>
+		<PackageIcon>openslide_logo.png</PackageIcon>
+		<RepositoryUrl>https://github.com/IOL0ol1/OpenSlideSharp.git</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 		<PackageId>OpenSlideSharp.Interop</PackageId>
 		<PackageTags>openslide image</PackageTags>
 		<PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/), ClangSharpPInvokeGenerator auto generater</PackageReleaseNotes>
@@ -14,6 +20,19 @@
 		<AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
 		<Version>1.1.2</Version>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="../../openslide_logo.png">
+			<Visible>false</Visible>
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+		<None Include="../../README.md">
+			<Visible>false</Visible>
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+	</ItemGroup>
 
 	<ItemGroup>
 	  <PackageReference Include="System.Memory" Version="4.6.3" /> 
