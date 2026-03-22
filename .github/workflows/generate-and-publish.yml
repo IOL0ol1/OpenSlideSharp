@@ -21,9 +21,9 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Run Download script and generate bindings
-        working-directory: generation
         shell: pwsh
         run: |
+          cd generation
           ./Download.ps1
           dotnet tool restore
           dotnet ClangSharpPInvokeGenerator "@GenerateOpenSlide.rsp"
