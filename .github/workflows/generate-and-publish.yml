@@ -5,8 +5,6 @@ on:
     branches:
       - '**'
   workflow_dispatch:
-  issues:
-    types: [opened]
 
 jobs:
   generate-and-publish:
@@ -31,41 +29,27 @@ jobs:
       - name: Update csproj Version with timestamp
         shell: pwsh
         run: |
-          # Path to the csproj file
+          # Path to the project file
           $csproj = 'src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj'
+          if (-not (Test-Path $csproj)) { Write-Error "CSProj not found"; exit 1 }
 
-          if (-not (Test-Path $csproj)) {
-            Write-Error "CSProj not found: $csproj"
-            exit 1
-          }
-
-          # Load XML with whitespace preservation
+          # Load XML while preserving whitespace
           $xml = New-Object System.Xml.XmlDocument
           $xml.PreserveWhitespace = $true
           $xml.Load($csproj)
 
-          # Find PropertyGroup without namespace (works for most SDK-style projects)
-          $pg = $xml.SelectSingleNode("//PropertyGroup[Version]")
-          if (-not $pg) {
-            $pg = $xml.SelectSingleNode("//PropertyGroup[1]")
-          }
+          # Select PropertyGroup that contains Version or use the first one
+          $pg = $xml.SelectSingleNode("//PropertyGroup[Version]") ?? $xml.SelectSingleNode("//PropertyGroup[1]")
+          if (-not $pg) { Write-Error "No PropertyGroup found"; exit 1 }
 
-          if (-not $pg) {
-            Write-Error "No PropertyGroup found in csproj"
-            exit 1
-          }
+          # Get or create Version node
+          $versionNode = $pg.SelectSingleNode("Version") ?? $pg.AppendChild($xml.CreateElement("Version"))
 
-          # Get existing Version node or create a new one
-          $versionNode = $pg.SelectSingleNode("Version")
-          if (-not $versionNode) {
-            $versionNode = $xml.CreateElement("Version")
-            $pg.AppendChild($versionNode) | Out-Null
-          }
-
-          # Generate new version number
-          $now = Get-Date -Format 'yyyyMMddHH'
+          # Generate new version suffix
+          $now = Get-Date -Format 'yyyyMMddHHmm'
           $version = $versionNode.InnerText.Trim()
 
+          # Replace last part of version with timestamp
           if ($version -match '\.') {
             $parts = $version -split '\.'
             $parts[-1] = $now
@@ -74,20 +58,22 @@ jobs:
             $newVersion = "1.0.$now"
           }
 
-          # Update and save project file
+          # Save updated version
           $versionNode.InnerText = $newVersion
           $xml.Save($csproj)
-          Write-Host "Updated $csproj to version $newVersion"
+          Write-Host "Updated to version $newVersion"
 
-      - name: Pack NuGet package
+      # Build only - NuGet package is auto-generated on build (GeneratePackageOnBuild)
+      - name: Build (auto-generate nupkg)
         run: |
-          dotnet restore src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj
-          dotnet pack src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj -c Release -o ./nupkgs
+          dotnet build src/OpenSlideSharp.Interop/OpenSlideSharp.Interop.csproj -c Release
 
+      # Push packages to NuGet.org only on main branch
       - name: Push to NuGet.org
         if: github.ref == 'refs/heads/main'
+        shell: pwsh
         run: |
-          $nupkgs = Get-ChildItem -Path "./nupkgs" -Filter "*.nupkg"
+          $nupkgs = Get-ChildItem -Recurse -Filter "*.nupkg" | Where-Object { $_.FullName -notmatch "symbols" }
           foreach ($pkg in $nupkgs) {
             dotnet nuget push $pkg.FullName `
               --api-key ${{ secrets.NUGET_API_KEY }} `
