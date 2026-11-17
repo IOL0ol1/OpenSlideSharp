@@ -390,7 +390,8 @@ public sealed class OmeZarrGenerator
 
     /// <summary>
     /// Lists every key of the store: first the metadata documents (group, then each level), then the chunks by
-    /// level, channel, row and column.
+    /// level, row and column, with the three channels of a chunk next to each other. Fetching the entries in this
+    /// order renders each chunk region once, even with a <see cref="OmeZarrOptions.RenderCacheSize"/> of 1.
     /// </summary>
     /// <returns>The keys, generated lazily.</returns>
     public IEnumerable<string> EnumerateKeys()
@@ -403,13 +404,14 @@ public sealed class OmeZarrGenerator
         string prefix = Version == NgffVersion.V0_5 ? "/c/" : "/";
         for (int level = 0; level < LevelCount; level++)
         {
-            for (int channel = 0; channel < ChannelCount; channel++)
+            for (long y = 0; y < _rows[level]; y++)
             {
-                for (long y = 0; y < _rows[level]; y++)
+                for (long x = 0; x < _columns[level]; x++)
                 {
-                    for (long x = 0; x < _columns[level]; x++)
+                    string position = "/" + Invariant(y) + "/" + Invariant(x);
+                    for (int channel = 0; channel < ChannelCount; channel++)
                     {
-                        yield return Invariant(level) + prefix + Invariant(channel) + "/" + Invariant(y) + "/" + Invariant(x);
+                        yield return Invariant(level) + prefix + Invariant(channel) + position;
                     }
                 }
             }
