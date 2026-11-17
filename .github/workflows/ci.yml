@@ -48,8 +48,11 @@ jobs:
       - name: Verify generated bindings are committed
         shell: pwsh
         run: |
-          git diff --exit-code src/OpenSlideSharp/Native
-          if ($LASTEXITCODE -ne 0) {
+          # --porcelain also lists new untracked files, which git diff would miss.
+          $changes = git status --porcelain src/OpenSlideSharp/Native
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($changes) {
+            $changes | ForEach-Object { Write-Host $_ }
             Write-Host "::error::生成文件与清单不一致: regenerate with eng/Generate-Bindings.ps1 and commit src/OpenSlideSharp/Native"
             exit 1
           }

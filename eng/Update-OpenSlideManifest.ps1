@@ -1,4 +1,5 @@
 #!/usr/bin/env pwsh
+#requires -Version 7
 <#
 .SYNOPSIS
   Resolves the upstream OpenSlide binary release and writes eng/openslide.json.
