@@ -316,6 +316,77 @@ public sealed class OpenSlide : IDisposable
     }
 
     /// <summary>
+    /// Returns an opaque thumbnail of the slide that fits in <paramref name="maxWidth"/> x
+    /// <paramref name="maxHeight"/>, keeping its aspect ratio, like openslide-python's <c>get_thumbnail</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reads the whole level best suited to the requested size (<see cref="GetBestLevelForDownsample"/>),
+    /// composites it over the slide background color (<see cref="OpenSlideProperties.BackgroundColor"/>, white if
+    /// missing or malformed), and scales it down with Pillow's Lanczos filter to the size Pillow's
+    /// <c>Image.thumbnail</c> would choose. A level that already fits is returned at its own size, never enlarged.
+    /// </para>
+    /// <para>
+    /// The level is scaled in one Lanczos pass, without the box-reduce step Pillow adds when a side shrinks by a
+    /// factor of 4 or more, so in that case pixels can differ slightly from openslide-python; sizes always match.
+    /// </para>
+    /// </remarks>
+    /// <param name="maxWidth">Maximum width in pixels, at least 1.</param>
+    /// <param name="maxHeight">Maximum height in pixels, at least 1.</param>
+    /// <returns>
+    /// A <see cref="PixelFormat.Bgra32Opaque"/> image whose <see cref="PixelImage.IccProfile"/> is <see cref="ColorProfile"/>.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="maxWidth"/> or <paramref name="maxHeight"/> is less than 1, or the level to read would not fit
+    /// in a .NET array.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
+    public PixelImage GetThumbnail(int maxWidth, int maxHeight)
+    {
+        if (maxWidth < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxWidth), maxWidth, "The maximum width must be at least 1.");
+        }
+
+        if (maxHeight < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxHeight), maxHeight, "The maximum height must be at least 1.");
+        }
+
+        SlideSize dimensions = Dimensions;
+        double downsample = Math.Max((double)dimensions.Width / maxWidth, (double)dimensions.Height / maxHeight);
+        int level = GetBestLevelForDownsample(downsample);
+        SlideSize levelSize = _levelDimensions[level];
+
+        // An empty level, or one that already fits, is not scaled. Otherwise the size is at most the maximum.
+        (long Width, long Height) size =
+            ThumbnailSize.Compute(levelSize.Width, levelSize.Height, maxWidth, maxHeight)
+            ?? (levelSize.Width, levelSize.Height);
+        if (size.Width > int.MaxValue / 4 || size.Height > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxWidth), $"A {size.Width} x {size.Height} thumbnail is too large for a PixelImage.");
+        }
+
+        int width = (int)size.Width;
+        int height = (int)size.Height;
+        var data = new byte[CheckedPixelBytes(width, height, "thumbnail")];
+        var source = new SlideRenderSource(this);
+        Compositor.TryParseBackground(
+            source.GetProperty(OpenSlideProperties.BackgroundColor), out byte red, out byte green, out byte blue);
+        RegionRenderer.RenderRegion(
+            source,
+            new SourceRegion(0, 0, level, levelSize.Width, levelSize.Height),
+            (red, green, blue),
+            colorTransform: null,
+            width,
+            height,
+            data);
+        return new PixelImage(width, height, PixelFormat.Bgra32Opaque, data, ColorProfile);
+    }
+
+    /// <summary>
     /// Makes the slide use <paramref name="cache"/> for decoded tiles (<c>openslide_set_cache</c>). OpenSlide takes
     /// its own reference to the cache, so the cache may be disposed afterwards and the slide keeps working.
     /// </summary>
