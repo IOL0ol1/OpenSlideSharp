@@ -7,33 +7,14 @@ namespace OpenSlideSharp;
 internal static class Compositor
 {
     /// <summary>Composites premultiplied BGRA pixels in place into opaque BGRA.</summary>
-    internal static void CompositeInPlace(Span<byte> premultipliedBgra, byte red, byte green, byte blue)
-    {
-        for (int i = 0; i + 3 < premultipliedBgra.Length; i += 4)
-        {
-            int a = premultipliedBgra[i + 3];
-            if (a != 255)
-            {
-                if (a == 0)
-                {
-                    premultipliedBgra[i] = blue;
-                    premultipliedBgra[i + 1] = green;
-                    premultipliedBgra[i + 2] = red;
-                }
-                else
-                {
-                    premultipliedBgra[i] = Blend(blue, Math.Min(255, 255 * premultipliedBgra[i] / a), a);
-                    premultipliedBgra[i + 1] = Blend(green, Math.Min(255, 255 * premultipliedBgra[i + 1] / a), a);
-                    premultipliedBgra[i + 2] = Blend(red, Math.Min(255, 255 * premultipliedBgra[i + 2] / a), a);
-                }
-            }
-
-            premultipliedBgra[i + 3] = 255;
-        }
-    }
+    internal static void CompositeInPlace(Span<byte> premultipliedBgra, byte red, byte green, byte blue) =>
+        CompositeCore(premultipliedBgra, red, green, blue, premultiplied: true);
 
     /// <summary>Composites straight-alpha BGRA pixels in place into opaque BGRA (no un-premultiply step).</summary>
-    internal static void BlendStraightInPlace(Span<byte> bgra, byte red, byte green, byte blue)
+    internal static void BlendStraightInPlace(Span<byte> bgra, byte red, byte green, byte blue) =>
+        CompositeCore(bgra, red, green, blue, premultiplied: false);
+
+    private static void CompositeCore(Span<byte> bgra, byte red, byte green, byte blue, bool premultiplied)
     {
         for (int i = 0; i + 3 < bgra.Length; i += 4)
         {
@@ -48,15 +29,17 @@ internal static class Compositor
                 }
                 else
                 {
-                    bgra[i] = Blend(blue, bgra[i], a);
-                    bgra[i + 1] = Blend(green, bgra[i + 1], a);
-                    bgra[i + 2] = Blend(red, bgra[i + 2], a);
+                    bgra[i] = Blend(blue, Straight(bgra[i], a, premultiplied), a);
+                    bgra[i + 1] = Blend(green, Straight(bgra[i + 1], a, premultiplied), a);
+                    bgra[i + 2] = Blend(red, Straight(bgra[i + 2], a, premultiplied), a);
                 }
             }
 
             bgra[i + 3] = 255;
         }
     }
+
+    private static int Straight(int c, int a, bool premultiplied) => premultiplied ? Math.Min(255, 255 * c / a) : c;
 
     /// <summary>Parses a 6-digit hex <c>RRGGBB</c> color; on failure returns false with all outputs 255.</summary>
     internal static bool TryParseBackground(string? hex, out byte red, out byte green, out byte blue)
