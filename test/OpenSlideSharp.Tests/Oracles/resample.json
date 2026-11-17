@@ -61,6 +61,20 @@
     23
    ],
    "file": "resample-37x23.png"
+  },
+  {
+   "size": [
+    30,
+    5
+   ],
+   "file": "resample-30x5.png"
+  },
+  {
+   "size": [
+    35,
+    4
+   ],
+   "file": "resample-35x4.png"
   }
  ]
 }
