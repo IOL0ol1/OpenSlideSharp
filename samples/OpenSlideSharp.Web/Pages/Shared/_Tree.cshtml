@@ -1,0 +1,20 @@
+@model IReadOnlyList<SlideNode>
+<ul>
+    @foreach (SlideNode node in Model)
+    {
+        <li>
+            @if (node.UrlPath is not null)
+            {
+                <a href="@Url.Content("~/slide/" + SlideSite.EscapePath(node.UrlPath))">@node.Name</a>
+            }
+            else
+            {
+                @node.Name
+            }
+            @if (node.Children.Count > 0)
+            {
+                <partial name="_Tree" model="node.Children" />
+            }
+        </li>
+    }
+</ul>

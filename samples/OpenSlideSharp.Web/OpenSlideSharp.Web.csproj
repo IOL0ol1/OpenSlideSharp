@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>OpenSlideSharp.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenSlideSharp.Web.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OpenSlideSharp.AspNetCore\OpenSlideSharp.AspNetCore.csproj" />
+  </ItemGroup>
+
+  <!--
+    The viewer scripts, images and licenses are shared at the repository root (assets/viewer) and served under /lib.
+    They are copied into wwwroot/lib (git-ignored) before the build, so the files exist on disk for dotnet run, the
+    tests and dotnet publish alike, whatever the environment: static web assets from outside wwwroot are only
+    served in Development.
+  -->
+  <ItemGroup>
+    <ViewerAsset Include="..\..\assets\viewer\**" Exclude="..\..\assets\viewer\README.md" />
+  </ItemGroup>
+
+  <Target Name="CopyViewerAssets" BeforeTargets="BeforeBuild;ResolveStaticWebAssetsInputs">
+    <Copy SourceFiles="@(ViewerAsset)" DestinationFiles="@(ViewerAsset->'$(MSBuildProjectDirectory)\wwwroot\lib\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <Content Include="wwwroot\lib\**" Condition="false" />
+    </ItemGroup>
+  </Target>
+
+  <Import Project="..\..\eng\OpenSlideNative.targets" />
+
+</Project>
