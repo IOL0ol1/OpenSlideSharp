@@ -373,11 +373,18 @@ public sealed class OmeZarrGenerator
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The key names a chunk and the slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The key names a chunk and reading it failed.</exception>
+    /// <remarks>A key longer than <see cref="MaxKeyLength"/> characters is not found, without being parsed.</remarks>
     public bool TryGetEntry(string key, [NotNullWhen(true)] out byte[]? content)
     {
         if (key is null)
         {
             throw new ArgumentNullException(nameof(key));
+        }
+
+        if (key.Length > MaxKeyLength)
+        {
+            content = null;
+            return false;
         }
 
         if (_metadata.TryGetValue(key, out byte[]? metadata))
@@ -394,6 +401,24 @@ public sealed class OmeZarrGenerator
 
         content = null;
         return false;
+    }
+
+    /// <summary>
+    /// Tells whether the store has an entry for <paramref name="key"/>, by the same rules as
+    /// <see cref="TryGetEntry"/> but without reading or rendering anything. Use it to answer HEAD requests.
+    /// </summary>
+    /// <param name="key">The key, relative to the store root.</param>
+    /// <returns><see langword="true"/> if <see cref="TryGetEntry"/> would find the entry. Never throws for a malformed key.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    public bool ContainsKey(string key)
+    {
+        if (key is null)
+        {
+            throw new ArgumentNullException(nameof(key));
+        }
+
+        return key.Length <= MaxKeyLength
+            && (_metadata.ContainsKey(key) || TryParseChunkKey(key, out _, out _, out _, out _));
     }
 
     /// <summary>
@@ -436,6 +461,9 @@ public sealed class OmeZarrGenerator
         return $"OmeZarrGenerator({_source.Describe()}, version: {Version}, chunkSize: {ChunkSize}, " +
             $"compression: {compression}, limitBounds: {(_limitBounds ? "True" : "False")})";
     }
+
+    /// <summary>The longest key <see cref="TryGetEntry"/> and <see cref="ContainsKey"/> look at; longer ones are not found.</summary>
+    public const int MaxKeyLength = 256;
 
     private static string Invariant(long value) => value.ToString(CultureInfo.InvariantCulture);
 
