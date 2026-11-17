@@ -23,20 +23,23 @@ public static class SkiaColorTransform
     /// If that color space is sRGB, the transform leaves the pixels unchanged.
     /// </para>
     /// <para>
-    /// Tier 2: a profile that Skia parses but cannot turn into a color space (a lookup-table profile) is applied
-    /// by encoding the pixels as an uncompressed PNG that carries the profile and decoding it to sRGB with
-    /// <see cref="SKCodec"/>. Profiles whose A2B table (A2B0, or A2B1 if there is no A2B0) is a lut16
-    /// (<c>'mft2'</c>) are refused, because the codec misreads their PCS values: it takes 0xFFFF rather than 0x8000
-    /// as 1.0 for XYZ, and reads Lab in the ICC v4 encoding rather than the v2 one that lut16 keeps. Compared with
-    /// LittleCMS, white comes out as 188 instead of 255 with an XYZ PCS, and colors are up to 7 levels off with a
-    /// Lab PCS.
+    /// Tier 2: a lookup-table profile that Skia parses but cannot turn into a color space is applied by encoding
+    /// the pixels as an uncompressed PNG that carries the profile and decoding it to sRGB with
+    /// <see cref="SKCodec"/>. Only one kind is accepted: an A2B0 tag of type lutAtoBType (<c>'mAB '</c>) with a Lab
+    /// PCS, the case that matched LittleCMS within 1 level. The codec misreads the others. With an XYZ PCS it takes
+    /// 0xFFFF rather than 0x8000 as 1.0, in lut16 (<c>'mft2'</c>) and lutAtoBType alike, so white comes out as 188
+    /// instead of 255. For lut16 with a Lab PCS it reads the ICC v4 encoding rather than the v2 one lut16 keeps,
+    /// up to 7 levels off.
     /// </para>
-    /// <para>Tier 3: anything else is not converted, and this method returns <see langword="null"/>.</para>
+    /// <para>
+    /// Tier 3: anything else, including lut8 (<c>'mft1'</c>), a missing A2B0 tag and a malformed tag table, is
+    /// not converted, and this method returns <see langword="null"/>.
+    /// </para>
     /// </remarks>
     /// <param name="iccProfile">The ICC profile bytes.</param>
     /// <returns>
     /// A thread-safe transform, or <see langword="null"/> if <paramref name="iccProfile"/> is empty, is not an RGB
-    /// profile, cannot be parsed by Skia, or is a lut16 profile that tier 2 refuses.
+    /// profile, cannot be parsed by Skia, or is a lookup-table profile outside the tier-2 allow-list.
     /// </returns>
     public static IColorTransform? Create(ReadOnlyMemory<byte> iccProfile)
     {
@@ -93,10 +96,11 @@ public static class SkiaColorTransform
             return new PixmapTransform(colorSpace);
         }
 
-        // skcms, behind the PNG codec, misreads lut16 PCS values: XYZ with 0xFFFF as 1.0 instead of 0x8000 (half the
-        // linear light), Lab in the v4 encoding instead of the v2 one lut16 keeps (L 0xFF00 = 100, a/b 0x8000 = 0;
-        // up to 7 levels off LittleCMS). Better not to convert than to convert wrongly.
-        if (IccProfileInfo.HasLut16A2B(profile))
+        // Tier 2 is an allow-list of what skcms, behind the PNG codec, was measured to convert like LittleCMS: an
+        // A2B0 lutAtoBType ('mAB ') with a Lab PCS. It reads XYZ PCS values with 0xFFFF as 1.0 instead of 0x8000
+        // (half the linear light, in lut16 and lutAtoBType alike), and lut16 Lab in the v4 encoding instead of the
+        // v2 one lut16 keeps (up to 7 levels off). Better not to convert than to convert wrongly.
+        if (!IccProfileInfo.IsLutAToBWithLabPcs(profile))
         {
             return null;
         }

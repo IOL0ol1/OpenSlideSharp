@@ -47,14 +47,16 @@ public class ColorTransformTests
         255, 255, 255, 255,
     };
 
-    // What LittleCMS 2.19 makes of FivePixels (as R, G, B) through the lut16 fixtures. Produced with Pillow 13.0.0:
-    // ImageCms.applyTransform(image, ImageCms.buildTransform(ImageCmsProfile(profile), createProfile('sRGB'),
-    // 'RGB', 'RGB', renderingIntent=0)). Both are the exact red/blue swap.
-    private static readonly (byte R, byte G, byte B)[] LittleCmsLut16Xyz =
-        { (0, 0, 255), (0, 255, 0), (255, 0, 0), (128, 128, 128), (255, 255, 255) };
-
-    private static readonly (byte R, byte G, byte B)[] LittleCmsLut16Lab =
-        { (0, 0, 255), (0, 255, 0), (255, 0, 0), (128, 128, 128), (255, 255, 255) };
+    // What LittleCMS 2.19 makes of FivePixels (as R, G, B) through the lookup-table fixtures. Produced with Pillow
+    // 13.0.0: ImageCms.applyTransform(image, ImageCms.buildTransform(ImageCmsProfile(profile), createProfile('sRGB'),
+    // 'RGB', 'RGB', renderingIntent=0)). All are the red/blue swap; through the mAB profiles gray 128 gives 127.
+    private static readonly Dictionary<string, (byte R, byte G, byte B)[]> LittleCms = new()
+    {
+        ["swap-rb-lut.icc"] = new (byte, byte, byte)[] { (0, 0, 255), (0, 255, 0), (255, 0, 0), (128, 128, 128), (255, 255, 255) },
+        ["swap-rb-lut-lab.icc"] = new (byte, byte, byte)[] { (0, 0, 255), (0, 255, 0), (255, 0, 0), (128, 128, 128), (255, 255, 255) },
+        ["swap-rb-mab.icc"] = new (byte, byte, byte)[] { (0, 0, 255), (0, 255, 0), (255, 0, 0), (127, 127, 127), (255, 255, 255) },
+        ["swap-rb-mab-lab.icc"] = new (byte, byte, byte)[] { (0, 0, 255), (0, 255, 0), (255, 0, 0), (127, 127, 127), (255, 255, 255) },
+    };
 
     private static int LargestDifference(byte[] bgra, (byte R, byte G, byte B)[] expected)
     {
@@ -69,32 +71,101 @@ public class ColorTransformTests
         return largest;
     }
 
-    [Theory]
-    [InlineData("swap-rb-lut.icc")]
-    [InlineData("swap-rb-lut-lab.icc")]
-    public void Create_Lut16Profile_ReturnsNull(string name)
+    [Fact]
+    public void Create_LutAToBLabProfile_UsesTier2AndMatchesLittleCms()
     {
-        // Skia's PNG codec misreads lut16 PCS values (see SkiaCodec_Lut16Profiles_DisagreeWithLittleCms), so these
-        // profiles are not converted at all.
-        Assert.Null(SkiaColorTransform.Create(Icc(name)));
+        // The one kind of lookup-table profile tier 2 accepts: mAB with a Lab PCS.
+        var transform = SkiaColorTransform.Create(Icc("swap-rb-mab-lab.icc"));
+        Assert.IsType<SkiaColorTransform.CodecTransform>(transform);
+
+        byte[] px = FivePixels();
+        transform!.Apply(px, 5, 1);
+
+        // Measured with SkiaSharp 3.119.4: (0,0,255) (0,255,0) (255,0,0) (128,128,128) (255,255,255).
+        Assert.True(LargestDifference(px, LittleCms["swap-rb-mab-lab.icc"]) <= 3, "more than 3 levels off LittleCMS");
+        Assert.All(new[] { px[3], px[7], px[11], px[15], px[19] }, a => Assert.Equal(255, a));
     }
 
     [Theory]
     [InlineData("swap-rb-lut.icc")]
     [InlineData("swap-rb-lut-lab.icc")]
-    public void SkiaCodec_Lut16Profiles_DisagreeWithLittleCms(string name)
+    [InlineData("swap-rb-mab.icc")]
+    public void Create_LutProfileOutsideTheTier2AllowList_ReturnsNull(string name)
     {
-        // The reason for the test above, measured with SkiaSharp 3.119.4. Through the PNG codec,
-        // swap-rb-lut.icc gives (0,0,188) (0,188,0) (188,0,0) (92,92,92) (188,188,188): skcms reads the lut16
-        // XYZ values with 0xFFFF as 1.0 instead of 0x8000, halving linear light. swap-rb-lut-lab.icc gives
-        // (0,4,255) (0,254,7) (253,6,2) (126,127,128) (252,254,255), up to 7 levels off: skcms reads the ICC v4
-        // Lab encoding, but lut16 keeps the v2 one. Tier 2 would only be acceptable within 3 levels. If this test
-        // fails after a SkiaSharp update, the codec may have been fixed and lut16 profiles could be converted again.
-        var expected = name == "swap-rb-lut.icc" ? LittleCmsLut16Xyz : LittleCmsLut16Lab;
+        // Skia's PNG codec converts these wrongly (see SkiaCodec_RefusedLutProfiles_DisagreeWithLittleCms), so they
+        // are not converted at all.
+        Assert.Null(SkiaColorTransform.Create(Icc(name)));
+    }
+
+    private static int ReadInt32(byte[] data, int offset) =>
+        (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
+
+    // The offset of a tag's 12-byte entry in the tag table.
+    private static int TagEntry(byte[] profile, string signature)
+    {
+        for (int i = 0; i < ReadInt32(profile, 128); i++)
+        {
+            int entry = 132 + (i * 12);
+            if (Encoding.ASCII.GetString(profile, entry, 4) == signature)
+                return entry;
+        }
+
+        throw new InvalidOperationException(signature + " not found");
+    }
+
+    [Fact]
+    public void Create_LutAToBLabProfileWithoutA2B0_ReturnsNull()
+    {
+        // Rename the A2B0 tag to A2B1. skcms would still use it, but tier 2 only accepts an A2B0 tag.
+        byte[] profile = Icc("swap-rb-mab-lab.icc").ToArray();
+        profile[TagEntry(profile, "A2B0") + 3] = (byte)'1';
+
+        Assert.Null(SkiaColorTransform.Create(profile));
+    }
+
+    [Fact]
+    public void LutAToBLabCheck_IsDefensive()
+    {
+        byte[] good = Icc("swap-rb-mab-lab.icc").ToArray();
+        Assert.True(IccProfileInfo.IsLutAToBWithLabPcs(good));
+
+        byte[] Patched(int offset, params byte[] bytes)
+        {
+            byte[] copy = (byte[])good.Clone();
+            bytes.CopyTo(copy, offset);
+            return copy;
+        }
+
+        int entry = TagEntry(good, "A2B0");
+        int tagOffset = ReadInt32(good, entry + 4);
+
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(20, (byte)'X', (byte)'Y', (byte)'Z', (byte)' ')));
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(entry, (byte)'A', (byte)'2', (byte)'B', (byte)'1')));
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(tagOffset, (byte)'m', (byte)'f', (byte)'t', (byte)'1')));
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(128, 0xFF, 0xFF, 0xFF, 0xFF)));  // tag count
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(entry + 4, 0x7F, 0xFF, 0xFF, 0xFF))); // offset
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(entry + 8, 0xFF, 0xFF, 0xFF, 0xFF))); // size
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Patched(entry + 8, 0, 0, 0, 3)));              // no type
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(good.AsSpan(0, 131).ToArray()));
+        Assert.False(IccProfileInfo.IsLutAToBWithLabPcs(Array.Empty<byte>()));
+    }
+
+    [Theory]
+    [InlineData("swap-rb-lut.icc")]
+    [InlineData("swap-rb-lut-lab.icc")]
+    [InlineData("swap-rb-mab.icc")]
+    public void SkiaCodec_RefusedLutProfiles_DisagreeWithLittleCms(string name)
+    {
+        // The reason for the allow-list, measured with SkiaSharp 3.119.4. Through the PNG codec, swap-rb-lut.icc and
+        // swap-rb-mab.icc both give (0,0,188) (0,188,0) (188,0,0) (92,92,92) (188,188,188): skcms reads XYZ PCS
+        // values with 0xFFFF as 1.0 instead of 0x8000, halving linear light. swap-rb-lut-lab.icc gives (0,4,255)
+        // (0,254,7) (253,6,2) (126,127,128) (252,254,255), up to 7 levels off: skcms reads Lab in the ICC v4
+        // encoding, but lut16 keeps the v2 one. Tier 2 would only be acceptable within 3 levels. If this test fails
+        // after a SkiaSharp update, the codec may have been fixed and the allow-list could grow.
         byte[] px = FivePixels();
         new SkiaColorTransform.CodecTransform(Icc(name).ToArray()).Apply(px, 5, 1);
 
-        Assert.True(LargestDifference(px, expected) > 3, $"{name}: within 3 levels of LittleCMS");
+        Assert.True(LargestDifference(px, LittleCms[name]) > 3, $"{name}: within 3 levels of LittleCMS");
     }
 
     [Fact]
