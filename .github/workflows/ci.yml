@@ -41,9 +41,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      # The generator writes LF; a CRLF checkout would make git report the regenerated file as modified.
-      - name: Check out with LF line endings
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
@@ -58,12 +55,13 @@ jobs:
       - name: Verify generated bindings are committed
         shell: pwsh
         run: |
-          # --porcelain also lists new untracked files, which git diff would miss.
-          $changes = git status --porcelain src/OpenSlideSharp/Native
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($changes) {
-            $changes | ForEach-Object { Write-Host $_ }
+          # Compare content (git diff normalizes line endings); git status can flag an unchanged file on a CRLF checkout.
+          git --no-pager diff --exit-code --stat src/OpenSlideSharp/Native
+          $diffCode = $LASTEXITCODE
+          $untracked = git ls-files --others --exclude-standard src/OpenSlideSharp/Native
+          if ($diffCode -ne 0 -or $untracked) {
             git --no-pager diff src/OpenSlideSharp/Native | Select-Object -First 80
+            $untracked | ForEach-Object { Write-Host "untracked: $_" }
             Write-Host "::error::Generated bindings differ from the committed ones: run eng/Generate-Bindings.ps1 and commit src/OpenSlideSharp/Native"
             exit 1
           }
