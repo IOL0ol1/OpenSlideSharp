@@ -24,7 +24,7 @@ public static class SkiaColorTransform
     /// </para>
     /// <para>
     /// Tier 2: a profile that Skia parses but cannot turn into a color space (a lookup-table profile) is applied
-    /// by encoding the pixels as a PNG that carries the profile and decoding it to sRGB with
+    /// by encoding the pixels as an uncompressed PNG that carries the profile and decoding it to sRGB with
     /// <see cref="SKCodec"/>. Profiles whose A2B table (A2B0, or A2B1 if there is no A2B0) is a lut16
     /// (<c>'mft2'</c>) are refused: the codec reads their PCS values in the ICC v4 encodings, but lut16 keeps the
     /// v2 ones. Compared with LittleCMS, white comes out as 188 instead of 255 with an XYZ PCS, and colors are up
@@ -159,9 +159,10 @@ public static class SkiaColorTransform
     // Level 2: the profile is not a color space for Skia (e.g. LUT-only), but the PNG codec can still apply it.
     internal sealed class CodecTransform : IColorTransform
     {
-        private readonly byte[] _profile;
+        // The compressed iCCP payload, built once: it is the same in every PNG.
+        private readonly byte[] _iccpData;
 
-        public CodecTransform(byte[] profile) => _profile = profile;
+        public CodecTransform(byte[] profile) => _iccpData = PngChunks.BuildIccpData(profile);
 
         public unsafe void Apply(Span<byte> pixels, int width, int height)
         {
@@ -177,7 +178,7 @@ public static class SkiaColorTransform
                 throw new ArgumentException("Pixel buffer is too small.", nameof(pixels));
             }
 
-            byte[] png = PngChunks.BuildRgbPngWithProfile(pixels.Slice(0, length).ToArray(), width, height, _profile);
+            byte[] png = PngChunks.BuildRgbPng(pixels.Slice(0, length), width, height, _iccpData);
             using SKData data = SKData.CreateCopy(png);
             using SKCodec? codec = SKCodec.Create(data);
             if (codec is null)

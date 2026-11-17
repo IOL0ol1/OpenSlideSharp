@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using OpenSlideSharp.SkiaSharp;
+using OpenSlideSharp.SkiaSharp.Internal;
 using Xunit;
 
 namespace OpenSlideSharp.Tests.Skia;
@@ -93,6 +95,44 @@ public class ColorTransformTests
         new SkiaColorTransform.CodecTransform(Icc(name).ToArray()).Apply(px, 5, 1);
 
         Assert.True(LargestDifference(px, expected) > 3, $"{name}: within 3 levels of LittleCMS");
+    }
+
+    [Fact]
+    public void CodecTransform_MatrixProfile_MatchesTier1()
+    {
+        // The PNG round trip of tier 2 applies a profile the same way as tier 1 does.
+        var size = 32;
+        var pixels = new byte[size * size * 4];
+        new Random(5).NextBytes(pixels);
+        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+        byte[] tier1 = (byte[])pixels.Clone();
+        byte[] tier2 = (byte[])pixels.Clone();
+
+        SkiaColorTransform.Create(Icc("swap-rb-matrix.icc"))!.Apply(tier1, size, size);
+        new SkiaColorTransform.CodecTransform(Icc("swap-rb-matrix.icc").ToArray()).Apply(tier2, size, size);
+
+        for (int i = 0; i < pixels.Length; i++)
+            Assert.True(Math.Abs(tier1[i] - tier2[i]) <= 1, $"byte {i}: tier 1 {tier1[i]}, tier 2 {tier2[i]}");
+    }
+
+    [Fact]
+    public void BuildRgbPng_StoresPixelsUncompressedWithTheGivenIccp()
+    {
+        byte[] iccp = PngChunks.BuildIccpData(Icc("swap-rb-matrix.icc").ToArray());
+        byte[] png = PngChunks.BuildRgbPng(new byte[] { 1, 2, 3, 255, 4, 5, 6, 255 }, 2, 1, iccp);
+
+        var chunks = new List<(string Type, byte[] Data)>();
+        for (int pos = 8; pos < png.Length;)
+        {
+            int length = (png[pos] << 24) | (png[pos + 1] << 16) | (png[pos + 2] << 8) | png[pos + 3];
+            chunks.Add((Encoding.ASCII.GetString(png, pos + 4, 4), png[(pos + 8)..(pos + 8 + length)]));
+            pos += 12 + length;
+        }
+
+        Assert.Equal(new[] { "IHDR", "iCCP", "IDAT", "IEND" }, chunks.ConvertAll(c => c.Type));
+        Assert.Equal(iccp, chunks[1].Data);
+        byte[] scanline = { 0, 3, 2, 1, 6, 5, 4 }; // filter type 0, then R, G, B per pixel
+        Assert.True(chunks[2].Data.AsSpan().IndexOf(scanline) >= 0, "the IDAT holds the scanline as is");
     }
 
     private static byte[] WithDataColorSpace(string name, string signature)
