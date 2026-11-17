@@ -131,7 +131,7 @@ internal sealed class AssociatedImageMap : IReadOnlyDictionary<string, Associate
         for (; *p != null; p++)
         {
             string name = Utf8.FromNative(*p) ?? string.Empty;
-            byte[] key = Utf8.ToNullTerminated(name);
+            byte[] key = Utf8.ToNullTerminated(name, nameof(name));
             long width, height;
             fixed (byte* k = key)
             {

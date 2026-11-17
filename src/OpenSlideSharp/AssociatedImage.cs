@@ -56,7 +56,7 @@ public sealed class AssociatedImage
             byte[]? cached = Volatile.Read(ref _colorProfile);
             if (cached is null)
             {
-                byte[] name = Utf8.ToNullTerminated(Name);
+                byte[] name = Utf8.ToNullTerminated(Name, nameof(Name));
                 byte[] profile;
                 using (HandleLease lease = Slide.AcquireHandle())
                 {
@@ -111,7 +111,7 @@ public sealed class AssociatedImage
         }
 
         var data = new byte[length];
-        byte[] name = Utf8.ToNullTerminated(Name);
+        byte[] name = Utf8.ToNullTerminated(Name, nameof(Name));
         // OpenSlide never writes through dest for an empty image, but pass a valid pointer anyway.
         uint scratch;
         fixed (byte* n = name)

@@ -9,7 +9,8 @@ namespace OpenSlideSharp;
 /// <summary>
 /// A live, read-only view of a slide's properties. Nothing is cached: every lookup and enumeration queries
 /// OpenSlide through <see cref="OpenSlide.Invoke{T}(Func{IntPtr, T})"/>, so it throws once the slide is disposed
-/// or in the error state.
+/// or in the error state. Keys containing a NUL character throw <see cref="ArgumentException"/>, since OpenSlide
+/// would see only the text before it.
 /// </summary>
 internal sealed class PropertyMap : IReadOnlyDictionary<string, string>
 {
@@ -60,7 +61,8 @@ internal sealed class PropertyMap : IReadOnlyDictionary<string, string>
             throw new ArgumentNullException(nameof(key));
         }
 
-        string? found = _slide.Invoke(osr => ReadValue(osr, key));
+        byte[] name = Utf8.ToNullTerminated(key, nameof(key));
+        string? found = _slide.Invoke(osr => ReadValue(osr, name));
         value = found!;
         return found is not null;
     }
@@ -100,9 +102,11 @@ internal sealed class PropertyMap : IReadOnlyDictionary<string, string>
         return names;
     }
 
-    private static unsafe string? ReadValue(IntPtr osr, string name)
+    // Names read back from OpenSlide never contain NUL, so the conversion cannot throw here.
+    private static string? ReadValue(IntPtr osr, string name) => ReadValue(osr, Utf8.ToNullTerminated(name, nameof(name)));
+
+    private static unsafe string? ReadValue(IntPtr osr, byte[] key)
     {
-        byte[] key = Utf8.ToNullTerminated(name);
         fixed (byte* k = key)
         {
             return Utf8.FromNative(openslide.get_property_value(osr, k));

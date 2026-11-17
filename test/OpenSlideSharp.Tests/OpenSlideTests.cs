@@ -22,6 +22,14 @@ public class OpenSlideTests
         Assert.Throws<ArgumentNullException>(() => OpenSlide.Open(null!));
     }
 
+    [Fact] // Native code would stop at the NUL and silently open "small.svs".
+    public void Open_And_DetectFormat_EmbeddedNul_Throw()
+    {
+        string path = TestFiles.Get("small.svs") + "\0x";
+        Assert.Equal("filename", Assert.Throws<ArgumentException>(() => OpenSlide.Open(path)).ParamName);
+        Assert.Equal("filename", Assert.Throws<ArgumentException>(() => OpenSlide.DetectFormat(path)).ParamName);
+    }
+
     [Fact]
     public void Open_UnicodePath()
     {
