@@ -209,7 +209,7 @@ public sealed class OmeZarrGenerator
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public OmeZarrGenerator(OpenSlide slide, OmeZarrOptions? options = null)
-        : this(CreateSource(slide), Path.GetFileName(slide.FileName), false, options, slide.ThrowIfUnusable)
+        : this(SlideRenderSource.Create(slide), Path.GetFileName(slide.FileName), false, options, slide.ThrowIfUnusable)
     {
     }
 
@@ -220,7 +220,7 @@ public sealed class OmeZarrGenerator
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public OmeZarrGenerator(AssociatedImage image, OmeZarrOptions? options = null)
-        : this(CreateSource(image), image.Name, true, options, image.Slide.ThrowIfUnusable)
+        : this(AssociatedImageRenderSource.Create(image), image.Name, true, options, image.Slide.ThrowIfUnusable)
     {
     }
 
@@ -279,8 +279,8 @@ public sealed class OmeZarrGenerator
         _rows = new long[_levelDimensions.Length];
         for (int level = 0; level < _levelDimensions.Length; level++)
         {
-            _columns[level] = CeilDiv(_levelDimensions[level].Width, ChunkSize);
-            _rows[level] = CeilDiv(_levelDimensions[level].Height, ChunkSize);
+            _columns[level] = GridMath.CeilDiv(_levelDimensions[level].Width, ChunkSize);
+            _rows[level] = GridMath.CeilDiv(_levelDimensions[level].Height, ChunkSize);
         }
 
         (_metadataKeys, _metadata) = BuildMetadata(name, geometry);
@@ -426,30 +426,6 @@ public sealed class OmeZarrGenerator
         return $"OmeZarrGenerator({_source.Describe()}, version: {Version}, chunkSize: {ChunkSize}, " +
             $"compression: {compression}, limitBounds: {(_limitBounds ? "True" : "False")})";
     }
-
-    private static IRenderSource CreateSource(OpenSlide slide)
-    {
-        if (slide is null)
-        {
-            throw new ArgumentNullException(nameof(slide));
-        }
-
-        slide.ThrowIfUnusable();
-        return new SlideRenderSource(slide);
-    }
-
-    private static IRenderSource CreateSource(AssociatedImage image)
-    {
-        if (image is null)
-        {
-            throw new ArgumentNullException(nameof(image));
-        }
-
-        image.Slide.ThrowIfUnusable();
-        return new AssociatedImageRenderSource(image);
-    }
-
-    private static long CeilDiv(long value, long divisor) => (value + divisor - 1) / divisor;
 
     private static string Invariant(long value) => value.ToString(CultureInfo.InvariantCulture);
 

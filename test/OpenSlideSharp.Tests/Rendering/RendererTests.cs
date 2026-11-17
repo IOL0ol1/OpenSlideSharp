@@ -73,4 +73,20 @@ public class RendererTests
             }
         }
     }
+
+    [Fact]
+    public void Create_ChecksArgumentThenUsability()
+    {
+        Assert.Throws<ArgumentNullException>("slide", () => SlideRenderSource.Create(null!));
+        Assert.Throws<ArgumentNullException>("image", () => AssociatedImageRenderSource.Create(null!));
+
+        var osr = OpenSlide.Open(TestFiles.Get("small.svs"));
+        AssociatedImage thumbnail = osr.AssociatedImages["thumbnail"];
+        Assert.Equal("OpenSlide(" + osr.FileName + ")", SlideRenderSource.Create(osr).Describe());
+        Assert.Equal("AssociatedImage(thumbnail)", AssociatedImageRenderSource.Create(thumbnail).Describe());
+
+        osr.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => SlideRenderSource.Create(osr));
+        Assert.Throws<ObjectDisposedException>(() => AssociatedImageRenderSource.Create(thumbnail));
+    }
 }
