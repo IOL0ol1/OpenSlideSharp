@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netstandard2.1;net10.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS8981</NoWarn>
     <PackageId>OpenSlideSharp</PackageId>
     <Description>.NET bindings for OpenSlide 4.x (https://openslide.org/), with Deep Zoom and OME-Zarr generators.</Description>
   </PropertyGroup>

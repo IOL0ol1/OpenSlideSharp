@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <OpenSlideNativeDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../artifacts/native/$(NETCoreSdkRuntimeIdentifier)'))</OpenSlideNativeDir>
+  </PropertyGroup>
+  <Target Name="CheckOpenSlideNative" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(OpenSlideNativeDir)')" Text="OpenSlide native binaries not found at $(OpenSlideNativeDir). Run eng/Get-OpenSlide.ps1 first." />
+  </Target>
+  <ItemGroup>
+    <None Include="$(OpenSlideNativeDir)/*" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>
