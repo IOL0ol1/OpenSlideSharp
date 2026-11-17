@@ -14,7 +14,6 @@ internal readonly record struct DeepZoomRequest(
     int Row,
     string Format)
 {
-    private const string Associated = "/associated/";
     private const string FilesSuffix = "_files/";
     private const string DziSuffix = ".dzi";
 
@@ -51,20 +50,7 @@ internal readonly record struct DeepZoomRequest(
             slidePart = path[..files];
         }
 
-        string slide = slidePart;
-        string? associatedName = null;
-        int associated = slidePart.LastIndexOf(Associated, StringComparison.Ordinal);
-        if (associated >= 0)
-        {
-            slide = slidePart[..associated];
-            associatedName = slidePart[(associated + Associated.Length)..];
-            if (associatedName.Length == 0 || associatedName.Contains('/'))
-            {
-                return false;
-            }
-        }
-
-        if (slide.Length == 0)
+        if (!SlidePath.TrySplit(slidePart, out string slide, out string? associatedName))
         {
             return false;
         }
@@ -127,5 +113,65 @@ internal readonly record struct DeepZoomRequest(
         }
 
         return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+    }
+}
+
+/// <summary>What an OME-Zarr request path asks for: one key of the store of a slide or an associated image.</summary>
+internal readonly record struct OmeZarrRequest(string Slide, string? AssociatedName, string Key)
+{
+    private const string StoreMarker = ".zarr/";
+
+    /// <summary>
+    /// Parses the part of the URL after the endpoint prefix, without a leading <c>'/'</c>: the slide part, then
+    /// <c>.zarr/</c>, then the key. A path that ends at <c>.zarr</c> has no key. Returns <see langword="false"/>
+    /// for every other form, and for a key longer than <see cref="OmeZarrGenerator.MaxKeyLength"/>; the endpoint
+    /// answers all of them with 404.
+    /// </summary>
+    public static bool TryParse(string path, out OmeZarrRequest request)
+    {
+        request = default;
+        int marker = string.IsNullOrEmpty(path) ? -1 : path.IndexOf(StoreMarker, StringComparison.Ordinal);
+        if (marker < 0)
+        {
+            return false;
+        }
+
+        string key = path[(marker + StoreMarker.Length)..];
+        if (key.Length == 0 || key.Length > OmeZarrGenerator.MaxKeyLength
+            || !SlidePath.TrySplit(path[..marker], out string slide, out string? associatedName))
+        {
+            return false;
+        }
+
+        request = new OmeZarrRequest(slide, associatedName, key);
+        return true;
+    }
+}
+
+internal static class SlidePath
+{
+    private const string Associated = "/associated/";
+
+    /// <summary>
+    /// Splits <c>{slide}</c> or <c>{slide}/associated/{name}</c> into the slide and the associated image name
+    /// (<see langword="null"/> for the slide itself). Returns <see langword="false"/> if either part is empty or the
+    /// name has a <c>'/'</c>.
+    /// </summary>
+    public static bool TrySplit(string part, out string slide, out string? associatedName)
+    {
+        slide = part;
+        associatedName = null;
+        int associated = part.LastIndexOf(Associated, StringComparison.Ordinal);
+        if (associated >= 0)
+        {
+            slide = part[..associated];
+            associatedName = part[(associated + Associated.Length)..];
+            if (associatedName.Length == 0 || associatedName.Contains('/'))
+            {
+                return false;
+            }
+        }
+
+        return slide.Length > 0;
     }
 }

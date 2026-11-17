@@ -62,10 +62,23 @@ public sealed class OmeZarrServerOptions
 
     /// <summary>Gets or sets the width and height of a chunk, from 16 to 8192. The default is 512.</summary>
     /// <remarks>
-    /// Each open image keeps a render cache of up to <c>16 * ChunkSize * ChunkSize * 4</c> bytes (16 MiB with the
-    /// default), so large chunks and a large <see cref="OpenSlideServerOptions.SlideCacheSize"/> add up.
+    /// Each open image keeps a render cache of up to <see cref="RenderCacheSize"/> chunk regions, about
+    /// <c>RenderCacheSize * ChunkSize * ChunkSize * 4</c> bytes (16 MiB with the defaults), so large chunks and a
+    /// large <see cref="OpenSlideServerOptions.SlideCacheSize"/> add up.
     /// </remarks>
     public int ChunkSize { get; set; } = 512;
+
+    /// <summary>
+    /// Gets or sets how many rendered chunk regions each image keeps, so the three channels of a chunk are rendered
+    /// once. At least 0, which turns the cache off; the default is 16.
+    /// </summary>
+    /// <remarks>
+    /// The memory held is about <c>RenderCacheSize * ChunkSize * ChunkSize * 4</c> bytes for each image of each
+    /// open slide that has been requested through the OME-Zarr endpoint (the slide itself and each associated
+    /// image has its own generator). Lower it when using large chunks or a large
+    /// <see cref="OpenSlideServerOptions.SlideCacheSize"/>.
+    /// </remarks>
+    public int RenderCacheSize { get; set; } = 16;
 
     /// <summary>Gets or sets how chunks are compressed. The default is <see cref="OmeZarrCompression.None"/>.</summary>
     public OmeZarrCompression Compression { get; set; } = OmeZarrCompression.None;

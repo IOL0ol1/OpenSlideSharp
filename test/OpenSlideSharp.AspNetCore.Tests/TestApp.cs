@@ -25,7 +25,7 @@ internal sealed class TestApp : IAsyncDisposable
 
     public IServiceProvider Services => _app.Services;
 
-    /// <summary>Starts an app with <c>AddOpenSlide</c> and the Deep Zoom endpoints at <c>/dz</c>.</summary>
+    /// <summary>Starts an app with <c>AddOpenSlide</c>, the Deep Zoom endpoints at <c>/dz</c> and the OME-Zarr endpoints at <c>/zarr</c>.</summary>
     public static async Task<TestApp> CreateAsync(ISlideResolver resolver, Action<OpenSlideServerOptions>? configure = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
@@ -35,6 +35,7 @@ internal sealed class TestApp : IAsyncDisposable
 
         WebApplication app = builder.Build();
         app.MapDeepZoom("/dz", resolver);
+        app.MapOmeZarr("/zarr", resolver);
         await app.StartAsync();
         return new TestApp(app, app.GetTestClient());
     }

@@ -183,6 +183,7 @@ public sealed class SlideEntry
                 ChunkSize = server.ChunkSize,
                 Compression = server.Compression,
                 GzipLevel = server.GzipLevel,
+                RenderCacheSize = server.RenderCacheSize,
 
                 // An associated image has no bounds of its own; Deep Zoom shows it whole too.
                 LimitBounds = _image is null && server.LimitBounds,
