@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="OpenSlideSharp" Version="$(OpenSlideSharpVersion)" />
+    <PackageReference Include="OpenSlideSharp.SkiaSharp" Version="$(OpenSlideSharpVersion)" />
     <PackageReference Include="OpenSlideSharp.runtime" Version="$(OpenSlideSharpVersion)" Condition="'$(WithoutRuntime)' != 'true'" />
   </ItemGroup>
 
