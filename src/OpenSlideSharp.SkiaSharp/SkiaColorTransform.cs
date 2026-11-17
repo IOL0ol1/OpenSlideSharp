@@ -26,9 +26,10 @@ public static class SkiaColorTransform
     /// Tier 2: a profile that Skia parses but cannot turn into a color space (a lookup-table profile) is applied
     /// by encoding the pixels as an uncompressed PNG that carries the profile and decoding it to sRGB with
     /// <see cref="SKCodec"/>. Profiles whose A2B table (A2B0, or A2B1 if there is no A2B0) is a lut16
-    /// (<c>'mft2'</c>) are refused: the codec reads their PCS values in the ICC v4 encodings, but lut16 keeps the
-    /// v2 ones. Compared with LittleCMS, white comes out as 188 instead of 255 with an XYZ PCS, and colors are up
-    /// to 7 levels off with a Lab PCS.
+    /// (<c>'mft2'</c>) are refused, because the codec misreads their PCS values: it takes 0xFFFF rather than 0x8000
+    /// as 1.0 for XYZ, and reads Lab in the ICC v4 encoding rather than the v2 one that lut16 keeps. Compared with
+    /// LittleCMS, white comes out as 188 instead of 255 with an XYZ PCS, and colors are up to 7 levels off with a
+    /// Lab PCS.
     /// </para>
     /// <para>Tier 3: anything else is not converted, and this method returns <see langword="null"/>.</para>
     /// </remarks>
@@ -92,9 +93,9 @@ public static class SkiaColorTransform
             return new PixmapTransform(colorSpace);
         }
 
-        // skcms, behind the PNG codec, reads lut16 PCS values in the ICC v4 encodings, but lut16 keeps the v2 ones
-        // (XYZ 0x8000 = 1.0; Lab L 0xFF00 = 100, a/b 0x8000 = 0): XYZ comes out at half the linear light, Lab up to
-        // 7 levels off LittleCMS. Better not to convert than to convert wrongly.
+        // skcms, behind the PNG codec, misreads lut16 PCS values: XYZ with 0xFFFF as 1.0 instead of 0x8000 (half the
+        // linear light), Lab in the v4 encoding instead of the v2 one lut16 keeps (L 0xFF00 = 100, a/b 0x8000 = 0;
+        // up to 7 levels off LittleCMS). Better not to convert than to convert wrongly.
         if (IccProfileInfo.HasLut16A2B(profile))
         {
             return null;
