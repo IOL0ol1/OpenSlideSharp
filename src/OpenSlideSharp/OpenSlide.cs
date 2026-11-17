@@ -24,6 +24,7 @@ public sealed class OpenSlide : IDisposable
     private readonly IReadOnlyList<SlideSize> _levelDimensions;
     private readonly IReadOnlyList<double> _levelDownsamples;
     private readonly PropertyMap _properties;
+    private readonly AssociatedImageMap _associatedImages;
     private int _disposed;
     private byte[]? _colorProfile; // null = not read yet; NoProfile = read, slide has none
 
@@ -34,6 +35,7 @@ public sealed class OpenSlide : IDisposable
         FileName = fileName;
         _handle = handle;
         _properties = new PropertyMap(this);
+        _associatedImages = new AssociatedImageMap(this);
 
         // Level metadata never changes, so read it once. The public accessors still run the
         // disposed / sticky-error check on every access, like openslide-python's per-access queries.
@@ -200,6 +202,15 @@ public sealed class OpenSlide : IDisposable
     }
 
     /// <summary>
+    /// Gets the slide's associated images (thumbnail, label, macro and so on) as a live, read-only dictionary keyed
+    /// by name. The set of names is read once and cached, since it cannot change after the slide is opened; every
+    /// lookup or enumeration still throws <see cref="ObjectDisposedException"/> after the slide is disposed, or
+    /// <see cref="OpenSlideException"/> if it is in the error state. A missing key makes the indexer throw
+    /// <see cref="KeyNotFoundException"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, AssociatedImage> AssociatedImages => _associatedImages;
+
+    /// <summary>
     /// Gets the slide embedded ICC color profile (<c>openslide_read_icc_profile</c>), or <see langword="null"/>
     /// if it has none. The profile is read once and cached, so every access returns the same array instance:
     /// callers must not modify it.
@@ -256,19 +267,7 @@ public sealed class OpenSlide : IDisposable
     /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
     public unsafe PixelImage ReadRegion(long x, long y, int level, int width, int height)
     {
-        ValidateSize(width, height);
-        long length = (long)width * height * 4;
-#if NET
-        long maxLength = Array.MaxLength;
-#else
-        const long maxLength = 0x7FFFFFC7;
-#endif
-        if (length > maxLength)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(width), $"A {width} x {height} region needs {length} bytes, more than a .NET array can hold.");
-        }
-
+        long length = CheckedPixelBytes(width, height, "region");
         var data = new byte[length];
         fixed (byte* p = data)
         {
@@ -325,6 +324,37 @@ public sealed class OpenSlide : IDisposable
         }
 
         cache.Use(c => Invoke(osr => openslide.set_cache(osr, c)));
+    }
+
+    /// <summary>
+    /// Returns <c>width * height * 4</c> after rejecting negative sizes and sizes that do not fit in a .NET array.
+    /// Computed in <see langword="long"/>, so large associated image dimensions cannot overflow.
+    /// </summary>
+    internal static long CheckedPixelBytes(long width, long height, string what)
+    {
+        if (width < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Width must not be negative.");
+        }
+
+        if (height < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(height), height, "Height must not be negative.");
+        }
+
+#if NET
+        long maxLength = Array.MaxLength;
+#else
+        const long maxLength = 0x7FFFFFC7;
+#endif
+        // Both factors are non-negative; dividing avoids overflowing the product.
+        if (width != 0 && height > maxLength / 4 / width)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(width), $"A {width} x {height} {what} needs more bytes than a .NET array can hold.");
+        }
+
+        return width * height * 4;
     }
 
     private static void ValidateSize(int width, int height)
@@ -410,7 +440,7 @@ public sealed class OpenSlide : IDisposable
         }
     }
 
-    private void ThrowIfUnusable()
+    internal void ThrowIfUnusable()
     {
         using (AcquireHandle())
         {
