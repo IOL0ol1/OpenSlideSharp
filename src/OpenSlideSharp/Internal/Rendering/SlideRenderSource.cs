@@ -10,6 +10,24 @@ internal sealed class SlideRenderSource : IRenderSource
 
     internal SlideRenderSource(OpenSlide slide) => _slide = slide ?? throw new ArgumentNullException(nameof(slide));
 
+    /// <summary>
+    /// Creates the source for a public entry point: checks <paramref name="slide"/> for <see langword="null"/> and
+    /// then that it is usable, so callers report the public parameter name and fail before any other work.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="slide"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
+    internal static SlideRenderSource Create(OpenSlide slide)
+    {
+        if (slide is null)
+        {
+            throw new ArgumentNullException(nameof(slide));
+        }
+
+        slide.ThrowIfUnusable();
+        return new SlideRenderSource(slide);
+    }
+
     public IReadOnlyList<SlideSize> LevelDimensions => _slide.LevelDimensions;
 
     public IReadOnlyList<double> LevelDownsamples => _slide.LevelDownsamples;

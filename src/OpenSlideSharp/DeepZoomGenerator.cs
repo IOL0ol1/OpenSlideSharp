@@ -34,7 +34,7 @@ public sealed class DeepZoomGenerator
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     public DeepZoomGenerator(OpenSlide slide, int tileSize = 254, int overlap = 1, bool limitBounds = false, IColorTransform? colorTransform = null)
-        : this(CreateSource(slide), tileSize, overlap, limitBounds, colorTransform, slide.ThrowIfUnusable)
+        : this(SlideRenderSource.Create(slide), tileSize, overlap, limitBounds, colorTransform, slide.ThrowIfUnusable)
     {
     }
 
@@ -47,7 +47,7 @@ public sealed class DeepZoomGenerator
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     public DeepZoomGenerator(AssociatedImage image, int tileSize = 254, int overlap = 1, IColorTransform? colorTransform = null)
-        : this(CreateSource(image), tileSize, overlap, false, colorTransform, image.Slide.ThrowIfUnusable)
+        : this(AssociatedImageRenderSource.Create(image), tileSize, overlap, false, colorTransform, image.Slide.ThrowIfUnusable)
     {
     }
 
@@ -97,7 +97,7 @@ public sealed class DeepZoomGenerator
         {
             SlideSize size = _geometry.GetLevelSize(LevelCount - 1 - level);
             _levelDimensions[level] = size;
-            _levelTiles[level] = new TileGridSize(CeilDiv(size.Width, tileSize), CeilDiv(size.Height, tileSize));
+            _levelTiles[level] = new TileGridSize(GridMath.CeilDiv(size.Width, tileSize), GridMath.CeilDiv(size.Height, tileSize));
             total += _levelTiles[level].Columns * _levelTiles[level].Rows;
         }
 
@@ -237,30 +237,6 @@ public sealed class DeepZoomGenerator
         return new TileInfo(
             new TileRegion(region.X, region.Y, region.Level, region.Width, region.Height), (int)width, (int)height, exponent, x, y);
     }
-
-    private static IRenderSource CreateSource(OpenSlide slide)
-    {
-        if (slide is null)
-        {
-            throw new ArgumentNullException(nameof(slide));
-        }
-
-        slide.ThrowIfUnusable();
-        return new SlideRenderSource(slide);
-    }
-
-    private static IRenderSource CreateSource(AssociatedImage image)
-    {
-        if (image is null)
-        {
-            throw new ArgumentNullException(nameof(image));
-        }
-
-        image.Slide.ThrowIfUnusable();
-        return new AssociatedImageRenderSource(image);
-    }
-
-    private static long CeilDiv(long value, long divisor) => (value + divisor - 1) / divisor;
 
     private readonly record struct TileInfo(TileRegion Region, int Width, int Height, int Exponent, long X, long Y);
 }

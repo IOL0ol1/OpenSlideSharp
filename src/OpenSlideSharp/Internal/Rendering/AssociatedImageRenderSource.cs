@@ -23,6 +23,24 @@ internal sealed class AssociatedImageRenderSource : IRenderSource
         _levelDimensions = Array.AsReadOnly(new[] { image.Dimensions });
     }
 
+    /// <summary>
+    /// Creates the source for a public entry point: checks <paramref name="image"/> for <see langword="null"/>
+    /// and then that its slide is usable, so callers report the public parameter name and fail before any other work.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
+    internal static AssociatedImageRenderSource Create(AssociatedImage image)
+    {
+        if (image is null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
+        image.Slide.ThrowIfUnusable();
+        return new AssociatedImageRenderSource(image);
+    }
+
     public IReadOnlyList<SlideSize> LevelDimensions => _levelDimensions;
 
     public IReadOnlyList<double> LevelDownsamples => SingleDownsample;

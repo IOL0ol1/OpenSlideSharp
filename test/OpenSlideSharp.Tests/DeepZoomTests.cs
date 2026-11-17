@@ -230,10 +230,12 @@ public class DeepZoomTests
     public void GetTile_AssociatedImage_AfterSlideDisposed_ThrowsObjectDisposed()
     {
         var osr = OpenSlide.Open(TestFiles.Get("boxes_0.dcm"));
-        var dz = new DeepZoomGenerator(osr.AssociatedImages["thumbnail"], 4, 1);
+        AssociatedImage thumbnail = osr.AssociatedImages["thumbnail"];
+        var dz = new DeepZoomGenerator(thumbnail, 4, 1);
         osr.Dispose();
         for (int level = 0; level < dz.LevelCount; level++)
             Assert.Throws<ObjectDisposedException>(() => dz.GetTile(level, 0, 0));
+        Assert.Throws<ObjectDisposedException>(() => new DeepZoomGenerator(thumbnail, 4, 1));
     }
 
     [Fact]
@@ -242,7 +244,7 @@ public class DeepZoomTests
         using var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
         Assert.Equal("tileSize", Assert.Throws<ArgumentOutOfRangeException>(() => new DeepZoomGenerator(osr, tileSize: 0)).ParamName);
         Assert.Equal("overlap", Assert.Throws<ArgumentOutOfRangeException>(() => new DeepZoomGenerator(osr, overlap: -1)).ParamName);
-        Assert.Throws<ArgumentNullException>(() => new DeepZoomGenerator((OpenSlide)null!));
-        Assert.Throws<ArgumentNullException>(() => new DeepZoomGenerator((AssociatedImage)null!));
+        Assert.Throws<ArgumentNullException>("slide", () => new DeepZoomGenerator((OpenSlide)null!));
+        Assert.Throws<ArgumentNullException>("image", () => new DeepZoomGenerator((AssociatedImage)null!));
     }
 }
