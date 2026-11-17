@@ -102,6 +102,10 @@ public sealed class DeepZoomGenerator
         }
 
         TileCount = total;
+
+        // Read-only wrappers, so callers cannot change the grids that tile addresses are checked against.
+        LevelTiles = Array.AsReadOnly(_levelTiles);
+        LevelDimensions = Array.AsReadOnly(_levelDimensions);
     }
 
     /// <summary>Gets the width and height of a tile, not counting overlap.</summary>
@@ -117,10 +121,10 @@ public sealed class DeepZoomGenerator
     public int LevelCount { get; }
 
     /// <summary>Gets the tile grid size of each level, smallest level first.</summary>
-    public IReadOnlyList<TileGridSize> LevelTiles => _levelTiles;
+    public IReadOnlyList<TileGridSize> LevelTiles { get; }
 
     /// <summary>Gets the pixel size of each level, smallest level first.</summary>
-    public IReadOnlyList<SlideSize> LevelDimensions => _levelDimensions;
+    public IReadOnlyList<SlideSize> LevelDimensions { get; }
 
     /// <summary>Gets the total number of tiles in all levels.</summary>
     public long TileCount { get; }

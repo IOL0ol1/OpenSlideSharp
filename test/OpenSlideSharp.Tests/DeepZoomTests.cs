@@ -239,6 +239,19 @@ public class DeepZoomTests
     }
 
     [Fact]
+    public void LevelLists_CannotBeChangedThroughACast()
+    {
+        using var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
+        var dz = new DeepZoomGenerator(osr);
+
+        // Writable views would let callers corrupt the grid that GetTile validates addresses against.
+        Assert.IsNotType<TileGridSize[]>(dz.LevelTiles);
+        Assert.IsNotType<SlideSize[]>(dz.LevelDimensions);
+        Assert.Throws<NotSupportedException>(() => ((IList<TileGridSize>)dz.LevelTiles)[0] = new TileGridSize(9, 9));
+        Assert.Throws<NotSupportedException>(() => ((IList<SlideSize>)dz.LevelDimensions)[0] = new SlideSize(9, 9));
+    }
+
+    [Fact]
     public void Constructor_InvalidParameters_Throw()
     {
         using var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
