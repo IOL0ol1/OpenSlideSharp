@@ -17,6 +17,14 @@ internal readonly record struct SourceRegion(long X, long Y, int Level, long Wid
 /// A view is identified by its scale exponent <c>e</c>: it is the slide (or its active area) downsampled by
 /// <c>2^e</c>, so <c>e = 0</c> is full resolution and <c>e = LevelCount - 1</c> is 1 x 1. Deep Zoom level
 /// <c>k</c> is <c>e = LevelCount - 1 - k</c>.
+/// <para>
+/// Malformed properties never throw; they fall back to the defaults. With <c>limitBounds</c>,
+/// <c>openslide.bounds-x/y/width/height</c> are parsed as decimal integers, and a value that is missing or not
+/// an integer counts as missing: the offset is then 0 and the size is the level 0 size. A negative width or
+/// height also counts as missing. Zero is kept, as in Python, and gives an empty active area. Negative x and y
+/// are kept as well. The background is white unless <c>openslide.background-color</c> is 6 hex digits. The mpp
+/// values are null unless they parse as finite, positive invariant-culture numbers.
+/// </para>
 /// </remarks>
 internal sealed class SlideGeometry
 {
@@ -166,10 +174,19 @@ internal sealed class SlideGeometry
         }
     }
 
-    // Python: int(properties.get(prop, l0_lim)) / l0_lim. An empty level 0 (where Python divides by zero) keeps
-    // the empty level sizes as they are.
-    private static double SizeScale(long? boundsSize, long l0Size) =>
-        l0Size == 0 ? 1.0 : (double)(boundsSize ?? l0Size) / l0Size;
+    // Python: int(properties.get(prop, l0_lim)) / l0_lim. A negative size counts as missing (ruling R4: Python
+    // would produce negative level sizes), while zero is kept, as in Python. An empty level 0 (where Python
+    // divides by zero) keeps the empty level sizes as they are.
+    private static double SizeScale(long? boundsSize, long l0Size)
+    {
+        if (l0Size == 0)
+        {
+            return 1.0;
+        }
+
+        long size = boundsSize is long parsed && parsed >= 0 ? parsed : l0Size;
+        return (double)size / l0Size;
+    }
 
     private static long? ParseInteger(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long result) ? result : null;

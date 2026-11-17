@@ -45,9 +45,10 @@ public class GeometryTests
     [Fact]
     public void Geometry_MalformedProperties_FallBackToDefaults()
     {
+        // Level 0 is not 1000 wide, so misparsing "1e3" as 1000 would change ActiveSize.
         var source = new FakeRenderSource(
             "malformed",
-            new[] { new SlideSize(1000, 800), new SlideSize(250, 200) },
+            new[] { new SlideSize(1200, 800), new SlideSize(300, 200) },
             new[] { 1.0, 4.0 },
             new Dictionary<string, string>
             {
@@ -62,9 +63,31 @@ public class GeometryTests
 
         Assert.Equal(((byte)255, (byte)255, (byte)255), geometry.Background);
         Assert.Equal((0L, 0L), (geometry.OffsetX, geometry.OffsetY));
-        Assert.Equal(new SlideSize(1000, 800), geometry.ActiveSize);
+        Assert.Equal(new SlideSize(1200, 800), geometry.ActiveSize);
         Assert.Null(geometry.MppX);
         Assert.Null(geometry.MppY);
+    }
+
+    [Fact]
+    public void Geometry_NegativeBoundsSize_FallsBackToLevel0Size()
+    {
+        // Ruling R4: a negative bounds-width/height counts as missing (scale 1.0); zero and negative x/y stay as parsed.
+        var source = new FakeRenderSource(
+            "negative-bounds",
+            new[] { new SlideSize(1200, 800), new SlideSize(300, 200) },
+            new[] { 1.0, 4.0 },
+            new Dictionary<string, string>
+            {
+                [OpenSlideProperties.BoundsWidth] = "-5",
+                [OpenSlideProperties.BoundsHeight] = "-1",
+            });
+
+        var geometry = new SlideGeometry(source, limitBounds: true);
+
+        Assert.Equal(new SlideSize(1200, 800), geometry.ActiveSize);
+        Assert.Equal(new SlideSize(1200, 800), geometry.GetLevelSize(0));
+        // The lower slide level keeps its own size too: a 2^2 view of the whole level reads all of level 1.
+        Assert.Equal(new SourceRegion(0, 0, 1, 300, 200), geometry.Map(2, 0, 0, 300, 200));
     }
 
     [Fact]
