@@ -178,6 +178,18 @@ public class EncodeTests
     }
 
     [Fact]
+    public void Encode_DefaultWithLut16Profile_EmbedsProfile()
+    {
+        foreach (string name in new[] { "swap-rb-lut.icc", "swap-rb-lut-lab.icc" })
+        {
+            byte[] icc = Icc(name);
+            var img = Opaque(1, 1, new byte[] { 0, 0, 255, 255 }, icc);
+            Assert.Equal(icc, PngIccProfile(img.Encode(ImageFormat.Png)));
+            Assert.Equal(icc, JpegIccProfile(img.Encode(ImageFormat.Jpeg)));
+        }
+    }
+
+    [Fact]
     public void Encode_Ignore_DropsProfile()
     {
         var img = Opaque(1, 1, new byte[] { 0, 0, 255, 255 }, Icc("swap-rb-matrix.icc"));
