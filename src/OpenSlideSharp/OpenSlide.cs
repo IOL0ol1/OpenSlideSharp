@@ -25,6 +25,9 @@ public sealed class OpenSlide : IDisposable
     private readonly IReadOnlyList<double> _levelDownsamples;
     private readonly PropertyMap _properties;
     private int _disposed;
+    private byte[]? _colorProfile; // null = not read yet; NoProfile = read, slide has none
+
+    private static readonly byte[] NoProfile = new byte[0];
 
     private unsafe OpenSlide(string fileName, OpenSlideHandle handle)
     {
@@ -194,6 +197,156 @@ public sealed class OpenSlide : IDisposable
     {
         using HandleLease lease = AcquireHandle();
         return openslide.get_best_level_for_downsample(lease.Handle, downsample);
+    }
+
+    /// <summary>
+    /// Gets the slide embedded ICC color profile (<c>openslide_read_icc_profile</c>), or <see langword="null"/>
+    /// if it has none. The profile is read once and cached, so every access returns the same array instance:
+    /// callers must not modify it.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
+    public unsafe byte[]? ColorProfile
+    {
+        get
+        {
+            ThrowIfUnusable();
+            byte[]? cached = Volatile.Read(ref _colorProfile);
+            if (cached is null)
+            {
+                byte[] profile;
+                using (HandleLease lease = AcquireHandle())
+                {
+                    long size = openslide.get_icc_profile_size(lease.Handle);
+                    if (size <= 0)
+                    {
+                        // A negative size means error; the lease post-call check throws it.
+                        profile = NoProfile;
+                    }
+                    else
+                    {
+                        profile = new byte[size];
+                        fixed (byte* p = profile)
+                        {
+                            openslide.read_icc_profile(lease.Handle, (IntPtr)p);
+                        }
+                    }
+                }
+
+                // Concurrent first readers may both read; all of them end up returning the winner instance.
+                cached = Interlocked.CompareExchange(ref _colorProfile, profile, null) ?? profile;
+            }
+
+            return ReferenceEquals(cached, NoProfile) ? null : cached;
+        }
+    }
+
+    /// <summary>
+    /// Reads a region of the slide into a new <see cref="PixelImage"/> in <see cref="PixelFormat.Bgra32Premultiplied"/>
+    /// (<c>openslide_read_region</c>). Areas outside the slide are transparent.
+    /// </summary>
+    /// <param name="x">X of the top-left corner, in level 0 coordinates.</param>
+    /// <param name="y">Y of the top-left corner, in level 0 coordinates.</param>
+    /// <param name="level">The level to read from. A level that does not exist yields a transparent image, like openslide-python.</param>
+    /// <param name="width">Width in pixels at <paramref name="level"/>.</param>
+    /// <param name="height">Height in pixels at <paramref name="level"/>.</param>
+    /// <returns>The image; its <see cref="PixelImage.IccProfile"/> is <see cref="ColorProfile"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is negative (a deliberate divergence from openslide-python, which passes it to OpenSlide), or the pixel data would not fit in a .NET array.</exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
+    public unsafe PixelImage ReadRegion(long x, long y, int level, int width, int height)
+    {
+        ValidateSize(width, height);
+        long length = (long)width * height * 4;
+#if NET
+        long maxLength = Array.MaxLength;
+#else
+        const long maxLength = 0x7FFFFFC7;
+#endif
+        if (length > maxLength)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(width), $"A {width} x {height} region needs {length} bytes, more than a .NET array can hold.");
+        }
+
+        var data = new byte[length];
+        fixed (byte* p = data)
+        {
+            ReadRegionCore(x, y, level, width, height, p);
+        }
+
+        return new PixelImage(width, height, PixelFormat.Bgra32Premultiplied, data, ColorProfile);
+    }
+
+    /// <summary>
+    /// Reads a region of the slide into <paramref name="destination"/> as premultiplied BGRA bytes
+    /// (<c>openslide_read_region</c>). Areas outside the slide are transparent.
+    /// </summary>
+    /// <param name="x">X of the top-left corner, in level 0 coordinates.</param>
+    /// <param name="y">Y of the top-left corner, in level 0 coordinates.</param>
+    /// <param name="level">The level to read from. A level that does not exist yields transparent pixels, like openslide-python.</param>
+    /// <param name="width">Width in pixels at <paramref name="level"/>.</param>
+    /// <param name="height">Height in pixels at <paramref name="level"/>.</param>
+    /// <param name="destination">Receives <c>width * height * 4</c> bytes, rows top to bottom with no padding.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <c>width * height * 4</c> bytes.</exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
+    public unsafe void ReadRegion(long x, long y, int level, int width, int height, Span<byte> destination)
+    {
+        ValidateSize(width, height);
+        long length = (long)width * height * 4;
+        if (destination.Length < length)
+        {
+            throw new ArgumentException(
+                $"Destination holds {destination.Length} bytes but a {width} x {height} region needs {length}.",
+                nameof(destination));
+        }
+
+        fixed (byte* p = destination)
+        {
+            ReadRegionCore(x, y, level, width, height, p);
+        }
+    }
+
+    /// <summary>
+    /// Makes the slide use <paramref name="cache"/> for decoded tiles (<c>openslide_set_cache</c>). OpenSlide takes
+    /// its own reference to the cache, so the cache may be disposed afterwards and the slide keeps working.
+    /// </summary>
+    /// <param name="cache">The cache to use, replacing the slide default one.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="cache"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The slide or the cache has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
+    public void SetCache(OpenSlideCache cache)
+    {
+        if (cache is null)
+        {
+            throw new ArgumentNullException(nameof(cache));
+        }
+
+        cache.Use(c => Invoke(osr => openslide.set_cache(osr, c)));
+    }
+
+    private static void ValidateSize(int width, int height)
+    {
+        if (width < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Width must not be negative.");
+        }
+
+        if (height < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(height), height, "Height must not be negative.");
+        }
+    }
+
+    private unsafe void ReadRegionCore(long x, long y, int level, int width, int height, byte* dest)
+    {
+        // OpenSlide never writes through dest for an empty region, but pass a valid pointer anyway.
+        uint scratch;
+        uint* target = dest == null ? &scratch : (uint*)dest;
+        using HandleLease lease = AcquireHandle();
+        openslide.read_region(lease.Handle, target, x, y, level, width, height);
     }
 
     /// <summary>Returns <c>OpenSlide(</c><see cref="FileName"/><c>)</c>.</summary>
