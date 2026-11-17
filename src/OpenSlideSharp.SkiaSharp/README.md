@@ -15,7 +15,7 @@ byte[] jpeg = slide.ReadRegion(0, 0, 0, 512, 512).Encode(ImageFormat.Jpeg, quali
 
 | `ColorMode` | Pixels | Output ICC |
 |---|---|---|
-| `Default` | converted to sRGB; if the profile cannot be converted, behaves like `Embed` (a profile too large for a JPEG is then dropped) | none |
+| `Default` | converted to sRGB; if the profile cannot be converted, behaves like `Embed` (a profile too large for a JPEG is then dropped) | none (embedded when the profile cannot be converted) |
 | `Embed` | unchanged | the image's profile |
 | `Ignore` | unchanged | none |
 
