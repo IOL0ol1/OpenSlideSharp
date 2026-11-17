@@ -178,9 +178,21 @@ public class EncodeTests
     }
 
     [Fact]
-    public void Encode_DefaultWithLut16Profile_EmbedsProfile()
+    public void Encode_DefaultWithLutAToBLabProfile_ConvertsAndDropsProfile()
     {
-        foreach (string name in new[] { "swap-rb-lut.icc", "swap-rb-lut-lab.icc" })
+        var img = Opaque(1, 1, new byte[] { 0, 0, 255, 255 }, Icc("swap-rb-mab-lab.icc"));
+        var png = img.Encode(ImageFormat.Png);
+
+        Assert.DoesNotContain(PngChunks(png), c => c.Type == "iCCP");
+        using var bmp = Decode(png);
+        var c = bmp.GetPixel(0, 0);
+        Assert.True(c.Blue >= 252 && c.Red <= 3 && c.Green <= 3, c.ToString()); // red became blue
+    }
+
+    [Fact]
+    public void Encode_DefaultWithRefusedLutProfile_EmbedsProfile()
+    {
+        foreach (string name in new[] { "swap-rb-lut.icc", "swap-rb-lut-lab.icc", "swap-rb-mab.icc" })
         {
             byte[] icc = Icc(name);
             var img = Opaque(1, 1, new byte[] { 0, 0, 255, 255 }, icc);
