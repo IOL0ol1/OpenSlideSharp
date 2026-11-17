@@ -173,7 +173,8 @@ def main():
                  for y in range(23) for x in range(37)])
     src.save(os.path.join(out, 'tiles', 'resample-src.png'))
     resamples = []
-    for size in [(20, 11), (10, 40), (74, 46), (36, 23), (37, 5), (4, 3), (1, 1), (37, 23)]:
+    # (30, 5) and (35, 4) shrink the height far more than the width, so Pillow 13 runs the vertical pass first.
+    for size in [(20, 11), (10, 40), (74, 46), (36, 23), (37, 5), (4, 3), (1, 1), (37, 23), (30, 5), (35, 4)]:
         file = f'resample-{size[0]}x{size[1]}.png'
         src.resize(size, Image.Resampling.LANCZOS).save(os.path.join(out, 'tiles', file))
         resamples.append({'size': list(size), 'file': file})
