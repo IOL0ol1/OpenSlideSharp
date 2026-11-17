@@ -61,6 +61,17 @@ public class ReadRegionTests
     }
 
     [Fact]
+    public void ToOpaque_StraightAlphaOverWhite()
+    {
+        byte[] icc = { 4, 5, 6 };
+        var img = new PixelImage(1, 1, PixelFormat.Bgra32, new byte[] { 127, 63, 31, 128 }, icc);
+        var opaque = img.ToOpaque(255, 255, 255);
+        Assert.Equal(PixelFormat.Bgra32Opaque, opaque.Format);
+        Assert.Equal(new byte[] { 191, 159, 143, 255 }, opaque.Data);
+        Assert.Equal(icc, opaque.IccProfile.ToArray());
+    }
+
+    [Fact]
     public void ToOpaque_OpaqueReturnsSameInstance()
     {
         var img = new PixelImage(1, 1, PixelFormat.Bgra32Opaque, new byte[] { 1, 2, 3, 255 });
