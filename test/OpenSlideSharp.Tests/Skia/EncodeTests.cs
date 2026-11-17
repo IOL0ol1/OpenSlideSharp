@@ -207,6 +207,21 @@ public class EncodeTests
     }
 
     [Fact]
+    public void Encode_DefaultWithUnusableProfileTooLargeForJpeg_DropsIt()
+    {
+        // 255 APP2 segments hold 255 * 65519 bytes; Default must not throw because the profile does not fit.
+        var huge = new byte[(255 * 65519) + 1];
+        var img = Opaque(8, 8, new byte[8 * 8 * 4], huge);
+
+        var jpeg = img.Encode(ImageFormat.Jpeg);
+
+        Assert.Empty(JpegIccProfile(jpeg));
+        using (var bmp = Decode(jpeg)) Assert.Equal(8, bmp.Width);
+        Assert.Equal(huge, PngIccProfile(img.Encode(ImageFormat.Png))); // PNG has room for it
+        Assert.Throws<ArgumentException>("profile", () => img.Encode(ImageFormat.Jpeg, colorMode: ColorMode.Embed));
+    }
+
+    [Fact]
     public void Encode_Ignore_DropsProfile()
     {
         var img = Opaque(1, 1, new byte[] { 0, 0, 255, 255 }, Icc("swap-rb-matrix.icc"));

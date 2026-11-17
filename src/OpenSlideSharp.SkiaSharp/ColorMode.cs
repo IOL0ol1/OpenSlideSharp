@@ -3,7 +3,10 @@ namespace OpenSlideSharp.SkiaSharp;
 /// <summary>What to do with the ICC color profile of an image when encoding it.</summary>
 public enum ColorMode
 {
-    /// <summary>Convert the pixels to sRGB and write no profile; if the profile cannot be used, behave like <see cref="Embed"/>.</summary>
+    /// <summary>
+    /// Convert the pixels to sRGB and write no profile; if the profile cannot be converted, behave like
+    /// <see cref="Embed"/>, except that a profile too large for a JPEG is dropped rather than failing.
+    /// </summary>
     Default,
 
     /// <summary>Keep the pixels as they are and embed the ICC profile in the output.</summary>
