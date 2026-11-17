@@ -25,8 +25,16 @@ internal static class NativeLibraryLoader
         "OpenSlideLibrary.SetLibraryPath, with the full path of the library.";
 
     /// <summary>
+    /// Key in <see cref="Exception.Data"/> that marks a failure to load a library path the user configured; its value
+    /// is that path. <see cref="ThrowHelpfulIfMissing{T}"/> passes such exceptions through unchanged.
+    /// </summary>
+    internal const string ConfiguredPathDataKey = "OpenSlideSharp.ConfiguredLibraryPath";
+
+    /// <summary>
     /// Runs <paramref name="call"/>, which may be the process's first P/Invoke into OpenSlide, and replaces a bare
-    /// <see cref="DllNotFoundException"/> with one whose message explains how to supply the native library.
+    /// <see cref="DllNotFoundException"/> with one whose message explains how to supply the native library. A failure
+    /// to load an explicitly configured path (see <see cref="CreateConfiguredPathException"/>) already says what went
+    /// wrong, so it propagates as is.
     /// </summary>
     internal static T ThrowHelpfulIfMissing<T>(Func<T> call)
     {
@@ -34,10 +42,28 @@ internal static class NativeLibraryLoader
         {
             return call();
         }
-        catch (DllNotFoundException ex)
+        catch (DllNotFoundException ex) when (!ex.Data.Contains(ConfiguredPathDataKey))
         {
             throw new DllNotFoundException(MissingLibraryMessage, ex);
         }
+    }
+
+    /// <summary>
+    /// Builds the exception for a configured library path that failed to load: the message names the path, where
+    /// it was configured and the operating system's reason, and <paramref name="loadError"/> becomes the
+    /// <see cref="Exception.InnerException"/>.
+    /// </summary>
+    /// <param name="path">The configured path.</param>
+    /// <param name="source">Where the path came from, for example <c>OpenSlideLibrary.SetLibraryPath</c>.</param>
+    /// <param name="loadError">The exception the native library loader threw.</param>
+    internal static DllNotFoundException CreateConfiguredPathException(string path, string source, Exception loadError)
+    {
+        var ex = new DllNotFoundException(
+            "Unable to load the native OpenSlide library from '" + path + "', the path configured by " + source +
+            ": " + loadError.Message,
+            loadError);
+        ex.Data[ConfiguredPathDataKey] = path;
+        return ex;
     }
 
     internal static IReadOnlyList<string> GetFallbackNames(NativeOS os) => os switch
@@ -111,21 +137,25 @@ internal static class NativeLibraryLoader
             }
 
             string? explicitPath = s_explicitPath;
+            string source = "OpenSlideLibrary.SetLibraryPath";
             if (string.IsNullOrEmpty(explicitPath))
             {
                 explicitPath = Environment.GetEnvironmentVariable(OpenSlideLibrary.LibraryPathEnvironmentVariable);
+                source = "the " + OpenSlideLibrary.LibraryPathEnvironmentVariable + " environment variable";
             }
 
             if (!string.IsNullOrEmpty(explicitPath))
             {
-                if (!NativeLibrary.TryLoad(explicitPath, out IntPtr explicitHandle))
+                // Load, not TryLoad: its exception carries the OS reason (file missing, wrong architecture,
+                // a dependency missing), which the user needs to fix the path they configured.
+                try
                 {
-                    throw new DllNotFoundException(
-                        "Unable to load the native OpenSlide library from the explicitly configured path '" +
-                        explicitPath + "'.");
+                    return s_handle = NativeLibrary.Load(explicitPath);
                 }
-
-                return s_handle = explicitHandle;
+                catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
+                {
+                    throw CreateConfiguredPathException(explicitPath, source, ex);
+                }
             }
 
             if (NativeLibrary.TryLoad(libraryName, assembly, searchPath, out IntPtr handle))

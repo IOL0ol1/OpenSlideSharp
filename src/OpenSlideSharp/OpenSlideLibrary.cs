@@ -24,6 +24,9 @@ public static class OpenSlideLibrary
     /// <summary>
     /// Sets an explicit path to the native library. It takes precedence over
     /// <see cref="LibraryPathEnvironmentVariable"/> and must be called before the library is first used.
+    /// If the library cannot be loaded from a configured path, OpenSlide calls throw
+    /// <see cref="DllNotFoundException"/> naming that path and the operating system's reason; the default
+    /// search is not tried.
     /// </summary>
     /// <param name="path">Full path of the native OpenSlide library.</param>
     /// <exception cref="System.InvalidOperationException">The library has already been resolved.</exception>
