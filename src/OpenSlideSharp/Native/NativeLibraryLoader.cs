@@ -19,9 +19,26 @@ internal static class NativeLibraryLoader
 {
     internal static string MissingLibraryMessage =>
         "The native OpenSlide library (" + OpenSlideLibrary.LibraryName + ") could not be loaded. " +
-        "Add the OpenSlideSharp.runtime package (it bundles the native binaries for Windows, Linux and macOS), " +
-        "install OpenSlide 4.x on this machine, or set the " + OpenSlideLibrary.LibraryPathEnvironmentVariable +
-        " environment variable to the full path of the library.";
+        "Add the OpenSlideSharp.runtime package (it bundles the native binaries for Windows, Linux and macOS) " +
+        "or install OpenSlide 4.x on this machine. On .NET 10 or later you can instead set the " +
+        OpenSlideLibrary.LibraryPathEnvironmentVariable + " environment variable, or call " +
+        "OpenSlideLibrary.SetLibraryPath, with the full path of the library.";
+
+    /// <summary>
+    /// Runs <paramref name="call"/>, which may be the process's first P/Invoke into OpenSlide, and replaces a bare
+    /// <see cref="DllNotFoundException"/> with one whose message explains how to supply the native library.
+    /// </summary>
+    internal static T ThrowHelpfulIfMissing<T>(Func<T> call)
+    {
+        try
+        {
+            return call();
+        }
+        catch (DllNotFoundException ex)
+        {
+            throw new DllNotFoundException(MissingLibraryMessage, ex);
+        }
+    }
 
     internal static IReadOnlyList<string> GetFallbackNames(NativeOS os) => os switch
     {

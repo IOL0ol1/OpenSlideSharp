@@ -1,3 +1,4 @@
+using System;
 using OpenSlideSharp.Native;
 
 namespace OpenSlideSharp;
@@ -8,11 +9,16 @@ public static class OpenSlideLibrary
     /// <summary>The library name used by the P/Invoke layer.</summary>
     public const string LibraryName = "libopenslide-1";
 
-    /// <summary>Name of the environment variable holding an explicit path to the native library.</summary>
+    /// <summary>
+    /// Name of the environment variable holding an explicit path to the native library.
+    /// It is honoured only on .NET 10 or later; the netstandard builds use the platform's default library search.
+    /// </summary>
     public const string LibraryPathEnvironmentVariable = "OPENSLIDE_LIBRARY_PATH";
 
     /// <summary>Gets the version of the loaded native OpenSlide library (<c>openslide_get_version</c>).</summary>
-    public static unsafe string Version => Utf8.FromNative(openslide.get_version()) ?? string.Empty;
+    /// <exception cref="DllNotFoundException">The native library could not be loaded.</exception>
+    public static unsafe string Version =>
+        NativeLibraryLoader.ThrowHelpfulIfMissing(() => Utf8.FromNative(openslide.get_version()) ?? string.Empty);
 
 #if NET
     /// <summary>
