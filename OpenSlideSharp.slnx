@@ -3,8 +3,10 @@
     <Project Path="src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj" />
     <Project Path="src/OpenSlideSharp/OpenSlideSharp.csproj" />
     <Project Path="src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj" />
+    <Project Path="src/OpenSlideSharp.AspNetCore/OpenSlideSharp.AspNetCore.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/OpenSlideSharp.Tests/OpenSlideSharp.Tests.csproj" />
+    <Project Path="test/OpenSlideSharp.AspNetCore.Tests/OpenSlideSharp.AspNetCore.Tests.csproj" />
   </Folder>
 </Solution>
