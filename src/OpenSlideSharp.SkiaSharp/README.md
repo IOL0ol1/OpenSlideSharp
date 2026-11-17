@@ -15,20 +15,18 @@ byte[] jpeg = slide.ReadRegion(0, 0, 0, 512, 512).Encode(ImageFormat.Jpeg, quali
 
 | `ColorMode` | Pixels | Output ICC |
 |---|---|---|
-| `Default` | converted to sRGB; if the profile cannot be converted, behaves like `Embed` | none |
+| `Default` | converted to sRGB; if the profile cannot be converted, behaves like `Embed` (a profile too large for a JPEG is then dropped) | none |
 | `Embed` | unchanged | the image's profile |
 | `Ignore` | unchanged | none |
 
-An image without an ICC profile is encoded the same way in all three modes.
+An image without an ICC profile is encoded the same way in all three modes. `Embed` throws `ArgumentException` for a JPEG when the profile is larger than the 255 × 65519 bytes a JPEG can hold.
 
 ## Conversion tiers
 
-`SkiaColorTransform.Create(icc)` returns an `IColorTransform` that you can pass to `DeepZoomGenerator` and `OmeZarrOptions`. It tries three tiers and returns `null` when none works (the pixels are then left as they are):
+`SkiaColorTransform.Create(icc)` returns an `IColorTransform` that you can pass to `DeepZoomGenerator` and `OmeZarrOptions`, or `null` when the profile is not converted (the pixels are then left as they are). Only RGB profiles are considered: the data must hold a full 128-byte header with the data color space `RGB `. Gray, CMYK and other profiles are not converted, since Skia would apply them wrongly or not at all.
 
-1. `SKColorSpace.CreateIcc`, for matrix/TRC profiles.
-2. For profiles that Skia reads as an ICC profile but cannot turn into a color space (typically lookup-table profiles), the pixels are encoded as a PNG with the profile in an `iCCP` chunk and decoded again by `SKCodec` into sRGB.
-3. No conversion.
-
-Tier 2 is built on skcms, which decodes the XYZ values of `lut16` profiles differently from LittleCMS. The colors are converted, but the result is darker than a LittleCMS-based reader would give (a mid gray of 128 comes out near 92 for the test profile).
+1. `SKColorSpace.CreateIcc`, for matrix/TRC profiles. When the result is sRGB itself, the transform leaves the pixels unchanged, and `ColorMode.Default` just drops the profile.
+2. Profiles that Skia parses but cannot turn into a color space (lookup-table profiles): the pixels are encoded as an uncompressed PNG with the profile in an `iCCP` chunk and decoded again by `SKCodec` into sRGB. This tier refuses profiles whose A2B table (A2B0, or A2B1 if there is no A2B0) is a `lut16` (`mft2`). skcms, which does the decoding, reads their PCS values in the ICC v4 encodings, while `lut16` keeps the v2 ones. Compared with LittleCMS, an XYZ-PCS `lut16` profile comes out at half the linear light (white 255 → 188, mid gray 128 → 92), and a Lab-PCS one up to 7 levels off.
+3. Anything else: no conversion, and `Create` returns `null`.
 
 Add the [OpenSlideSharp.runtime](https://www.nuget.org/packages/OpenSlideSharp.runtime) package for the native OpenSlide library.
