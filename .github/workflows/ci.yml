@@ -2,16 +2,22 @@ name: CI
 
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +39,7 @@ jobs:
 
   bindings:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -53,12 +60,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($changes) {
             $changes | ForEach-Object { Write-Host $_ }
-            Write-Host "::error::生成文件与清单不一致: regenerate with eng/Generate-Bindings.ps1 and commit src/OpenSlideSharp/Native"
+            git --no-pager diff src/OpenSlideSharp/Native | Select-Object -First 80
+            Write-Host "::error::Generated bindings differ from the committed ones: run eng/Generate-Bindings.ps1 and commit src/OpenSlideSharp/Native"
             exit 1
           }
 
   package:
     runs-on: windows-latest
+    timeout-minutes: 30
     needs: test
     steps:
       - uses: actions/checkout@v7
@@ -84,6 +93,7 @@ jobs:
   package-unix:
     name: package-unix (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     needs: package
     strategy:
       fail-fast: false
