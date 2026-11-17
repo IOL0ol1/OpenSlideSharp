@@ -24,8 +24,8 @@ namespace OpenSlideSharp.AspNetCore;
 /// <item>
 /// <see cref="ColorMode.Default"/>: when <see cref="SkiaColorTransform.Create"/> gives a transform, the generators
 /// convert to sRGB and tiles are encoded with <see cref="ColorMode.Ignore"/>. When it cannot, Deep Zoom tiles are
-/// encoded with <see cref="ColorMode.Embed"/>, OME-Zarr chunks are left unconverted, and a warning is logged once
-/// for the image.
+/// encoded with <see cref="ColorMode.Default"/>, which embeds the profile (and drops one too large for a JPEG),
+/// OME-Zarr chunks are left unconverted, and a warning is logged once for the image.
 /// </item>
 /// <item>
 /// <see cref="ColorMode.Embed"/>: nothing is converted and tiles are encoded with <see cref="ColorMode.Embed"/>.
@@ -76,7 +76,10 @@ public sealed class SlideEntry
     /// remarks of <see cref="SlideEntry"/>.
     /// </summary>
     /// <param name="associatedName">The associated image name, or <see langword="null"/> for the slide itself.</param>
-    /// <returns><see cref="ColorMode.Ignore"/> or <see cref="ColorMode.Embed"/>.</returns>
+    /// <returns>
+    /// <see cref="ColorMode.Ignore"/>, <see cref="ColorMode.Embed"/>, or <see cref="ColorMode.Default"/> for an
+    /// image whose profile cannot be converted (encoding then embeds it, as far as a JPEG can hold it).
+    /// </returns>
     /// <exception cref="KeyNotFoundException">The slide has no associated image with that name.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public ColorMode EncodeMode(string? associatedName) => GetImage(associatedName).EncodeMode;
@@ -138,7 +141,9 @@ public sealed class SlideEntry
                 if (_transform is null)
                 {
                     Log.CannotConvertProfile(entry._logger, entry.FilePath, Describe());
-                    EncodeMode = ColorMode.Embed;
+
+                    // Default encoding embeds the profile too, and drops one a JPEG cannot hold instead of throwing.
+                    EncodeMode = ColorMode.Default;
                 }
                 else
                 {

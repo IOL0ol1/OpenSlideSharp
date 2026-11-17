@@ -291,11 +291,11 @@ public class SlideCacheTests
         SlideEntry entry = lease.Entry;
         Assert.Null(SkiaColorTransform.Create(entry.Slide.ColorProfile));
 
-        // Deep Zoom falls back to embedding the profile; OME-Zarr leaves the pixels as they are.
-        Assert.Equal(ColorMode.Embed, entry.EncodeMode(null));
+        // Deep Zoom falls back to Default encoding, which embeds the profile; OME-Zarr leaves the pixels as they are.
+        Assert.Equal(ColorMode.Default, entry.EncodeMode(null));
         DeepZoomGenerator dz = entry.GetDeepZoom(null);
         Assert.Equal(588, dz.GetTile(dz.LevelCount - 1, 0, 0).IccProfile.Length);
-        Assert.Equal(ColorMode.Embed, entry.EncodeMode(null));
+        Assert.Equal(ColorMode.Default, entry.EncodeMode(null));
         entry.GetOmeZarr(null);
         entry.GetOmeZarr(null);
 
