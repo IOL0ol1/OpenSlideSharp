@@ -35,20 +35,64 @@ public class ColorTransformTests
         Assert.Equal(new byte[] { 129, 129, 129, 255 }, px[12..16]);
     }
 
-    [Fact]
-    public void Create_LutProfile_UsesCodecPathAndSwapsChannels()
+    // Red, green, blue, gray 128 and white as opaque BGRA.
+    private static byte[] FivePixels() => new byte[]
     {
-        var transform = SkiaColorTransform.Create(Icc("swap-rb-lut.icc"));
-        Assert.NotNull(transform);
+        0, 0, 255, 255,
+        0, 255, 0, 255,
+        255, 0, 0, 255,
+        128, 128, 128, 255,
+        255, 255, 255, 255,
+    };
 
-        byte[] px = FourPixels();
-        transform!.Apply(px, 4, 1);
+    // What LittleCMS 2.19 makes of FivePixels (as R, G, B) through the lut16 fixtures. Produced with Pillow 13.0.0:
+    // ImageCms.applyTransform(image, ImageCms.buildTransform(ImageCmsProfile(profile), createProfile('sRGB'),
+    // 'RGB', 'RGB', renderingIntent=0)). Both are the exact red/blue swap.
+    private static readonly (byte R, byte G, byte B)[] LittleCmsLut16Xyz =
+        { (0, 0, 255), (0, 255, 0), (255, 0, 0), (128, 128, 128), (255, 255, 255) };
 
-        // BGRA order: red input must have a strong blue and almost no red or green.
-        Assert.True(px[0] >= 150 && px[2] <= 16 && px[1] <= 16, $"red -> B={px[0]} G={px[1]} R={px[2]}");
-        Assert.True(px[10] >= 150 && px[9] <= 16 && px[8] <= 16, $"blue -> B={px[8]} G={px[9]} R={px[10]}");
-        Assert.True(px[5] >= 150, $"green -> G={px[5]}");
-        Assert.All(new[] { px[3], px[7], px[11], px[15] }, a => Assert.Equal(255, a));
+    private static readonly (byte R, byte G, byte B)[] LittleCmsLut16Lab =
+        { (0, 0, 255), (0, 255, 0), (255, 0, 0), (128, 128, 128), (255, 255, 255) };
+
+    private static int LargestDifference(byte[] bgra, (byte R, byte G, byte B)[] expected)
+    {
+        int largest = 0;
+        for (int i = 0; i < expected.Length; i++)
+        {
+            largest = Math.Max(largest, Math.Abs(bgra[i * 4 + 2] - expected[i].R));
+            largest = Math.Max(largest, Math.Abs(bgra[i * 4 + 1] - expected[i].G));
+            largest = Math.Max(largest, Math.Abs(bgra[i * 4] - expected[i].B));
+        }
+
+        return largest;
+    }
+
+    [Theory]
+    [InlineData("swap-rb-lut.icc")]
+    [InlineData("swap-rb-lut-lab.icc")]
+    public void Create_Lut16Profile_ReturnsNull(string name)
+    {
+        // Skia's PNG codec misreads lut16 PCS values (see SkiaCodec_Lut16Profiles_DisagreeWithLittleCms), so these
+        // profiles are not converted at all.
+        Assert.Null(SkiaColorTransform.Create(Icc(name)));
+    }
+
+    [Theory]
+    [InlineData("swap-rb-lut.icc")]
+    [InlineData("swap-rb-lut-lab.icc")]
+    public void SkiaCodec_Lut16Profiles_DisagreeWithLittleCms(string name)
+    {
+        // The reason for the test above, measured with SkiaSharp 3.119.4. Through the PNG codec,
+        // swap-rb-lut.icc gives (0,0,188) (0,188,0) (188,0,0) (92,92,92) (188,188,188): skcms reads the lut16
+        // XYZ values with 0xFFFF as 1.0 instead of 0x8000, halving linear light. swap-rb-lut-lab.icc gives
+        // (0,4,255) (0,254,7) (253,6,2) (126,127,128) (252,254,255), up to 7 levels off: skcms reads the ICC v4
+        // Lab encoding, but lut16 keeps the v2 one. Tier 2 would only be acceptable within 3 levels. If this test
+        // fails after a SkiaSharp update, the codec may have been fixed and lut16 profiles could be converted again.
+        var expected = name == "swap-rb-lut.icc" ? LittleCmsLut16Xyz : LittleCmsLut16Lab;
+        byte[] px = FivePixels();
+        new SkiaColorTransform.CodecTransform(Icc(name).ToArray()).Apply(px, 5, 1);
+
+        Assert.True(LargestDifference(px, expected) > 3, $"{name}: within 3 levels of LittleCMS");
     }
 
     private static byte[] WithDataColorSpace(string name, string signature)
