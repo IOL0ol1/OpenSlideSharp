@@ -160,6 +160,23 @@ public class EncodeTests
         Assert.Equal(garbage, PngIccProfile(png));
     }
 
+    [Theory]
+    [InlineData("GRAY")]
+    [InlineData("CMYK")]
+    public void Encode_DefaultWithNonRgbProfile_EmbedsProfileAndKeepsPixels(string signature)
+    {
+        byte[] icc = Icc("swap-rb-matrix.icc");
+        System.Text.Encoding.ASCII.GetBytes(signature).CopyTo(icc, 16);
+        var img = Opaque(2, 1, new byte[] { 0, 0, 255, 255, 255, 0, 0, 255 }, icc);
+
+        var png = img.Encode(ImageFormat.Png);
+
+        Assert.Equal(icc, PngIccProfile(png));
+        var idat = PngChunks(png).Find(c => c.Type == "IDAT").Data;
+        var unconverted = PngChunks(img.Encode(ImageFormat.Png, colorMode: ColorMode.Ignore)).Find(c => c.Type == "IDAT").Data;
+        Assert.Equal(unconverted, idat);
+    }
+
     [Fact]
     public void Encode_Ignore_DropsProfile()
     {

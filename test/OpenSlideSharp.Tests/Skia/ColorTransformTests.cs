@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using OpenSlideSharp.SkiaSharp;
 using Xunit;
@@ -48,6 +49,30 @@ public class ColorTransformTests
         Assert.True(px[10] >= 150 && px[9] <= 16 && px[8] <= 16, $"blue -> B={px[8]} G={px[9]} R={px[10]}");
         Assert.True(px[5] >= 150, $"green -> G={px[5]}");
         Assert.All(new[] { px[3], px[7], px[11], px[15] }, a => Assert.Equal(255, a));
+    }
+
+    private static byte[] WithDataColorSpace(string name, string signature)
+    {
+        byte[] profile = Icc(name).ToArray();
+        Encoding.ASCII.GetBytes(signature).CopyTo(profile, 16);
+        return profile;
+    }
+
+    [Theory]
+    [InlineData("GRAY")]
+    [InlineData("CMYK")]
+    public void Create_NonRgbDataColorSpace_ReturnsNull(string signature)
+    {
+        // Skia accepts both: it would apply a gray profile to RGB pixels as a matrix, and its PNG codec ignores a
+        // CMYK profile, so the pixels would be neither converted nor tagged.
+        Assert.Null(SkiaColorTransform.Create(WithDataColorSpace("swap-rb-matrix.icc", signature)));
+        Assert.Null(SkiaColorTransform.Create(WithDataColorSpace("swap-rb-lut-lab.icc", signature)));
+    }
+
+    [Fact]
+    public void Create_ShortProfile_ReturnsNull()
+    {
+        Assert.Null(SkiaColorTransform.Create(Icc("swap-rb-matrix.icc").Slice(0, 127)));
     }
 
     [Fact]

@@ -15,7 +15,8 @@ public static class SkiaColorTransform
     /// <summary>Creates a transform from an ICC profile to sRGB.</summary>
     /// <param name="iccProfile">The ICC profile bytes.</param>
     /// <returns>
-    /// A thread-safe transform, or <see langword="null"/> if <paramref name="iccProfile"/> is empty or Skia cannot parse it.
+    /// A thread-safe transform, or <see langword="null"/> if <paramref name="iccProfile"/> is empty, is not an RGB
+    /// profile (a full 128-byte header with the data color space <c>'RGB '</c>), or Skia cannot parse it.
     /// </returns>
     public static IColorTransform? Create(ReadOnlyMemory<byte> iccProfile)
     {
@@ -46,6 +47,13 @@ public static class SkiaColorTransform
 
     private static IColorTransform? CreateCore(byte[] profile)
     {
+        // The pixels are RGB. Skia also accepts other profiles: it applies a gray one to RGB pixels as a diagonal
+        // matrix (tier 1), and its PNG codec ignores a CMYK one (tier 2), so neither would convert correctly.
+        if (!IccProfileInfo.HasRgbDataColorSpace(profile))
+        {
+            return null;
+        }
+
         // Never call SKColorSpace.CreateIcc(byte[]) directly: it throws on data that is not a profile.
         using SKColorSpaceIccProfile? parsed = SKColorSpaceIccProfile.Create(profile);
         if (parsed is null)
