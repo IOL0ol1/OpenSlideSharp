@@ -1,0 +1,26 @@
+using OpenSlideSharp.Native;
+
+namespace OpenSlideSharp;
+
+/// <summary>Information about, and configuration of, the native OpenSlide library.</summary>
+public static class OpenSlideLibrary
+{
+    /// <summary>The library name used by the P/Invoke layer.</summary>
+    public const string LibraryName = "libopenslide-1";
+
+    /// <summary>Name of the environment variable holding an explicit path to the native library.</summary>
+    public const string LibraryPathEnvironmentVariable = "OPENSLIDE_LIBRARY_PATH";
+
+    /// <summary>Gets the version of the loaded native OpenSlide library (<c>openslide_get_version</c>).</summary>
+    public static unsafe string Version => Utf8.FromNative(openslide.get_version()) ?? string.Empty;
+
+#if NET
+    /// <summary>
+    /// Sets an explicit path to the native library. It takes precedence over
+    /// <see cref="LibraryPathEnvironmentVariable"/> and must be called before the library is first used.
+    /// </summary>
+    /// <param name="path">Full path of the native OpenSlide library.</param>
+    /// <exception cref="System.InvalidOperationException">The library has already been resolved.</exception>
+    public static void SetLibraryPath(string path) => NativeLibraryLoader.SetLibraryPath(path);
+#endif
+}

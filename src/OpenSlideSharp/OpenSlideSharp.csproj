@@ -8,6 +8,10 @@
     <Description>.NET bindings for OpenSlide 4.x (https://openslide.org/), with Deep Zoom and OME-Zarr generators.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenSlideSharp.Tests" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="System.Memory" />
   </ItemGroup>
