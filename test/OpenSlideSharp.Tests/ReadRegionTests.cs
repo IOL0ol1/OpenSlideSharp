@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -63,20 +64,56 @@ public class ReadRegionTests
     [Fact]
     public async Task ReadRegion_ConcurrentWithDispose_OnlyObjectDisposed()
     {
+        const int readerCount = 8;
         var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
-        var errors = new ConcurrentBag<Exception>();
-        var readers = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        try
         {
-            for (int i = 0; i < 200; i++)
+            using var firstReadDone = new CountdownEvent(readerCount);
+            int successes = 0;
+            var caught = new ConcurrentBag<Exception>();
+
+            // Each reader reads until an exception ends it, so the loop only ends once Dispose has won.
+            // Dedicated threads keep thread-pool start-up from delaying any reader.
+            var readers = Enumerable.Range(0, readerCount).Select(_ => Task.Factory.StartNew(() =>
             {
-                try { osr.ReadRegion(0, 0, 0, 300, 250); }
-                catch (Exception e) { errors.Add(e); }
-            }
-        }, TestContext.Current.CancellationToken)).ToArray();
-        await Task.Delay(5, TestContext.Current.CancellationToken);
-        osr.Dispose();
-        await Task.WhenAll(readers);
-        Assert.All(errors, e => Assert.IsType<ObjectDisposedException>(e));
+                bool signalled = false;
+                try
+                {
+                    while (true)
+                    {
+                        osr.ReadRegion(0, 0, 0, 300, 250);
+                        Interlocked.Increment(ref successes);
+                        if (!signalled)
+                        {
+                            signalled = true;
+                            firstReadDone.Signal();
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    caught.Add(e);
+                    if (!signalled)
+                    {
+                        firstReadDone.Signal();
+                    }
+                }
+            }, TestContext.Current.CancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+
+            // Dispose only after every reader has completed a read, so reads are guaranteed to be in flight.
+            Assert.True(firstReadDone.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken),
+                "readers did not start in time");
+            osr.Dispose();
+            await Task.WhenAll(readers).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+            Assert.True(successes >= readerCount, "every reader should have read successfully before Dispose");
+            Assert.Equal(readerCount, caught.Count); // each reader ended with exactly one exception
+            Assert.All(caught, e => Assert.IsType<ObjectDisposedException>(e));
+        }
+        finally
+        {
+            osr.Dispose();
+        }
     }
 }
 
