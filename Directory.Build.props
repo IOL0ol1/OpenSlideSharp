@@ -16,7 +16,7 @@
     <RepositoryUrl>https://github.com/IOL0ol1/OpenSlideSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>openslide_logo.png</PackageIcon>
-    <IsSrcProject>$([System.String]::new('$(MSBuildProjectDirectory)').Replace('\', '/').Contains('/src/'))</IsSrcProject>
+    <IsSrcProject>$([MSBuild]::EnsureTrailingSlash('$(MSBuildProjectDirectory)').StartsWith('$([MSBuild]::NormalizeDirectory($(MSBuildThisFileDirectory), src))'))</IsSrcProject>
   </PropertyGroup>
 
   <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/README.md')">
