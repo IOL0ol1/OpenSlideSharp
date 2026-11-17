@@ -76,21 +76,25 @@ function Get-Archive([string]$Key) {
     }
     if (-not (Test-Path $path)) {
         Write-Host "Downloading $name"
+        # Download to .part and rename only after the hash checks out, so an interrupted download is never cached.
+        $part = "$path.part"
+        Remove-Item $part -Force -ErrorAction SilentlyContinue
         try {
-            Invoke-WebRequest -Uri $asset.url -OutFile $path
+            Invoke-WebRequest -Uri $asset.url -OutFile $part
         } catch {
-            Remove-Item $path -Force -ErrorAction SilentlyContinue
+            Remove-Item $part -Force -ErrorAction SilentlyContinue
             $status = $_.Exception.Response.StatusCode.value__
             if ($status -eq 404) {
                 throw "$name is no longer available upstream (HTTP 404: $($asset.url)). Nightly builds expire; run eng/Update-OpenSlideManifest.ps1 to refresh $Manifest."
             }
             throw
         }
-        $actual = Get-Sha256 $path
+        $actual = Get-Sha256 $part
         if ($actual -ne $expected) {
-            Remove-Item $path -Force
+            Remove-Item $part -Force
             throw "SHA256 mismatch for ${name}: expected $expected, got $actual. The downloaded file was deleted."
         }
+        Move-Item $part $path
     }
     $path
 }
@@ -111,6 +115,16 @@ function Expand-OpenSlideArchive([string]$Archive, [string]$To) {
     } finally { Pop-Location }
 }
 
+# Files that must exist for a key to count as extracted (guards against a stale .stamp).
+function Get-ExpectedOutputs([string]$Key) {
+    switch ($Key) {
+        'windows-x64' { 'win-x64/libopenslide-1.dll', 'msvc/x64/libopenslide.lib', 'include/openslide/openslide.h' }
+        'linux-x86_64' { 'linux-x64/libopenslide-1.so' }
+        'linux-aarch64' { 'linux-arm64/libopenslide-1.so' }
+        'macos-arm64-x86_64' { 'osx-arm64/libopenslide-1.dylib', 'osx-x64/libopenslide-1.dylib' }
+    }
+}
+
 function Copy-Native([string]$From, [string]$ToRelative) {
     $target = Join-Path $Destination $ToRelative
     New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
@@ -126,7 +140,8 @@ function Find-Single([string]$Dir, [scriptblock]$Filter, [string]$What) {
 # --- process ---------------------------------------------------------------
 foreach ($key in $keys) {
     $sha = $m.assets.$key.sha256.ToLowerInvariant()
-    if (-not $Force -and $stamp[$key] -eq $sha) {
+    $missing = @(Get-ExpectedOutputs $key | Where-Object { -not (Test-Path (Join-Path $Destination $_)) })
+    if (-not $Force -and $stamp[$key] -eq $sha -and $missing.Count -eq 0) {
         Write-Host "$key is up to date."
         continue
     }

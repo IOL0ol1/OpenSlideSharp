@@ -58,9 +58,17 @@ foreach ($key in $assetSuffixes.Keys) {
     $asset = $release.assets | Where-Object { $_.name -like "openslide-bin-*$($assetSuffixes[$key])" } | Select-Object -First 1
     if (-not $asset) { throw "Release $tagName has no asset matching *$($assetSuffixes[$key])." }
     $path = Join-Path $downloads $asset.name
+    # A cached file of the wrong size is a leftover from an interrupted download.
+    if ((Test-Path $path) -and (Get-Item $path).Length -ne $asset.size) { Remove-Item $path -Force }
     if (-not (Test-Path $path)) {
         Write-Host "Downloading $($asset.name)"
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $path
+        # Download to .part and rename only on success, so a failed download is never cached or hashed.
+        $part = "$path.part"
+        Remove-Item $part -Force -ErrorAction SilentlyContinue
+        try { Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $part }
+        catch { Remove-Item $part -Force -ErrorAction SilentlyContinue; throw }
+        if ((Get-Item $part).Length -ne $asset.size) { Remove-Item $part -Force; throw "Downloaded $($asset.name) has the wrong size." }
+        Move-Item $part $path
     }
     $assets[$key] = [ordered]@{
         url    = $asset.browser_download_url
