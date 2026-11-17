@@ -1,6 +1,6 @@
 #requires -Version 7
 <#
-Packs OpenSlideSharp and OpenSlideSharp.runtime into artifacts/smoke-feed and
+Packs OpenSlideSharp, OpenSlideSharp.SkiaSharp and OpenSlideSharp.runtime into artifacts/smoke-feed and
 proves the nupkgs work for real consumers (net10.0, net48 x64 and AnyCPU,
 no-runtime, and a Visual Studio C++ project), plus the 32-bit build warning.
 
@@ -35,15 +35,15 @@ Get-ChildItem $artifacts -Filter 'smoke*' -ErrorAction SilentlyContinue |
     Remove-Item -Recurse -Force
 New-Item -ItemType Directory -Force $feed | Out-Null
 
-# 1. Pack both packages (or, with -SkipPack, require them to be in the feed already).
+# 1. Pack all packages (or, with -SkipPack, require them to be in the feed already).
 if ($SkipPack) {
-    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.runtime') {
+    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.runtime') {
         $nupkg = Join-Path $feed "$id.$Version.nupkg"
         if (-not (Test-Path $nupkg)) { throw "-SkipPack: '$nupkg' not found; put the nupkgs for version $Version into $feed first" }
     }
 }
 else {
-    foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj') {
+    foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj') {
         Invoke-Native dotnet @('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed, "-p:Version=$Version")
     }
 }
@@ -100,6 +100,22 @@ if (($rtMeta.tags -split '\s+') -notcontains 'native') { throw "runtime nuspec t
 
 $coreMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.$Version.nupkg")).package.metadata
 if ($coreMeta.SelectNodes("//*[local-name()='dependency'][@id='OpenSlideSharp.runtime']").Count -gt 0) { throw "core nuspec depends on OpenSlideSharp.runtime" }
+
+$skiaMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.SkiaSharp.$Version.nupkg")).package.metadata
+if ($skiaMeta.SelectNodes("//*[local-name()='dependency'][@id='OpenSlideSharp.runtime']").Count -gt 0) { throw "Skia nuspec depends on OpenSlideSharp.runtime" }
+if ($skiaMeta.license.InnerText -ne 'MIT') { throw "Skia nuspec license is '$($skiaMeta.license.InnerText)', expected MIT" }
+$skiaGroups = @($skiaMeta.dependencies.group)
+if ($skiaGroups.Count -lt 3) { throw "Skia nuspec has $($skiaGroups.Count) dependency groups, expected one per target framework (3)" }
+foreach ($g in $skiaGroups) {
+    $deps = @{}
+    foreach ($d in @($g.dependency)) { $deps[$d.id] = $d.version }
+    $expect = @{ 'OpenSlideSharp' = $Version; 'SkiaSharp' = '3.119.4'; 'SkiaSharp.NativeAssets.Linux.NoDependencies' = '3.119.4' }
+    foreach ($id in $expect.Keys) {
+        if (-not $deps.ContainsKey($id)) { throw "Skia nuspec group '$($g.targetFramework)' lacks a dependency on $id" }
+        # NuGet writes a minimum version as '[x, )' or 'x' depending on the packer; accept both.
+        if ($deps[$id] -notmatch ('^\[?' + [regex]::Escape($expect[$id]) + '(, \))?\]?$')) { throw "Skia nuspec group '$($g.targetFramework)': $id version is '$($deps[$id])', expected $($expect[$id])" }
+    }
+}
 
 # 3. Consume the packages from an isolated global cache.
 $env:NUGET_PACKAGES = Join-Path $artifacts 'smoke-packages'
@@ -159,6 +175,7 @@ function Invoke-Smoke {
     Write-Host $text
     if ($code -ne $ExpectedExit) { throw "[$Name] expected exit code $ExpectedExit, got $code" }
     if ($text -notmatch [regex]::Escape($ExpectedText)) { throw "[$Name] output does not contain '$ExpectedText'" }
+    if ($ExpectedExit -eq 0 -and $text -notmatch 'png=ok') { throw "[$Name] output does not contain 'png=ok'" }
     Write-Host "PASS: $Name"
 }
 
