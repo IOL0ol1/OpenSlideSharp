@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -65,7 +66,19 @@ public partial class Program
         builder.Services.AddRazorPages();
 
         WebApplication app = builder.Build();
-        SlideSite site = app.Services.GetRequiredService<SlideSite>();
+        SlideSite site;
+        try
+        {
+            site = app.Services.GetRequiredService<SlideSite>();
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException)
+        {
+            Console.Error.WriteLine(e.Message);
+            Console.Error.WriteLine();
+            Console.Error.WriteLine(Usage);
+            Environment.ExitCode = 2;
+            return;
+        }
 
         app.UseStaticFiles();
         app.MapDeepZoom("/dz", site.Resolver);
