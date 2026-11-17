@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj" />
     <Project Path="src/OpenSlideSharp/OpenSlideSharp.csproj" />
+    <Project Path="src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/OpenSlideSharp.Tests/OpenSlideSharp.Tests.csproj" />

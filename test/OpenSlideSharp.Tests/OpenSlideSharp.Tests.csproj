@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenSlideSharp\OpenSlideSharp.csproj" />
+    <ProjectReference Include="..\..\src\OpenSlideSharp.SkiaSharp\OpenSlideSharp.SkiaSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
