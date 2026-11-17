@@ -56,6 +56,7 @@ public class OmeZarrTests
     private static JsonElement[] Transforms(JsonElement multiscale, int level) =>
         multiscale.GetProperty("datasets")[level].GetProperty("coordinateTransformations").EnumerateArray().ToArray();
 
+    // Every chunk, in EnumerateKeys order: level, row, column, then the three channels of that chunk.
     private static IEnumerable<(int Level, int Channel, int Y, int X)> AllChunks(OmeZarrGenerator generator)
     {
         for (int level = 0; level < generator.LevelCount; level++)
@@ -63,9 +64,9 @@ public class OmeZarrTests
             SlideSize size = generator.LevelDimensions[level];
             int rows = (int)((size.Height + generator.ChunkSize - 1) / generator.ChunkSize);
             int columns = (int)((size.Width + generator.ChunkSize - 1) / generator.ChunkSize);
-            for (int channel = 0; channel < 3; channel++)
-                for (int y = 0; y < rows; y++)
-                    for (int x = 0; x < columns; x++)
+            for (int y = 0; y < rows; y++)
+                for (int x = 0; x < columns; x++)
+                    for (int channel = 0; channel < 3; channel++)
                         yield return (level, channel, y, x);
         }
     }
@@ -691,6 +692,24 @@ public class OmeZarrTests
         for (int channel = 0; channel < 3; channel++)
             uncached.GetChunk(0, channel, 0, 0);
         Assert.Equal(3, uncachedSource.Reads);
+    }
+
+    [Theory]
+    [InlineData(NgffVersion.V0_5)]
+    [InlineData(NgffVersion.V0_4)]
+    public void RenderCache_ExportInKeyOrder_RendersEachRegionOnce(NgffVersion version)
+    {
+        // An export walks EnumerateKeys in order. With a single cache entry, that order alone decides whether the
+        // three channels of a chunk share one render.
+        var source = new FlakySource();
+        var options = Options(version);
+        options.RenderCacheSize = 1;
+        var generator = new OmeZarrGenerator(source, "flaky", false, options);
+
+        foreach (string key in generator.EnumerateKeys())
+            Assert.True(generator.TryGetEntry(key, out _), key);
+
+        Assert.Equal(BoxesGrid.Sum(g => g.Columns * g.Rows), source.Reads); // 29 regions, one read each
     }
 
     [Fact]
