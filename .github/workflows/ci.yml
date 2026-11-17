@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Stage native OpenSlide
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1
+      - name: Test
+        run: dotnet test OpenSlideSharp.slnx -c Release
+
+  bindings:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Generate bindings
+        shell: pwsh
+        run: ./eng/Generate-Bindings.ps1
+      - name: Verify generated bindings are committed
+        shell: pwsh
+        run: |
+          git diff --exit-code src/OpenSlideSharp/Native
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::生成文件与清单不一致: regenerate with eng/Generate-Bindings.ps1 and commit src/OpenSlideSharp/Native"
+            exit 1
+          }
+
+  package:
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Stage native OpenSlide for all platforms
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1 -Platform all
+      - name: Pack and smoke-test packages
+        shell: pwsh
+        run: ./eng/Test-Packages.ps1 -Version 0.0.0-ci.${{ github.run_number }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: artifacts/smoke-feed/*.nupkg
+          if-no-files-found: error
+
+  package-unix:
+    name: package-unix (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: artifacts/smoke-feed
+      - name: Smoke-test the packed packages
+        shell: pwsh
+        run: ./eng/Test-Packages.ps1 -SkipPack -Version 0.0.0-ci.${{ github.run_number }}
