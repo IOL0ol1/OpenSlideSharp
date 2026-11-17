@@ -214,13 +214,13 @@ public sealed class OpenSlide : IDisposable
     public IReadOnlyDictionary<string, AssociatedImage> AssociatedImages => _associatedImages;
 
     /// <summary>
-    /// Gets the slide embedded ICC color profile (<c>openslide_read_icc_profile</c>), or <see langword="null"/>
+    /// Gets the slide embedded ICC color profile (<c>openslide_read_icc_profile</c>), or an empty value
     /// if it has none. The profile is read once and cached, so every access returns the same array instance:
     /// callers must not modify it.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
-    public unsafe byte[]? ColorProfile
+    public unsafe ReadOnlyMemory<byte> ColorProfile
     {
         get
         {
@@ -251,7 +251,7 @@ public sealed class OpenSlide : IDisposable
                 cached = Interlocked.CompareExchange(ref _colorProfile, profile, null) ?? profile;
             }
 
-            return ReferenceEquals(cached, NoProfile) ? null : cached;
+            return ReferenceEquals(cached, NoProfile) ? default : new ReadOnlyMemory<byte>(cached);
         }
     }
 
@@ -290,6 +290,10 @@ public sealed class OpenSlide : IDisposable
     /// <param name="width">Width in pixels at <paramref name="level"/>.</param>
     /// <param name="height">Height in pixels at <paramref name="level"/>.</param>
     /// <param name="destination">Receives <c>width * height * 4</c> bytes, rows top to bottom with no padding.</param>
+    /// <remarks>
+    /// The alignment of <paramref name="destination"/> is not guaranteed, although OpenSlide accesses it as
+    /// <c>uint32</c>: a <c>byte[]</c>, <c>stackalloc</c> memory or a pooled array all work.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is negative.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <c>width * height * 4</c> bytes.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
