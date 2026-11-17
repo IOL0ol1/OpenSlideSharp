@@ -65,4 +65,4 @@ dotnet test OpenSlideSharp.slnx
 
 ## License
 
-The managed code is MIT licensed; see [LICENSE](LICENSE). `OpenSlideSharp.runtime` redistributes OpenSlide and its dependencies under LGPL-2.1-only. Originally based on [OpenSlideNET](https://github.com/yigolden/OpenSlideNET).
+The managed code is MIT licensed; see [LICENSE](LICENSE). `OpenSlideSharp.runtime` redistributes OpenSlide and its dependencies under LGPL-2.1-only.
