@@ -43,8 +43,8 @@ public sealed class AssociatedImage
 
     /// <summary>
     /// Gets the image embedded ICC color profile (<c>openslide_read_associated_image_icc_profile</c>), or
-    /// an empty value if it has none. The profile is read once and cached, so every access returns the same
-    /// array instance: callers must not modify it.
+    /// an empty value if it has none. The profile is read once and cached; the returned memory is read-only and
+    /// shared by every access and by the images read from this associated image.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>

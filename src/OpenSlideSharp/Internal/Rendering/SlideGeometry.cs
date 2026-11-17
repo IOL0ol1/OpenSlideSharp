@@ -174,9 +174,9 @@ internal sealed class SlideGeometry
         }
     }
 
-    // Python: int(properties.get(prop, l0_lim)) / l0_lim. A negative size counts as missing (ruling R4: Python
-    // would produce negative level sizes), while zero is kept, as in Python. An empty level 0 (where Python
-    // divides by zero) keeps the empty level sizes as they are.
+    // Python: int(properties.get(prop, l0_lim)) / l0_lim. A negative bounds width or height counts as missing
+    // (Python would produce negative level sizes), while zero is kept as parsed, as in Python. An empty level 0
+    // (where Python divides by zero) keeps the empty level sizes as they are.
     private static double SizeScale(long? boundsSize, long l0Size)
     {
         if (l0Size == 0)
