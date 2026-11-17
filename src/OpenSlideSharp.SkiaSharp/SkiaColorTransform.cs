@@ -20,6 +20,7 @@ public static class SkiaColorTransform
     /// </para>
     /// <para>
     /// Tier 1: a profile that Skia turns into a color space (matrix/TRC) is applied with <c>SKPixmap.ReadPixels</c>.
+    /// If that color space is sRGB, the transform leaves the pixels unchanged.
     /// </para>
     /// <para>
     /// Tier 2: a profile that Skia parses but cannot turn into a color space (a lookup-table profile) is applied
@@ -82,6 +83,12 @@ public static class SkiaColorTransform
         SKColorSpace? colorSpace = SKColorSpace.CreateIcc(parsed);
         if (colorSpace is not null)
         {
+            if (colorSpace.IsSrgb)
+            {
+                colorSpace.Dispose();
+                return NoOpTransform.Instance;
+            }
+
             return new PixmapTransform(colorSpace);
         }
 
@@ -94,6 +101,20 @@ public static class SkiaColorTransform
         }
 
         return new CodecTransform(profile);
+    }
+
+    // The profile is sRGB already: the pixels need no change.
+    internal sealed class NoOpTransform : IColorTransform
+    {
+        internal static readonly NoOpTransform Instance = new();
+
+        private NoOpTransform()
+        {
+        }
+
+        public void Apply(Span<byte> pixels, int width, int height)
+        {
+        }
     }
 
     // Level 1: Skia understands the profile as a color space (matrix/TRC).

@@ -120,6 +120,20 @@ public class ColorTransformTests
     }
 
     [Fact]
+    public void Create_SrgbProfile_ReturnsNoOp()
+    {
+        var transform = SkiaColorTransform.Create(Icc("srgb-matrix.icc"));
+        Assert.Same(SkiaColorTransform.NoOpTransform.Instance, transform);
+
+        var pixels = new byte[16 * 16 * 4];
+        new Random(3).NextBytes(pixels);
+        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+        byte[] before = (byte[])pixels.Clone();
+        transform!.Apply(pixels, 16, 16);
+        Assert.Equal(before, pixels);
+    }
+
+    [Fact]
     public void Create_GarbageOrEmpty_ReturnsNull()
     {
         var garbage = new byte[300];
