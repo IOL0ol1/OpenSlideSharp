@@ -2,10 +2,15 @@
 <#
 Packs OpenSlideSharp and OpenSlideSharp.runtime into artifacts/smoke-feed and
 proves the nupkgs work for real consumers (net10.0, net48, and no-runtime).
+
+-SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
+there) instead of packing; everything else, including the nupkg content
+assertions, still runs. net48 and the C++ stage only run on Windows.
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = "0.0.0-smoke.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
+    [string]$Version = "0.0.0-smoke.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))",
+    [switch]$SkipPack
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,13 +28,23 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) { throw "$Exe $($Arguments -join ' ') failed with exit code $LASTEXITCODE" }
 }
 
-# Start clean: no stale feeds, caches or outputs.
-Get-ChildItem $artifacts -Filter 'smoke*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+# Start clean: no stale feeds, caches or outputs. With -SkipPack the feed is the input, so keep it.
+Get-ChildItem $artifacts -Filter 'smoke*' -ErrorAction SilentlyContinue |
+    Where-Object { -not ($SkipPack -and $_.Name -eq 'smoke-feed') } |
+    Remove-Item -Recurse -Force
 New-Item -ItemType Directory -Force $feed | Out-Null
 
-# 1. Pack both packages.
-foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj') {
-    Invoke-Native dotnet @('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed, "-p:Version=$Version")
+# 1. Pack both packages (or, with -SkipPack, require them to be in the feed already).
+if ($SkipPack) {
+    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.runtime') {
+        $nupkg = Join-Path $feed "$id.$Version.nupkg"
+        if (-not (Test-Path $nupkg)) { throw "-SkipPack: '$nupkg' not found; put the nupkgs for version $Version into $feed first" }
+    }
+}
+else {
+    foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj') {
+        Invoke-Native dotnet @('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed, "-p:Version=$Version")
+    }
 }
 
 # 2. Assert nupkg contents.
