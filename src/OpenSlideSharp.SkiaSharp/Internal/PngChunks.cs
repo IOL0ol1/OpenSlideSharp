@@ -110,8 +110,11 @@ internal static class PngChunks
         return true;
     }
 
-    /// <summary>Builds an 8-bit RGB PNG (color type 2) with an iCCP chunk, from opaque BGRA pixels.</summary>
-    public static byte[] BuildRgbPngWithProfile(byte[] bgra, int width, int height, byte[] profile)
+    /// <summary>
+    /// Builds an uncompressed 8-bit RGB PNG (color type 2) from opaque BGRA pixels, with an iCCP chunk whose payload
+    /// <see cref="BuildIccpData"/> made.
+    /// </summary>
+    public static byte[] BuildRgbPng(ReadOnlySpan<byte> bgra, int width, int height, byte[] iccpData)
     {
         var raw = new byte[(long)height * (1 + width * 3)];
         int o = 0;
@@ -128,7 +131,9 @@ internal static class PngChunks
             }
         }
 
-        using var ms = new MemoryStream();
+        // The PNG is decoded right away, so compressing it would only cost time.
+        byte[] idat = ZlibCompress(raw, CompressionLevel.NoCompression);
+        using var ms = new MemoryStream(raw.Length + iccpData.Length + 128);
         WriteSignature(ms);
         var ihdr = new byte[13];
         WriteUInt32(ihdr, 0, (uint)width);
@@ -136,8 +141,7 @@ internal static class PngChunks
         ihdr[8] = 8;
         ihdr[9] = 2;
         WriteChunk(ms, "IHDR", ihdr);
-        WriteChunk(ms, "iCCP", BuildIccpData(profile));
-        byte[] idat = ZlibCompress(raw, CompressionLevel.Fastest);
+        WriteChunk(ms, "iCCP", iccpData);
         WriteChunk(ms, "IDAT", idat);
         WriteChunk(ms, "IEND", Array.Empty<byte>());
         return ms.ToArray();
