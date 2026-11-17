@@ -1,13 +1,15 @@
 """Writes the synthetic ICC profiles the color tests use.
 
-Three profiles describe sRGB with the red and blue channels swapped, so converting pure red through any of them
+Five profiles describe sRGB with the red and blue channels swapped, so converting pure red through any of them
 to sRGB yields (nearly) pure blue. They differ only in how the device-to-PCS transform is stored:
 
 - swap-rb-matrix.icc: rXYZ/gXYZ/bXYZ + rTRC/gTRC/bTRC (matrix/TRC), which SKColorSpace.CreateIcc accepts.
 - swap-rb-lut.icc: A2B0 only (lut16Type, PCS XYZ), which SKColorSpace.CreateIcc rejects but skcms can still parse.
 - swap-rb-lut-lab.icc: A2B0 only (lut16Type, PCS Lab), the same transform with Lab values in the CLUT.
+- swap-rb-mab.icc: A2B0 only (lutAtoBType, PCS XYZ), an ICC v4 profile.
+- swap-rb-mab-lab.icc: A2B0 only (lutAtoBType, PCS Lab), an ICC v4 profile.
 
-A fourth one is plain sRGB:
+Another one is plain sRGB:
 
 - srgb-matrix.icc: the sRGB primaries (D50) with parametric sRGB curves (parametricCurveType, function type 3).
 
@@ -118,7 +120,49 @@ def lut16_swap_rb_lab() -> bytes:
     return lut16(LAB_GRID, entry)
 
 
-def profile(tags: list[tuple[bytes, bytes]], pcs: bytes = b'XYZ ') -> bytes:
+def pad4(data: bytes) -> bytes:
+    return data + b'\0' * (-len(data) % 4)
+
+
+def curv_identity() -> bytes:
+    return b'curv' + b'\0' * 4 + struct.pack('>I', 0)
+
+
+def lut_a_to_b(grid: int, clut_entry) -> bytes:
+    """lutAtoBType ('mAB ') with parametric sRGB A curves (to linear light), a 16-bit CLUT and identity B curves,
+    without M curves or a matrix. clut_entry is as for lut16."""
+    b_curves = b''.join(pad4(curv_identity()) for _ in range(3))
+    clut = bytes([grid] * 3 + [0] * 13) + bytes([2, 0, 0, 0])  # grid points per input, 16-bit precision, padding
+    for r in range(grid):
+        for g in range(grid):
+            for b in range(grid):
+                clut += struct.pack('>HHH', *clut_entry(r / (grid - 1), g / (grid - 1), b / (grid - 1)))
+    clut = pad4(clut)
+    a_curves = b''.join(pad4(para_srgb()) for _ in range(3))
+    offset_b = 32  # right after the 32-byte header below
+    offset_clut = offset_b + len(b_curves)
+    offset_a = offset_clut + len(clut)
+    header = b'mAB ' + b'\0' * 4 + struct.pack('>BBH', 3, 3, 0)
+    header += struct.pack('>IIIII', offset_b, 0, 0, offset_clut, offset_a)  # B, matrix, M, CLUT, A
+    return header + b_curves + clut + a_curves
+
+
+def mab_swap_rb() -> bytes:
+    # 16-bit PCSXYZ as for lut16: 0x8000 = 1.0.
+    return lut_a_to_b(2, lambda r, g, b: [min(65535, round(v * 32768)) for v in swapped_xyz(r, g, b)])
+
+
+def mab_swap_rb_lab() -> bytes:
+    # The ICC v4 Lab encoding: L 0..100 -> 0x0000..0xFFFF, a and b -128..127 -> 0x0000..0xFFFF with 0x8080 = 0.
+    def entry(r: float, g: float, b: float) -> list[int]:
+        lightness, a, b_ = xyz_to_lab(*swapped_xyz(r, g, b))
+        values = (lightness * 0xFFFF / 100, (a + 128) * 257, (b_ + 128) * 257)
+        return [max(0, min(65535, round(v))) for v in values]
+
+    return lut_a_to_b(LAB_GRID, entry)
+
+
+def profile(tags: list[tuple[bytes, bytes]], pcs: bytes = b'XYZ ', version: bytes = bytes([2, 0x40, 0, 0])) -> bytes:
     count = len(tags)
     offset = 128 + 4 + 12 * count
     table = struct.pack('>I', count)
@@ -131,7 +175,7 @@ def profile(tags: list[tuple[bytes, bytes]], pcs: bytes = b'XYZ ') -> bytes:
     while (offset + len(data)) % 4:
         data += b'\0'
     size = 128 + len(table) + len(data)
-    header = struct.pack('>I', size) + b'\0\0\0\0' + bytes([2, 0x40, 0, 0])  # size, CMM, version 2.4
+    header = struct.pack('>I', size) + b'\0\0\0\0' + version  # size, CMM, version (2.4 by default)
     header += b'mntr' + b'RGB ' + pcs
     header += struct.pack('>HHHHHH', 2026, 1, 1, 0, 0, 0)
     header += b'acsp' + b'\0' * 4 + struct.pack('>I', 0) + b'\0' * 4 + b'\0' * 4 + b'\0' * 8
@@ -181,6 +225,17 @@ def main() -> None:
         (b'gTRC', para_srgb()),
         (b'bTRC', para_srgb()),
     ]
+    mab_xyz = [
+        (b'desc', desc_type('sRGB with red and blue swapped (A2B0 lutAtoB only)')),
+        *common[1:],
+        (b'A2B0', mab_swap_rb()),
+    ]
+    mab_lab = [
+        (b'desc', desc_type('sRGB with red and blue swapped (A2B0 lutAtoB only, PCS Lab)')),
+        *common[1:],
+        (b'A2B0', mab_swap_rb_lab()),
+    ]
+    v4 = bytes([4, 0x30, 0, 0])  # lutAtoBType is an ICC v4 type
     with open(os.path.join(out, 'swap-rb-matrix.icc'), 'wb') as f:
         f.write(profile(matrix))
     with open(os.path.join(out, 'swap-rb-lut.icc'), 'wb') as f:
@@ -189,6 +244,10 @@ def main() -> None:
         f.write(profile(lut_lab, pcs=b'Lab '))
     with open(os.path.join(out, 'srgb-matrix.icc'), 'wb') as f:
         f.write(profile(srgb))
+    with open(os.path.join(out, 'swap-rb-mab.icc'), 'wb') as f:
+        f.write(profile(mab_xyz, version=v4))
+    with open(os.path.join(out, 'swap-rb-mab-lab.icc'), 'wb') as f:
+        f.write(profile(mab_lab, pcs=b'Lab ', version=v4))
 
 
 if __name__ == '__main__':
