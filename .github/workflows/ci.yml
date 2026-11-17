@@ -37,6 +37,34 @@ jobs:
       - name: Test
         run: dotnet test OpenSlideSharp.slnx -c Release
 
+  omezarr-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Stage native OpenSlide
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install zarr-python and ome-zarr
+        run: pip install -r eng/requirements-interop.txt
+      - name: Export OME-Zarr stores
+        env:
+          OPENSLIDESHARP_INTEROP_DIR: ${{ runner.temp }}/omezarr
+        run: dotnet test OpenSlideSharp.slnx -c Release
+      - name: Read the stores with zarr-python and ome-zarr
+        run: python eng/verify-omezarr.py ${{ runner.temp }}/omezarr
+
   bindings:
     runs-on: windows-latest
     timeout-minutes: 30
