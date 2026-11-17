@@ -41,6 +41,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
+      # The generator writes LF; a CRLF checkout would make git report the regenerated file as modified.
+      - name: Check out with LF line endings
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
