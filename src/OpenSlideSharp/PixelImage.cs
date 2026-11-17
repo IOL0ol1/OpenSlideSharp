@@ -15,11 +15,11 @@ public sealed class PixelImage
     /// <param name="height">Height in pixels, not negative.</param>
     /// <param name="format">How the pixel bytes are to be interpreted.</param>
     /// <param name="data">Pixel bytes; its length must equal <c>width * height * 4</c>.</param>
-    /// <param name="iccProfile">The ICC color profile the pixels are in, or <see langword="null"/> if unknown.</param>
+    /// <param name="iccProfile">The ICC color profile the pixels are in, or empty if unknown.</param>
     /// <exception cref="ArgumentNullException"><paramref name="data"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is negative, <paramref name="width"/> times 4 exceeds <see cref="int.MaxValue"/>, or <paramref name="format"/> is not a defined value.</exception>
     /// <exception cref="ArgumentException"><paramref name="data"/> has the wrong length.</exception>
-    public PixelImage(int width, int height, PixelFormat format, byte[] data, byte[]? iccProfile = null)
+    public PixelImage(int width, int height, PixelFormat format, byte[] data, ReadOnlyMemory<byte> iccProfile = default)
     {
         if (data is null)
         {
@@ -34,6 +34,16 @@ public sealed class PixelImage
         if (height < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(height), height, "Height must not be negative.");
+        }
+
+        if (width > int.MaxValue / 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Width times 4 must not exceed Int32.MaxValue.");
+        }
+
+        if (format != PixelFormat.Bgra32Premultiplied && format != PixelFormat.Bgra32 && format != PixelFormat.Bgra32Opaque)
+        {
+            throw new ArgumentOutOfRangeException(nameof(format), format, "Undefined pixel format.");
         }
 
         long expected = (long)width * height * 4;
@@ -62,8 +72,8 @@ public sealed class PixelImage
     /// <summary>Gets the pixel bytes (B, G, R, A per pixel, rows top to bottom). Not a copy.</summary>
     public byte[] Data { get; }
 
-    /// <summary>Gets the ICC color profile of the pixels, or <see langword="null"/> if there is none. Do not modify it.</summary>
-    public byte[]? IccProfile { get; }
+    /// <summary>Gets the ICC color profile of the pixels, or an empty value if there is none.</summary>
+    public ReadOnlyMemory<byte> IccProfile { get; }
 
     /// <summary>Gets the number of bytes per row, which is <c>Width * 4</c>.</summary>
     public int Stride => Width * 4;
@@ -72,6 +82,8 @@ public sealed class PixelImage
     /// <remarks>
     /// For each pixel with alpha <c>a</c>: if <c>a == 255</c> it is unchanged; if <c>a == 0</c> the color channels
     /// become 0; otherwise each color channel <c>c</c> becomes <c>255 * c / a</c> using truncating integer division.
+    /// A premultiplied pixel with <c>c &gt; a</c> is invalid; such values are clamped to 255, whereas openslide-python
+    /// wraps around as uint8. This difference is intentional.
     /// </remarks>
     /// <returns>
     /// A new <see cref="PixelFormat.Bgra32"/> image if <see cref="Format"/> is <see cref="PixelFormat.Bgra32Premultiplied"/>;
@@ -106,6 +118,36 @@ public sealed class PixelImage
         }
 
         return new PixelImage(Width, Height, PixelFormat.Bgra32, dst, IccProfile);
+    }
+
+    /// <summary>Composites this image over a solid background color, giving an opaque image.</summary>
+    /// <remarks>
+    /// Uses the Pillow <c>paste</c> / openslide-python formula. For <see cref="PixelFormat.Bgra32Premultiplied"/> the
+    /// color is un-premultiplied first; for <see cref="PixelFormat.Bgra32"/> the color is already straight, so it
+    /// is blended directly. The ICC profile is kept unchanged.
+    /// </remarks>
+    /// <param name="red">Background red.</param>
+    /// <param name="green">Background green.</param>
+    /// <param name="blue">Background blue.</param>
+    /// <returns>A new <see cref="PixelFormat.Bgra32Opaque"/> image, or this same instance if it is already opaque.</returns>
+    public PixelImage ToOpaque(byte red, byte green, byte blue)
+    {
+        if (Format == PixelFormat.Bgra32Opaque)
+        {
+            return this;
+        }
+
+        byte[] dst = (byte[])Data.Clone();
+        if (Format == PixelFormat.Bgra32Premultiplied)
+        {
+            Compositor.CompositeInPlace(dst, red, green, blue);
+        }
+        else
+        {
+            Compositor.BlendStraightInPlace(dst, red, green, blue);
+        }
+
+        return new PixelImage(Width, Height, PixelFormat.Bgra32Opaque, dst, IccProfile);
     }
 
     // Premultiplied input can have c > a (invalid); clamp so the byte cast never wraps.

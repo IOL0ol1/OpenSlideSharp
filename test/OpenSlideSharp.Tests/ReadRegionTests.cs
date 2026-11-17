@@ -49,16 +49,35 @@ public class ReadRegionTests
     }
 
     [Fact]
+    public void ToOpaque_PremultipliedOverWhite()
+    {
+        byte[] icc = { 1, 2, 3 };
+        var img = new PixelImage(1, 1, PixelFormat.Bgra32Premultiplied, new byte[] { 64, 32, 16, 128 }, icc);
+        var opaque = img.ToOpaque(255, 255, 255);
+        Assert.Equal(PixelFormat.Bgra32Opaque, opaque.Format);
+        Assert.Equal(new byte[] { 191, 159, 143, 255 }, opaque.Data);
+        Assert.Equal(icc, opaque.IccProfile.ToArray());
+        Assert.Equal(new byte[] { 64, 32, 16, 128 }, img.Data);
+    }
+
+    [Fact]
+    public void ToOpaque_OpaqueReturnsSameInstance()
+    {
+        var img = new PixelImage(1, 1, PixelFormat.Bgra32Opaque, new byte[] { 1, 2, 3, 255 });
+        Assert.Same(img, img.ToOpaque(0, 0, 0));
+    }
+
+    [Fact]
     public void ColorProfile_Boxes_And_Svs()
     {
         using var boxes = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
-        Assert.Equal(588, boxes.ColorProfile!.Length);
-        Assert.Equal("mntr", Encoding.ASCII.GetString(boxes.ColorProfile, 12, 4));
-        Assert.Same(boxes.ColorProfile, boxes.ColorProfile);
-        Assert.Equal(588, boxes.ReadRegion(0, 0, 0, 100, 100).IccProfile!.Length);
+        Assert.Equal(588, boxes.ColorProfile.Length);
+        Assert.Equal("mntr", Encoding.ASCII.GetString(boxes.ColorProfile.Span.Slice(12, 4).ToArray()));
+        Assert.True(boxes.ColorProfile.Equals(boxes.ColorProfile));
+        Assert.Equal(588, boxes.ReadRegion(0, 0, 0, 100, 100).IccProfile.Length);
         using var svs = OpenSlide.Open(TestFiles.Get("small.svs"));
-        Assert.Null(svs.ColorProfile);
-        Assert.Null(svs.ReadRegion(0, 0, 0, 100, 100).IccProfile);
+        Assert.True(svs.ColorProfile.IsEmpty);
+        Assert.True(svs.ReadRegion(0, 0, 0, 100, 100).IccProfile.IsEmpty);
     }
 
     [Fact]

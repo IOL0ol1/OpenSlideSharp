@@ -43,12 +43,12 @@ public sealed class AssociatedImage
 
     /// <summary>
     /// Gets the image embedded ICC color profile (<c>openslide_read_associated_image_icc_profile</c>), or
-    /// <see langword="null"/> if it has none. The profile is read once and cached, so every access returns the same
+    /// an empty value if it has none. The profile is read once and cached, so every access returns the same
     /// array instance: callers must not modify it.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
-    public unsafe byte[]? ColorProfile
+    public unsafe ReadOnlyMemory<byte> ColorProfile
     {
         get
         {
@@ -86,9 +86,13 @@ public sealed class AssociatedImage
                 cached = Interlocked.CompareExchange(ref _colorProfile, profile, null) ?? profile;
             }
 
-            return ReferenceEquals(cached, NoProfile) ? null : cached;
+            return ReferenceEquals(cached, NoProfile) ? default : new ReadOnlyMemory<byte>(cached);
         }
     }
+
+    /// <summary>Returns <c>AssociatedImage(name)</c>.</summary>
+    /// <returns>A short description containing <see cref="Name"/>.</returns>
+    public override string ToString() => "AssociatedImage(" + Name + ")";
 
     /// <summary>
     /// Reads the image into a new <see cref="PixelImage"/> in <see cref="PixelFormat.Bgra32Premultiplied"/>

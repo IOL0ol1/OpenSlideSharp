@@ -16,8 +16,9 @@ public class AssociatedImageTests
         Assert.Equal(new SlideSize(16, 16), thumb.Dimensions);
         var img = thumb.Read();
         Assert.Equal((16, 16), (img.Width, img.Height));
-        Assert.Null(thumb.ColorProfile);
-        Assert.Null(img.IccProfile);
+        Assert.True(thumb.ColorProfile.IsEmpty);
+        Assert.True(img.IccProfile.IsEmpty);
+        Assert.Equal("AssociatedImage(thumbnail)", thumb.ToString());
         Assert.Throws<KeyNotFoundException>(() => osr.AssociatedImages["__missing"]);
         Assert.Equal(osr.AssociatedImages.Count, osr.AssociatedImages.Count());
     }
@@ -26,10 +27,10 @@ public class AssociatedImageTests
     public void Dicom_SharedColorProfile()
     {
         using var osr = OpenSlide.Open(TestFiles.Get("boxes_0.dcm"));
-        Assert.Equal(456, osr.ColorProfile!.Length);
-        Assert.Equal("mntr", Encoding.ASCII.GetString(osr.ColorProfile, 12, 4));
-        Assert.Equal(456, osr.ReadRegion(0, 0, 0, 100, 100).IccProfile!.Length);
-        Assert.Equal(osr.ColorProfile, osr.AssociatedImages["thumbnail"].ColorProfile);
+        Assert.Equal(456, osr.ColorProfile.Length);
+        Assert.Equal("mntr", Encoding.ASCII.GetString(osr.ColorProfile.Span.Slice(12, 4).ToArray()));
+        Assert.Equal(456, osr.ReadRegion(0, 0, 0, 100, 100).IccProfile.Length);
+        Assert.Equal(osr.ColorProfile.ToArray(), osr.AssociatedImages["thumbnail"].ColorProfile.ToArray());
     }
 
     [Fact]
