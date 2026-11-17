@@ -82,6 +82,10 @@ public static class PixelImageExtensions
     /// </exception>
     /// <exception cref="InvalidOperationException">Skia failed to encode the image.</exception>
     public static byte[] Encode(this PixelImage image, ImageFormat format, int quality = 75, ColorMode colorMode = ColorMode.Default)
+        => Encode(image, format, quality, colorMode, SkiaColorTransform.GetCached);
+
+    // The transform factory is injectable so tests can make a transform fail.
+    internal static byte[] Encode(PixelImage image, ImageFormat format, int quality, ColorMode colorMode, Func<ReadOnlyMemory<byte>, IColorTransform?> transformFactory)
     {
         if (image is null)
         {
@@ -111,16 +115,16 @@ public static class PixelImageExtensions
             bool embed = true;
             if (colorMode == ColorMode.Default)
             {
-                IColorTransform? transform = SkiaColorTransform.GetCached(source.IccProfile);
+                IColorTransform? transform = transformFactory(source.IccProfile);
                 if (transform is SkiaColorTransform.NoOpTransform)
                 {
                     // The profile is sRGB already: drop it and leave the pixels alone.
                     source = new PixelImage(source.Width, source.Height, source.Format, source.Data);
                     embed = false;
                 }
-                else if (transform is not null)
+                else if (transform is not null && TryConvertToSrgb(source, transform) is { } converted)
                 {
-                    source = ConvertToSrgb(source, transform);
+                    source = converted;
                     embed = false;
                 }
                 else if (format == ImageFormat.Jpeg && !IccEmbedding.FitsInJpeg(source.IccProfile.Length))
@@ -145,6 +149,20 @@ public static class PixelImageExtensions
         return format == ImageFormat.Jpeg
             ? IccEmbedding.EmbedJpeg(encoded, profileToEmbed)
             : IccEmbedding.EmbedPng(encoded, profileToEmbed);
+    }
+
+    // Default never fails because of the profile: a transform that throws InvalidOperationException (the codec
+    // tier cannot convert this profile after all) leaves the image unconverted, to be embedded instead.
+    private static PixelImage? TryConvertToSrgb(PixelImage image, IColorTransform transform)
+    {
+        try
+        {
+            return ConvertToSrgb(image, transform);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     // Converts the color channels to sRGB on a copy and returns an image without a profile.
