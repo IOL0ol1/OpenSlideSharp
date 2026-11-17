@@ -9,3 +9,7 @@ Reference this package next to `OpenSlideSharp`; the native library is then copi
 ## Licensing
 
 This package is licensed under LGPL-2.1-only because it redistributes OpenSlide and its dependencies, each under its own license. See `licenses/` and `VERSIONS.md` inside the package for the exact components and versions. The corresponding source is the openslide-bin source tarball of the same version.
+
+## Known issues
+
+On Windows, corrupt JPEG or PNG data in a slide terminates the whole process with `0xC0000409`, and the failure cannot be caught. The cause is in the Windows build of the native OpenSlide library, and no workaround is shipped. Services that open untrusted slides on Windows should decode them in a separate worker process. See [the details](https://github.com/IOL0ol1/OpenSlideSharp/blob/master/docs/known-issues/windows-cfg-longjmp-crash.md).

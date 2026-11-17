@@ -35,7 +35,7 @@ public class AssociatedImageTests
     [Fact]
     public void UnreadableAssociated_IsSticky()
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "OpenSlide's libjpeg longjmp error path crashes .NET processes on Windows (under investigation); covered on Linux/macOS CI");
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "OpenSlide's libjpeg longjmp error path crashes .NET processes on Windows (known issue: see docs/known-issues/windows-cfg-longjmp-crash.md); covered on Linux/macOS CI");
         using var osr = OpenSlide.Open(TestFiles.Get("unreadable.svs"));
         Assert.Equal("aperio", osr.Properties[OpenSlideProperties.Vendor]);
         Assert.Throws<OpenSlideException>(() => osr.AssociatedImages["thumbnail"].Read());
