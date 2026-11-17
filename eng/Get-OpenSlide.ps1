@@ -1,4 +1,5 @@
 #!/usr/bin/env pwsh
+#requires -Version 7
 <#
 .SYNOPSIS
   Downloads, verifies and extracts the OpenSlide binaries pinned in eng/openslide.json.
