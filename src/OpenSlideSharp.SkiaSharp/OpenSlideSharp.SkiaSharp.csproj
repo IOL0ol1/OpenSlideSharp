@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;net10.0</TargetFrameworks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageId>OpenSlideSharp.SkiaSharp</PackageId>
+    <PackageTags>openslide wsi pathology skiasharp icc</PackageTags>
+    <Description>SkiaSharp encoding (JPEG/PNG) and ICC to sRGB color conversion for OpenSlideSharp.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenSlideSharp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,368 +1,251 @@
-﻿// See openslide-python (https://github.com/openslide/openslide-python)
-// See OpenSlideNET (https://github.com/yigolden/OpenSlideNET)
-// *Changed some code supported net3.5.
-
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Text;
 
+namespace OpenSlideSharp;
 
-namespace OpenSlideSharp
+/// <summary>
+/// Generates Deep Zoom tiles and metadata for a slide or an associated image, matching openslide-python's
+/// <c>openslide.deepzoom.DeepZoomGenerator</c>: the same levels, tile grids, <c>read_region</c> arguments and DZI
+/// text. Level 0 is the smallest (1 x 1) level and <see cref="LevelCount"/> - 1 the full-resolution one.
+/// </summary>
+/// <remarks>
+/// Everything is read from the source in the constructor. Tiles are always exactly the size
+/// <see cref="GetTileDimensions"/> reports (Pillow's <c>thumbnail</c> can differ by one pixel; this is
+/// intentional). Instances are immutable and <see cref="GetTile"/> may be called from several threads at once.
+/// </remarks>
+public sealed class DeepZoomGenerator
 {
-    /// <summary>
-    /// Deep zoom generator for OpenSlide image.
-    /// </summary>
-    public class DeepZoomGenerator : IDisposable
+    private readonly IRenderSource _source;
+    private readonly Action? _ensureUsable;
+    private readonly SlideGeometry _geometry;
+    private readonly RegionRenderer _renderer;
+    private readonly TileGridSize[] _levelTiles;
+    private readonly SlideSize[] _levelDimensions;
+    private readonly ReadOnlyMemory<byte> _iccProfile;
+
+    /// <summary>Creates a generator for a slide.</summary>
+    /// <param name="slide">The slide.</param>
+    /// <param name="tileSize">Width and height of a tile; <c>tileSize + 2 * overlap</c> should be a power of two for best viewer performance.</param>
+    /// <param name="overlap">Extra pixels added to each interior edge of a tile.</param>
+    /// <param name="limitBounds"><see langword="true"/> to render only the non-empty slide region.</param>
+    /// <param name="colorTransform">Converts tiles to sRGB; if given, tiles carry no ICC profile.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="slide"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
+    public DeepZoomGenerator(OpenSlide slide, int tileSize = 254, int overlap = 1, bool limitBounds = false, IColorTransform? colorTransform = null)
+        : this(SlideRenderSource.Create(slide), tileSize, overlap, limitBounds, colorTransform, slide.ThrowIfUnusable)
     {
-        private OpenSlideImage _image;
-        private readonly long _boundX;
-        private readonly long _boundY;
-        private readonly long _width;
-        private readonly long _height;
-        private readonly int _tileSize;
-        private readonly int _overlap;
-        private readonly DeepZoomLayerInformation[] _layers;
-
-        /// <summary>
-        /// Get the underlying OpenSlide image object.
-        /// </summary>
-        public OpenSlideImage Image => _image;
-
-        /// <summary>
-        /// Initialize a <see cref="DeepZoomGenerator"/> instance with the specified parameters.
-        /// </summary>
-        /// <param name="image">The OpenSlide image.</param>
-        /// <param name="tileSize">The tile size paramter.</param>
-        /// <param name="overlap">The overlap paramter.</param>
-        /// <param name="limitBounds">Whether image bounds should be respected.</param>
-        /// <param name="isOwner">Whether the OpenSlide image instance should be disposed when this <see cref="DeepZoomGenerator"/> instance is disposed.</param>
-        public DeepZoomGenerator(OpenSlideImage image, int tileSize = 254, int overlap = 1, bool limitBounds = true, bool isOwner = true)
-        {
-            _image = image ?? throw new ArgumentNullException(nameof(image));
-            disposedValue = !isOwner;
-
-            long width, height;
-            var size = image.Dimensions;
-            if (limitBounds)
-            {
-                _boundX = image.BoundsX ?? 0;
-                _boundY = image.BoundsY ?? 0;
-                _width = width = image.BoundsWidth ?? size.Width;
-                _height = height = image.BoundsHeight ?? size.Height;
-            }
-            else
-            {
-                _boundX = 0;
-                _boundY = 0;
-                _width = width = size.Width;
-                _height = height = size.Height;
-            }
-
-            DeepZoomLayer[] dzLayers = DeepZoomLayer.CalculateDeepZoomLayers(width, height);
-            DeepZoomLayerInformation[] layers = new DeepZoomLayerInformation[dzLayers.Length];
-
-            for (int i = 0; i < layers.Length; i++)
-            {
-                DeepZoomLayer dzLayer = dzLayers[i];
-                int layerDownsample = 1 << (dzLayers.Length - i - 1);
-
-                int level = image.GetBestLevelForDownsample(layerDownsample);
-                (long levelWidth, long levelHeight) = image.GetLevelDimension(level);
-                layers[i] = new DeepZoomLayerInformation
-                {
-                    Level = level,
-                    LevelDownsample = image.GetLevelDownsample(level),
-                    LevelWidth = levelWidth,
-                    LevelHeight = levelHeight,
-                    LayerDownsample = layerDownsample,
-                    LayerWidth = dzLayer.Width,
-                    LayerHeight = dzLayer.Height
-                };
-            }
-
-            _layers = layers;
-            _tileSize = tileSize;
-            _overlap = overlap;
-        }
-
-        /// <summary>
-        /// The Count of the deep zoom level.
-        /// </summary>
-        public int LevelCount => _layers.Length;
-
-        private IEnumerable<TileDimensions> _levelTilesCache;
-
-        /// <summary>
-        /// The number of tiles in each level.
-        /// </summary>
-        public IEnumerable<TileDimensions> LevelTiles
-            => _levelTilesCache != null ? _levelTilesCache : _levelTilesCache = _layers.Select(l => new TileDimensions((int)((l.LayerWidth + _tileSize - 1) / _tileSize), (int)((l.LayerHeight + _tileSize - 1) / _tileSize)));
-
-        private IEnumerable<ImageDimension> _levelDimensionsCache;
-
-        /// <summary>
-        /// The dimensions of each level.
-        /// </summary>
-        public IEnumerable<ImageDimension> LevelDimensions
-            => _levelDimensionsCache != null ? _levelDimensionsCache : _levelDimensionsCache = _layers.Select(l => new ImageDimension(l.LayerWidth, l.LayerHeight));
-
-        private int? _tileCountCache;
-
-        /// <summary>
-        /// The total number of tiles.
-        /// </summary>
-        public int TileCount
-            => _tileCountCache.HasValue ? _tileCountCache.Value : (_tileCountCache = (int)_layers.Sum(l => (l.LayerWidth + _tileSize - 1) * (l.LayerHeight + _tileSize - 1) / _tileSize / _tileSize)).GetValueOrDefault();
-
-        /// <summary>
-        /// Get the pre-multiplied BGRA data for the specified tile.
-        /// </summary>
-        /// <param name="level">The deep zoom level.</param>
-        /// <param name="col">Horizontal tile index.</param>
-        /// <param name="row">Vertical tile index.</param>
-        /// <param name="info">Information of the specified tile.</param>
-        /// <returns>Pre-multiplied BGRA image data.</returns>
-        public byte[] GetTile(int level, int col, int row, out TileInfo info)
-        {
-            info = GetTileInfo(level, col, row);
-            return _image.ReadRegion(info.SlideLevel, info.X, info.Y, info.Width, info.Height);
-        }
-
-        /// <summary>
-        /// Get information of the specified tile.
-        /// </summary>
-        /// <param name="level">The deep zoom level.</param>
-        /// <param name="col">Horizontal tile index.</param>
-        /// <param name="row">Vertical tile index.</param>
-        /// <returns>Information of the specified tile.</returns>
-        public TileInfo GetTileInfo(int level, int col, int row)
-        {
-            var layers = _layers;
-            if ((uint)level >= (uint)layers.Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(level));
-            }
-            var layer = layers[level];
-            int tileSize = _tileSize;
-            int overlap = _overlap;
-            int horizontalTileCount = (int)((layer.LayerWidth + tileSize - 1) / tileSize);
-            int verticalTileCount = (int)((layer.LayerHeight + tileSize - 1) / tileSize);
-            if ((uint)col >= (uint)horizontalTileCount)
-            {
-                throw new ArgumentOutOfRangeException(nameof(col));
-            }
-            if ((uint)row >= (uint)verticalTileCount)
-            {
-                throw new ArgumentOutOfRangeException(nameof(row));
-            }
-
-            long offsetX = (long)col * tileSize;
-            long offsetY = (long)row * tileSize;
-            int width = (int)Math.Min(tileSize, layer.LayerWidth - offsetX);
-            int height = (int)Math.Min(tileSize, layer.LayerHeight - offsetY); ;
-            if (col != 0)
-            {
-                offsetX -= overlap;
-                width += overlap;
-            }
-            if (col != horizontalTileCount - 1)
-            {
-                width += overlap;
-            }
-            if (row != 0)
-            {
-                offsetY -= overlap;
-                height += overlap;
-            }
-            if (row != verticalTileCount - 1)
-            {
-                height += overlap;
-            }
-
-            return new TileInfo
-            {
-                X = _boundX + offsetX * layer.LayerDownsample,
-                Y = _boundY + offsetY * layer.LayerDownsample,
-                SlideLevel = layer.Level,
-                Width = (long)(width * layer.LayerDownsample / layer.LevelDownsample),
-                Height = (long)(height * layer.LayerDownsample / layer.LevelDownsample),
-                TileWidth = width,
-                TileHeight = height
-            };
-        }
-
-        /// <summary>
-        /// Get the dzi file content.
-        /// </summary>
-        /// <param name="format">The iamge format.</param>
-        /// <returns>Dzi file content.</returns>
-        public string GetDzi(string format = "jpeg")
-        {
-            return
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-                "<Image xmlns=\"http://schemas.microsoft.com/deepzoom/2008\" " +
-                "Format=\"" + format + "\" " +
-                "Overlap=\"" + _overlap + "\" " +
-                "TileSize=\"" + _tileSize + "\">" +
-                "<Size Height=\"" + _height + "\" Width=\"" + _width + "\" />" +
-                "</Image>";
-        }
-
-        /// <summary>
-        /// Information of a tile.
-        /// </summary>
-        public class TileInfo
-        {
-            /// <summary>
-            /// The X coordinate in the base level.
-            /// </summary>
-            public long X { get; set; }
-
-
-            /// <summary>
-            /// The Y coordinate in the base level.
-            /// </summary>
-            public long Y { get; set; }
-
-            /// <summary>
-            /// The corresponding level in the OpenSlide image.
-            /// </summary>
-            public int SlideLevel { get; set; }
-
-            /// <summary>
-            /// Width of the image to read from OpenSlide image.
-            /// </summary>
-            public long Width { get; set; }
-
-            /// <summary>
-            /// Height of the image to read from OpenSlide image.
-            /// </summary>
-            public long Height { get; set; }
-
-            /// <summary>
-            /// The width of the deep zoom tile.
-            /// </summary>
-            public int TileWidth { get; set; }
-
-
-            /// <summary>
-            /// The height of the deep zoom tile.
-            /// </summary>
-            public int TileHeight { get; set; }
-        }
-
-        private class DeepZoomLayerInformation
-        {
-            public int Level { get; set; }
-            public long LevelWidth { get; set; }
-            public long LevelHeight { get; set; }
-            public double LevelDownsample { get; set; }
-            public int LayerDownsample { get; set; }
-            public long LayerWidth { get; set; }
-            public long LayerHeight { get; set; }
-        }
-
-        private readonly struct DeepZoomLayer
-        {
-            public long Width { get; }
-            public long Height { get; }
-
-            public DeepZoomLayer(long width, long height)
-            {
-                Width = width;
-                Height = height;
-            }
-            public static DeepZoomLayer[] CalculateDeepZoomLayers(long width, long height)
-            {
-                if (width <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(width));
-                }
-                if (height <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(height));
-                }
-                var layers = new List<DeepZoomLayer>();
-                DeepZoomLayer currentLayer = new DeepZoomLayer(width, height);
-                layers.Add(currentLayer);
-                while (currentLayer.Width != 1 || currentLayer.Height != 1)
-                {
-                    currentLayer = new DeepZoomLayer((currentLayer.Width + 1) / 2, (currentLayer.Height + 1) / 2);
-                    layers.Add(currentLayer);
-                }
-                DeepZoomLayer[] layersArray = layers.ToArray();
-                Array.Reverse(layersArray);
-                return layersArray;
-            }
-        }
-
-        private bool disposedValue;
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="disposing"></param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposedValue)
-            {
-                if (disposing)
-                {
-                    _image.Dispose();
-                }
-
-                disposedValue = true;
-            }
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(disposing: true);
-            GC.SuppressFinalize(this);
-        }
     }
 
-    /// <summary>
-    /// Tile position
-    /// </summary>
-    public struct TileDimensions
+    /// <summary>Creates a generator for an associated image, which has one level and no properties.</summary>
+    /// <param name="image">The associated image.</param>
+    /// <param name="tileSize">Width and height of a tile.</param>
+    /// <param name="overlap">Extra pixels added to each interior edge of a tile.</param>
+    /// <param name="colorTransform">Converts tiles to sRGB; if given, tiles carry no ICC profile.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
+    public DeepZoomGenerator(AssociatedImage image, int tileSize = 254, int overlap = 1, IColorTransform? colorTransform = null)
+        : this(AssociatedImageRenderSource.Create(image), tileSize, overlap, false, colorTransform, image.Slide.ThrowIfUnusable)
     {
-        internal int cols;
-        internal int rows;
-
-        /// <summary>
-        /// tile col
-        /// </summary>
-        public int Cols => cols;
-        /// <summary>
-        /// tile row
-        /// </summary>
-        public int Rows => rows;
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="_cols">cols</param>
-        /// <param name="_rows">rows</param>
-        public TileDimensions(int _cols, int _rows)
-        {
-            cols = _cols;
-            rows = _rows;
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="cols"></param>
-        /// <param name="rows"></param>
-        public void Deconstruct(out int cols, out int rows)
-        {
-            cols = this.cols;
-            rows = this.rows;
-        }
-
     }
+
+    internal DeepZoomGenerator(IRenderSource source, int tileSize, int overlap, bool limitBounds, IColorTransform? colorTransform)
+        : this(source, tileSize, overlap, limitBounds, colorTransform, null)
+    {
+    }
+
+    private DeepZoomGenerator(
+        IRenderSource source, int tileSize, int overlap, bool limitBounds, IColorTransform? colorTransform, Action? ensureUsable)
+    {
+        if (source is null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
+        if (tileSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tileSize), tileSize, "The tile size must be at least 1.");
+        }
+
+        if (overlap < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(overlap), overlap, "The overlap must not be negative.");
+        }
+
+        if ((long)tileSize + (2L * overlap) > int.MaxValue / 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(overlap), overlap, "The tile size plus twice the overlap is too large.");
+        }
+
+        _source = source;
+        _ensureUsable = ensureUsable;
+        TileSize = tileSize;
+        Overlap = overlap;
+        LimitBounds = limitBounds;
+
+        _geometry = new SlideGeometry(source, limitBounds);
+        _renderer = new RegionRenderer(source, _geometry, colorTransform);
+        _iccProfile = colorTransform is null ? source.ColorProfile : default;
+
+        LevelCount = _geometry.LevelCount;
+        _levelDimensions = new SlideSize[LevelCount];
+        _levelTiles = new TileGridSize[LevelCount];
+        long total = 0;
+        for (int level = 0; level < LevelCount; level++)
+        {
+            SlideSize size = _geometry.GetLevelSize(LevelCount - 1 - level);
+            _levelDimensions[level] = size;
+            _levelTiles[level] = new TileGridSize(GridMath.CeilDiv(size.Width, tileSize), GridMath.CeilDiv(size.Height, tileSize));
+            total += _levelTiles[level].Columns * _levelTiles[level].Rows;
+        }
+
+        TileCount = total;
+
+        // Read-only wrappers, so callers cannot change the grids that tile addresses are checked against.
+        LevelTiles = Array.AsReadOnly(_levelTiles);
+        LevelDimensions = Array.AsReadOnly(_levelDimensions);
+    }
+
+    /// <summary>Gets the width and height of a tile, not counting overlap.</summary>
+    public int TileSize { get; }
+
+    /// <summary>Gets the number of extra pixels added to each interior edge of a tile.</summary>
+    public int Overlap { get; }
+
+    /// <summary>Gets a value indicating whether only the non-empty slide region is rendered.</summary>
+    public bool LimitBounds { get; }
+
+    /// <summary>Gets the number of Deep Zoom levels.</summary>
+    public int LevelCount { get; }
+
+    /// <summary>Gets the tile grid size of each level, smallest level first.</summary>
+    public IReadOnlyList<TileGridSize> LevelTiles { get; }
+
+    /// <summary>Gets the pixel size of each level, smallest level first.</summary>
+    public IReadOnlyList<SlideSize> LevelDimensions { get; }
+
+    /// <summary>Gets the total number of tiles in all levels.</summary>
+    public long TileCount { get; }
+
+    /// <summary>Renders a tile as opaque BGRA, with the size <see cref="GetTileDimensions"/> reports.</summary>
+    /// <remarks>The result carries the source's ICC profile, or none if a color transform was given.</remarks>
+    /// <param name="level">The Deep Zoom level.</param>
+    /// <param name="column">The tile column within the level.</param>
+    /// <param name="row">The tile row within the level.</param>
+    /// <returns>The tile.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The level, column or row is out of range, or the tile, or the slide region it is rendered from, needs more
+    /// bytes than a .NET array can hold.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
+    public PixelImage GetTile(int level, long column, long row)
+    {
+        _ensureUsable?.Invoke();
+        TileInfo info = GetTileInfo(level, column, row);
+        var data = new byte[OpenSlide.CheckedPixelBytes(info.Width, info.Height, "tile")];
+        _renderer.Render(info.Exponent, info.X, info.Y, info.Width, info.Height, data);
+        return new PixelImage(info.Width, info.Height, PixelFormat.Bgra32Opaque, data, _iccProfile);
+    }
+
+    /// <summary>Returns the <c>OpenSlide.ReadRegion</c> arguments for a tile.</summary>
+    /// <param name="level">The Deep Zoom level.</param>
+    /// <param name="column">The tile column within the level.</param>
+    /// <param name="row">The tile row within the level.</param>
+    /// <returns>The region to read.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level, column or row is out of range.</exception>
+    public TileRegion GetTileCoordinates(int level, long column, long row) => GetTileInfo(level, column, row).Region;
+
+    /// <summary>Returns the size in pixels of a tile, including its overlap.</summary>
+    /// <param name="level">The Deep Zoom level.</param>
+    /// <param name="column">The tile column within the level.</param>
+    /// <param name="row">The tile row within the level.</param>
+    /// <returns>The tile size.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level, column or row is out of range.</exception>
+    public SlideSize GetTileDimensions(int level, long column, long row)
+    {
+        TileInfo info = GetTileInfo(level, column, row);
+        return new SlideSize(info.Width, info.Height);
+    }
+
+    /// <summary>Returns the XML text of the <c>.dzi</c> file, identical to openslide-python's <c>get_dzi</c>.</summary>
+    /// <param name="format">The tile format, such as <c>"png"</c> or <c>"jpeg"</c>.</param>
+    /// <returns>The XML, without an XML declaration.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="format"/> is <see langword="null"/>.</exception>
+    public string GetDzi(string format)
+    {
+        if (format is null)
+        {
+            throw new ArgumentNullException(nameof(format));
+        }
+
+        SlideSize size = _geometry.ActiveSize;
+        var sb = new StringBuilder();
+        sb.Append("<Image TileSize=\"").Append(TileSize).Append("\" Overlap=\"").Append(Overlap).Append("\" Format=\"");
+        foreach (char c in format)
+        {
+            switch (c)
+            {
+                case '&': sb.Append("&amp;"); break;
+                case '<': sb.Append("&lt;"); break;
+                case '>': sb.Append("&gt;"); break;
+                case '"': sb.Append("&quot;"); break;
+                case '\r': sb.Append("&#13;"); break;
+                case '\n': sb.Append("&#10;"); break;
+                case '\t': sb.Append("&#09;"); break;
+                default: sb.Append(c); break;
+            }
+        }
+
+        sb.Append("\" xmlns=\"http://schemas.microsoft.com/deepzoom/2008\"><Size Width=\"")
+            .Append(size.Width).Append("\" Height=\"").Append(size.Height).Append("\" /></Image>");
+        return sb.ToString();
+    }
+
+    /// <summary>Describes the generator and its parameters.</summary>
+    /// <returns>For example <c>DeepZoomGenerator(OpenSlide(path), tileSize: 254, overlap: 1, limitBounds: False)</c>.</returns>
+    public override string ToString() =>
+        $"DeepZoomGenerator({_source.Describe()}, tileSize: {TileSize}, overlap: {Overlap}, limitBounds: {(LimitBounds ? "True" : "False")})";
+
+    // Port of _get_tile_info: validates the address, then computes the overlap, final tile size and read region.
+    private TileInfo GetTileInfo(int level, long column, long row)
+    {
+        if (level < 0 || level >= LevelCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(level), level, "Invalid level.");
+        }
+
+        TileGridSize grid = _levelTiles[level];
+        if (column < 0 || column >= grid.Columns)
+        {
+            throw new ArgumentOutOfRangeException(nameof(column), column, "Invalid address.");
+        }
+
+        if (row < 0 || row >= grid.Rows)
+        {
+            throw new ArgumentOutOfRangeException(nameof(row), row, "Invalid address.");
+        }
+
+        SlideSize levelSize = _levelDimensions[level];
+        long overlapLeft = column != 0 ? Overlap : 0;
+        long overlapTop = row != 0 ? Overlap : 0;
+        long overlapRight = column != grid.Columns - 1 ? Overlap : 0;
+        long overlapBottom = row != grid.Rows - 1 ? Overlap : 0;
+
+        long width = Math.Min(TileSize, levelSize.Width - ((long)TileSize * column)) + overlapLeft + overlapRight;
+        long height = Math.Min(TileSize, levelSize.Height - ((long)TileSize * row)) + overlapTop + overlapBottom;
+
+        int exponent = LevelCount - 1 - level;
+        long x = ((long)TileSize * column) - overlapLeft;
+        long y = ((long)TileSize * row) - overlapTop;
+        SourceRegion region = _geometry.Map(exponent, x, y, width, height);
+        return new TileInfo(
+            new TileRegion(region.X, region.Y, region.Level, region.Width, region.Height), (int)width, (int)height, exponent, x, y);
+    }
+
+    private readonly record struct TileInfo(TileRegion Region, int Width, int Height, int Exponent, long X, long Y);
 }

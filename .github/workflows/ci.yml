@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Stage native OpenSlide
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1
+      - name: Test
+        run: dotnet test OpenSlideSharp.slnx -c Release
+
+  omezarr-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Stage native OpenSlide
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install zarr-python and ome-zarr
+        run: pip install -r eng/requirements-interop.txt
+      - name: Export OME-Zarr stores
+        env:
+          OPENSLIDESHARP_INTEROP_DIR: ${{ runner.temp }}/omezarr
+        run: dotnet test OpenSlideSharp.slnx -c Release
+      - name: Read the stores with zarr-python and ome-zarr
+        run: python eng/verify-omezarr.py ${{ runner.temp }}/omezarr
+
+  bindings:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Generate bindings
+        shell: pwsh
+        run: ./eng/Generate-Bindings.ps1
+      - name: Verify generated bindings are committed
+        shell: pwsh
+        run: |
+          # Compare content (git diff normalizes line endings); git status can flag an unchanged file on a CRLF checkout.
+          git --no-pager diff --exit-code --stat src/OpenSlideSharp/Native
+          $diffCode = $LASTEXITCODE
+          $untracked = git ls-files --others --exclude-standard src/OpenSlideSharp/Native
+          if ($diffCode -ne 0 -or $untracked) {
+            git --no-pager diff src/OpenSlideSharp/Native | Select-Object -First 80
+            $untracked | ForEach-Object { Write-Host "untracked: $_" }
+            Write-Host "::error::Generated bindings differ from the committed ones: run eng/Generate-Bindings.ps1 and commit src/OpenSlideSharp/Native"
+            exit 1
+          }
+
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v6
+        with:
+          path: artifacts/downloads
+          key: openslide-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/openslide.json') }}
+      - name: Stage native OpenSlide for all platforms
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1 -Platform all
+      - name: Pack and smoke-test packages
+        shell: pwsh
+        run: ./eng/Test-Packages.ps1 -Version 0.0.0-ci.${{ github.run_number }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: artifacts/smoke-feed/*.nupkg
+          if-no-files-found: error
+
+  package-unix:
+    name: package-unix (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: artifacts/smoke-feed
+      - name: Smoke-test the packed packages
+        shell: pwsh
+        run: ./eng/Test-Packages.ps1 -SkipPack -Version 0.0.0-ci.${{ github.run_number }}

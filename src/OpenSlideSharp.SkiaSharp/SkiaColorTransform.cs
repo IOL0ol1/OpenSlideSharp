@@ -1,0 +1,211 @@
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using OpenSlideSharp.SkiaSharp.Internal;
+using SkiaSharp;
+
+namespace OpenSlideSharp.SkiaSharp;
+
+/// <summary>Creates <see cref="IColorTransform"/> instances that convert ICC profiles to sRGB with SkiaSharp.</summary>
+public static class SkiaColorTransform
+{
+    // One decision per slide: the core hands every tile the same backing array of the profile.
+    private static readonly ConditionalWeakTable<byte[], StrongBox<IColorTransform?>> Cache = new();
+
+    /// <summary>Creates a transform from an ICC profile to sRGB.</summary>
+    /// <remarks>
+    /// <para>
+    /// Only RGB profiles are converted: the data must hold a full 128-byte header whose data color space is
+    /// <c>'RGB '</c>. Skia would accept some others, but apply them wrongly (a gray profile) or not at all (CMYK).
+    /// </para>
+    /// <para>
+    /// Tier 1: a profile that Skia turns into a color space (matrix/TRC) is applied with <c>SKPixmap.ReadPixels</c>.
+    /// If that color space is sRGB, the transform leaves the pixels unchanged.
+    /// </para>
+    /// <para>
+    /// Tier 2: a lookup-table profile that Skia parses but cannot turn into a color space is applied by encoding
+    /// the pixels as an uncompressed PNG that carries the profile and decoding it to sRGB with
+    /// <see cref="SKCodec"/>. Only one kind is accepted: an A2B0 tag of type lutAtoBType (<c>'mAB '</c>) with a Lab
+    /// PCS, the case that matched LittleCMS within 1 level. The codec misreads the others. With an XYZ PCS it takes
+    /// 0xFFFF rather than 0x8000 as 1.0, in lut16 (<c>'mft2'</c>) and lutAtoBType alike, so white comes out as 188
+    /// instead of 255. For lut16 with a Lab PCS it reads the ICC v4 encoding rather than the v2 one lut16 keeps,
+    /// up to 7 levels off.
+    /// </para>
+    /// <para>
+    /// Tier 3: anything else, including lut8 (<c>'mft1'</c>), a missing A2B0 tag and a malformed tag table, is
+    /// not converted, and this method returns <see langword="null"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="iccProfile">The ICC profile bytes.</param>
+    /// <returns>
+    /// A thread-safe transform, or <see langword="null"/> if <paramref name="iccProfile"/> is empty, is not an RGB
+    /// profile, cannot be parsed by Skia, or is a lookup-table profile outside the tier-2 allow-list.
+    /// </returns>
+    public static IColorTransform? Create(ReadOnlyMemory<byte> iccProfile)
+    {
+        if (iccProfile.IsEmpty)
+        {
+            return null;
+        }
+
+        return CreateCore(iccProfile.ToArray());
+    }
+
+    /// <summary>Like <see cref="Create"/>, but remembers the result per backing array of the profile.</summary>
+    internal static IColorTransform? GetCached(ReadOnlyMemory<byte> iccProfile)
+    {
+        if (iccProfile.IsEmpty)
+        {
+            return null;
+        }
+
+        if (MemoryMarshal.TryGetArray(iccProfile, out ArraySegment<byte> segment)
+            && segment.Array is { } array && segment.Offset == 0 && segment.Count == array.Length)
+        {
+            return Cache.GetValue(array, a => new StrongBox<IColorTransform?>(CreateCore(a))).Value;
+        }
+
+        return CreateCore(iccProfile.ToArray());
+    }
+
+    private static IColorTransform? CreateCore(byte[] profile)
+    {
+        // The pixels are RGB. Skia also accepts other profiles: it applies a gray one to RGB pixels as a diagonal
+        // matrix (tier 1), and its PNG codec ignores a CMYK one (tier 2), so neither would convert correctly.
+        if (!IccProfileInfo.HasRgbDataColorSpace(profile))
+        {
+            return null;
+        }
+
+        // Never call SKColorSpace.CreateIcc(byte[]) directly: it throws on data that is not a profile.
+        using SKColorSpaceIccProfile? parsed = SKColorSpaceIccProfile.Create(profile);
+        if (parsed is null)
+        {
+            return null;
+        }
+
+        SKColorSpace? colorSpace = SKColorSpace.CreateIcc(parsed);
+        if (colorSpace is not null)
+        {
+            if (colorSpace.IsSrgb)
+            {
+                colorSpace.Dispose();
+                return NoOpTransform.Instance;
+            }
+
+            return new PixmapTransform(colorSpace);
+        }
+
+        // Tier 2 is an allow-list of what skcms, behind the PNG codec, was measured to convert like LittleCMS: an
+        // A2B0 lutAtoBType ('mAB ') with a Lab PCS. It reads XYZ PCS values with 0xFFFF as 1.0 instead of 0x8000
+        // (half the linear light, in lut16 and lutAtoBType alike), and lut16 Lab in the v4 encoding instead of the
+        // v2 one lut16 keeps (up to 7 levels off). Better not to convert than to convert wrongly.
+        if (!IccProfileInfo.IsLutAToBWithLabPcs(profile))
+        {
+            return null;
+        }
+
+        return new CodecTransform(profile);
+    }
+
+    // The profile is sRGB already: the pixels need no change.
+    internal sealed class NoOpTransform : IColorTransform
+    {
+        internal static readonly NoOpTransform Instance = new();
+
+        private NoOpTransform()
+        {
+        }
+
+        public void Apply(Span<byte> pixels, int width, int height)
+        {
+        }
+    }
+
+    // Level 1: Skia understands the profile as a color space (matrix/TRC).
+    private sealed class PixmapTransform : IColorTransform
+    {
+        private readonly SKColorSpace _source;
+
+        public PixmapTransform(SKColorSpace source) => _source = source;
+
+        public unsafe void Apply(Span<byte> pixels, int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            int stride = width * 4;
+            int length = checked(stride * height);
+            if (pixels.Length < length)
+            {
+                throw new ArgumentException("Pixel buffer is too small.", nameof(pixels));
+            }
+
+            byte[] converted = new byte[length];
+            fixed (byte* src = pixels)
+            fixed (byte* dst = converted)
+            {
+                var srcInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque, _source);
+                using var srgb = SKColorSpace.CreateSrgb();
+                var dstInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque, srgb);
+                using var pixmap = new SKPixmap(srcInfo, (IntPtr)src, stride);
+                if (!pixmap.ReadPixels(dstInfo, (IntPtr)dst, stride))
+                {
+                    throw new InvalidOperationException("Skia could not convert the pixels to sRGB.");
+                }
+            }
+
+            converted.AsSpan().CopyTo(pixels);
+        }
+    }
+
+    // Level 2: the profile is not a color space for Skia (e.g. LUT-only), but the PNG codec can still apply it.
+    internal sealed class CodecTransform : IColorTransform
+    {
+        // The compressed iCCP payload, built once: it is the same in every PNG.
+        private readonly byte[] _iccpData;
+
+        public CodecTransform(byte[] profile) => _iccpData = PngChunks.BuildIccpData(profile);
+
+        public unsafe void Apply(Span<byte> pixels, int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            int stride = width * 4;
+            int length = checked(stride * height);
+            if (pixels.Length < length)
+            {
+                throw new ArgumentException("Pixel buffer is too small.", nameof(pixels));
+            }
+
+            byte[] png = PngChunks.BuildRgbPng(pixels.Slice(0, length), width, height, _iccpData);
+            using SKData data = SKData.CreateCopy(png);
+            using SKCodec? codec = SKCodec.Create(data);
+            if (codec is null)
+            {
+                throw new InvalidOperationException("Skia could not read the intermediate PNG.");
+            }
+
+            byte[] converted = new byte[length];
+            using var srgb = SKColorSpace.CreateSrgb();
+            var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque, srgb);
+            SKCodecResult result;
+            fixed (byte* dst = converted)
+            {
+                result = codec.GetPixels(info, (IntPtr)dst, stride, SKCodecOptions.Default);
+            }
+
+            if (result != SKCodecResult.Success)
+            {
+                throw new InvalidOperationException("Skia could not convert the pixels to sRGB: " + result + ".");
+            }
+
+            converted.AsSpan().CopyTo(pixels);
+        }
+    }
+}

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net10.0;net48</TargetFrameworks>
+    <!--
+      net10.0 stays AnyCPU so the same build runs on x64 and arm64 hosts. net48 is x64 by default;
+      -p:SmokeAnyCpu=true leaves it at the SDK default (AnyCPU) to cover a plain .NET Framework console app.
+    -->
+    <PlatformTarget Condition="'$(TargetFramework)' == 'net48' and '$(SmokeAnyCpu)' != 'true'">x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <OpenSlideSharpVersion Condition="'$(OpenSlideSharpVersion)' == ''">0.0.0-local</OpenSlideSharpVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenSlideSharp" Version="$(OpenSlideSharpVersion)" />
+    <PackageReference Include="OpenSlideSharp.SkiaSharp" Version="$(OpenSlideSharpVersion)" />
+    <PackageReference Include="OpenSlideSharp.runtime" Version="$(OpenSlideSharpVersion)" Condition="'$(WithoutRuntime)' != 'true'" />
+  </ItemGroup>
+
+</Project>
