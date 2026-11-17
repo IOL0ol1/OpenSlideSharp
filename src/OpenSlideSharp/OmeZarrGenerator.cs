@@ -67,7 +67,8 @@ public sealed class OmeZarrOptions
 
     /// <summary>
     /// Gets or sets the width and height of a chunk, from 16 to 8192. The default is 512. Each chunk holds one
-    /// channel, so its shape is <c>1 x ChunkSize x ChunkSize</c>.
+    /// channel, so its shape is <c>1 x ChunkSize x ChunkSize</c>. Large chunks make the render cache large too;
+    /// see <see cref="RenderCacheSize"/>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is less than 16 or greater than 8192.</exception>
     public int ChunkSize
@@ -140,6 +141,13 @@ public sealed class OmeZarrOptions
     /// Gets or sets how many rendered chunk regions are kept, least recently used first out, so the three channels
     /// of a chunk are rendered once. 0 turns the cache off. The default is 16.
     /// </summary>
+    /// <remarks>
+    /// Each entry holds the BGRA pixels of one chunk, so a generator can keep up to about
+    /// <c>RenderCacheSize * ChunkSize * ChunkSize * 4</c> bytes alive for as long as it exists: 16 MiB with the
+    /// defaults, but 4 GiB with a <see cref="ChunkSize"/> of 8192 and 16 entries. Lower this value when using large
+    /// chunks or many generators. Reading the keys in <see cref="OmeZarrGenerator.EnumerateKeys"/> order needs
+    /// only one entry.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public int RenderCacheSize
     {
