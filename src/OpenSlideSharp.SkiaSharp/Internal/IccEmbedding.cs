@@ -7,6 +7,10 @@ namespace OpenSlideSharp.SkiaSharp.Internal;
 internal static class IccEmbedding
 {
     private const int MaxJpegSegmentData = 65519; // 65535 - 2 (length) - 12 (ICC_PROFILE\0) - 2 (sequence)
+    private const int MaxJpegSegments = 255;      // the sequence number and count are single bytes
+
+    /// <summary>Whether a profile of this many bytes fits in the APP2 segments of a JPEG.</summary>
+    public static bool FitsInJpeg(int profileLength) => profileLength <= MaxJpegSegments * MaxJpegSegmentData;
 
     public static byte[] EmbedJpeg(byte[] jpeg, byte[] profile)
     {
@@ -22,11 +26,12 @@ internal static class IccEmbedding
             pos += 2 + ((jpeg[pos + 2] << 8) | jpeg[pos + 3]);
         }
 
-        int count = Math.Max(1, (profile.Length + MaxJpegSegmentData - 1) / MaxJpegSegmentData);
-        if (count > 255)
+        if (!FitsInJpeg(profile.Length))
         {
             throw new ArgumentException("ICC profile is too large to embed in a JPEG.", nameof(profile));
         }
+
+        int count = Math.Max(1, (profile.Length + MaxJpegSegmentData - 1) / MaxJpegSegmentData);
 
         using var ms = new MemoryStream(jpeg.Length + profile.Length + count * 18);
         ms.Write(jpeg, 0, pos);

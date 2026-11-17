@@ -68,10 +68,18 @@ public static class PixelImageExtensions
     /// <param name="image">The image to encode.</param>
     /// <param name="format">The output format.</param>
     /// <param name="quality">Quality from 0 to 100; ignored for PNG.</param>
-    /// <param name="colorMode">How to treat the ICC profile of the image; see <see cref="ColorMode"/>.</param>
+    /// <param name="colorMode">
+    /// How to treat the ICC profile of the image; see <see cref="ColorMode"/>. With <see cref="ColorMode.Default"/>,
+    /// a profile that cannot be converted is embedded instead, unless it is too large for a JPEG (more than
+    /// 255 x 65519 bytes), in which case it is dropped.
+    /// </param>
     /// <returns>The encoded bytes. JPEG output is always opaque: transparent pixels are flattened on white.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="image"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="quality"/> is outside 0 to 100, or <paramref name="format"/> or <paramref name="colorMode"/> is not a defined value.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="colorMode"/> is <see cref="ColorMode.Embed"/>, <paramref name="format"/> is
+    /// <see cref="ImageFormat.Jpeg"/>, and the profile is larger than the 255 x 65519 bytes a JPEG can hold.
+    /// </exception>
     /// <exception cref="InvalidOperationException">Skia failed to encode the image.</exception>
     public static byte[] Encode(this PixelImage image, ImageFormat format, int quality = 75, ColorMode colorMode = ColorMode.Default)
     {
@@ -113,6 +121,11 @@ public static class PixelImageExtensions
                 else if (transform is not null)
                 {
                     source = ConvertToSrgb(source, transform);
+                    embed = false;
+                }
+                else if (format == ImageFormat.Jpeg && !IccEmbedding.FitsInJpeg(source.IccProfile.Length))
+                {
+                    // Default never fails because of the profile: one that a JPEG cannot hold is dropped.
                     embed = false;
                 }
             }
