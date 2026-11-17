@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -21,6 +22,7 @@
   <ItemGroup>
     <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Oracles\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Schemas\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Import Project="..\..\eng\OpenSlideNative.targets" />
