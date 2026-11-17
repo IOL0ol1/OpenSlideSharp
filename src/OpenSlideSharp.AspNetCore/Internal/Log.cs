@@ -19,4 +19,7 @@ internal static partial class Log
         LogLevel.Warning,
         "{FilePath}: {Image} has an ICC profile, which OME-Zarr cannot embed. OME-Zarr chunks keep the unconverted pixels and drop the profile.")]
     public static partial void OmeZarrCannotEmbedProfile(ILogger logger, string filePath, string image);
+
+    [LoggerMessage(4, LogLevel.Error, "{FilePath}: OpenSlide reported an error while serving {Request}; the slide is evicted from the cache.")]
+    public static partial void SlideError(ILogger logger, string filePath, string request, Exception exception);
 }
