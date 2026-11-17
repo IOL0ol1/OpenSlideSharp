@@ -190,6 +190,23 @@ public class EncodeTests
     }
 
     [Fact]
+    public void Encode_DefaultWithSrgbProfile_DropsProfileAndLeavesPixelsAlone()
+    {
+        // Premultiplied, half transparent: any conversion would unpremultiply the pixels itself, so only an
+        // untouched image encodes exactly like Ignore.
+        var bgra = new byte[] { 50, 100, 20, 200, 10, 20, 30, 40, 0, 0, 255, 255, 1, 2, 3, 3 };
+        var img = new PixelImage(2, 2, PixelFormat.Bgra32Premultiplied, bgra, Icc("srgb-matrix.icc"));
+
+        var png = img.Encode(ImageFormat.Png);
+        var jpeg = img.Encode(ImageFormat.Jpeg, 90);
+
+        Assert.DoesNotContain(PngChunks(png), c => c.Type == "iCCP");
+        Assert.Equal(img.Encode(ImageFormat.Png, colorMode: ColorMode.Ignore), png);
+        Assert.Empty(JpegIccProfile(jpeg));
+        Assert.Equal(img.Encode(ImageFormat.Jpeg, 90, ColorMode.Ignore), jpeg);
+    }
+
+    [Fact]
     public void Encode_Ignore_DropsProfile()
     {
         var img = Opaque(1, 1, new byte[] { 0, 0, 255, 255 }, Icc("swap-rb-matrix.icc"));

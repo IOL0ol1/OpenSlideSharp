@@ -104,7 +104,13 @@ public static class PixelImageExtensions
             if (colorMode == ColorMode.Default)
             {
                 IColorTransform? transform = SkiaColorTransform.GetCached(source.IccProfile);
-                if (transform is not null)
+                if (transform is SkiaColorTransform.NoOpTransform)
+                {
+                    // The profile is sRGB already: drop it and leave the pixels alone.
+                    source = new PixelImage(source.Width, source.Height, source.Format, source.Data);
+                    embed = false;
+                }
+                else if (transform is not null)
                 {
                     source = ConvertToSrgb(source, transform);
                     embed = false;
