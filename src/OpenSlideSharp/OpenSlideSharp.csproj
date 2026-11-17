@@ -1,18 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="$(SolutionDir)/OpenSlideSharp.Common.props" />
-  
   <PropertyGroup>
-    <TargetFrameworks>net35;netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;net10.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OpenSlideSharp</PackageId>
-    <PackageTags>openslide image</PackageTags>
-    <PackageReleaseNotes>.NET bindings for OpenSlide(https://openslide.org/), include DeepZoomGenerator</PackageReleaseNotes>
-    <Description>.NET bindings for OpenSlide(https://openslide.org/), include DeepZoomGenerator</Description>
-    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <Version>1.1.2</Version>
+    <Description>.NET bindings for OpenSlide 4.x (https://openslide.org/), with Deep Zoom and OME-Zarr generators.</Description>
   </PropertyGroup>
-  
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" />
+  </ItemGroup>
+
 </Project>
