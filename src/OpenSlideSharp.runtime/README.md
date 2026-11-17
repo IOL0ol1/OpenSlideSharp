@@ -6,6 +6,10 @@ Supported runtime identifiers: `win-x64`, `linux-x64`, `linux-arm64`, `osx-arm64
 
 Reference this package next to `OpenSlideSharp`; the native library is then copied to your output automatically.
 
+## .NET Framework
+
+OpenSlide ships Windows binaries for x64 only, so a .NET Framework app must run as a 64-bit process. Use `PlatformTarget` `x64`, or `AnyCPU` without `Prefer32Bit` (the SDK-style project default). An exe built as `x86`, or as `AnyCPU` with `Prefer32Bit` set to `true`, gets build warning `OPENSLIDE001` and cannot load the library at run time.
+
 ## Licensing
 
 This package is licensed under LGPL-2.1-only because it redistributes OpenSlide and its dependencies, each under its own license. See `licenses/` and `VERSIONS.md` inside the package for the exact components and versions. The corresponding source is the openslide-bin source tarball of the same version.

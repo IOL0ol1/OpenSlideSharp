@@ -1,7 +1,8 @@
 #requires -Version 7
 <#
 Packs OpenSlideSharp and OpenSlideSharp.runtime into artifacts/smoke-feed and
-proves the nupkgs work for real consumers (net10.0, net48, and no-runtime).
+proves the nupkgs work for real consumers (net10.0, net48 x64 and AnyCPU,
+no-runtime, and a Visual Studio C++ project), plus the 32-bit build warning.
 
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
@@ -103,14 +104,56 @@ if ($coreMeta.SelectNodes("//*[local-name()='dependency'][@id='OpenSlideSharp.ru
 # 3. Consume the packages from an isolated global cache.
 $env:NUGET_PACKAGES = Join-Path $artifacts 'smoke-packages'
 
-function Invoke-Smoke {
-    param([string]$Name, [string]$Tfm, [string[]]$Extra, [int]$ExpectedExit, [string]$ExpectedText)
-    Write-Host "== smoke: $Name ($Tfm)"
+# Builds the smoke project; returns the output folder and the captured build log.
+function Build-Smoke {
+    param([string]$Name, [string]$Tfm, [string[]]$Extra)
     $out = Join-Path $artifacts "smoke/$Name"
-    Invoke-Native dotnet (@('build', $smokeProj, '-c', 'Release', '-f', $Tfm, '--artifacts-path', $out, "-p:OpenSlideSharpVersion=$Version") + $Extra)
-    $bin = Join-Path $out "bin/PackageSmoke/release_$Tfm"
-    if ($Tfm -eq 'net48') { $output = & (Join-Path $bin 'PackageSmoke.exe') $fixture 2>&1 }
-    else { $output = & dotnet (Join-Path $bin 'PackageSmoke.dll') $fixture 2>&1 }
+    $log = & dotnet (@('build', $smokeProj, '-c', 'Release', '-f', $Tfm, '--artifacts-path', $out, "-p:OpenSlideSharpVersion=$Version") + $Extra) 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    Write-Host $log
+    if ($code -ne 0) { throw "[$Name] dotnet build failed with exit code $code" }
+    return [pscustomobject]@{ Bin = (Join-Path $out "bin/PackageSmoke/release_$Tfm"); Log = $log }
+}
+
+# Reads the target architecture a managed assembly was compiled for: x64, x86, anycpu or anycpu32bitpreferred.
+function Get-AssemblyArch([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $pe = [Reflection.PortableExecutable.PEReader]::new($stream)
+        try {
+            $machine = $pe.PEHeaders.CoffHeader.Machine
+            $flags = $pe.PEHeaders.CorHeader.Flags
+            if ($machine -eq [Reflection.PortableExecutable.Machine]::Amd64) { return 'x64' }
+            if ($machine -ne [Reflection.PortableExecutable.Machine]::I386) { return "$machine" }
+            if ($flags.HasFlag([Reflection.PortableExecutable.CorFlags]::Requires32Bit)) { return 'x86' }
+            if ($flags.HasFlag([Reflection.PortableExecutable.CorFlags]::Prefers32Bit)) { return 'anycpu32bitpreferred' }
+            return 'anycpu'
+        }
+        finally { $pe.Dispose() }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Invoke-Smoke {
+    param([string]$Name, [string]$Tfm, [string[]]$Extra, [string]$ExpectedArch, [int]$ExpectedExit, [string]$ExpectedText)
+    Write-Host "== smoke: $Name ($Tfm)"
+    $build = Build-Smoke -Name $Name -Tfm $Tfm -Extra $Extra
+    if ($build.Log -match 'OPENSLIDE001') { throw "[$Name] unexpected 32-bit process warning OPENSLIDE001" }
+    $bin = $build.Bin
+    $assembly = Join-Path $bin $(if ($Tfm -eq 'net48') { 'PackageSmoke.exe' } else { 'PackageSmoke.dll' })
+    $arch = Get-AssemblyArch $assembly
+    Write-Host "assembly architecture: $arch"
+    if ($arch -ne $ExpectedArch) { throw "[$Name] expected a(n) $ExpectedArch assembly, got $arch" }
+    if ($Tfm -eq 'net48') {
+        # Exactly one copy, beside the exe: NuGet's x64 RID copy and the package targets must never both apply.
+        $dlls = @(Get-ChildItem $bin -Recurse -Filter 'libopenslide-1.dll')
+        $dlls | ForEach-Object { Write-Host "native: $($_.FullName)" }
+        if ($dlls.Count -ne 1 -or $dlls[0].DirectoryName -ne [IO.Path]::GetFullPath($bin)) {
+            throw "[$Name] expected exactly one libopenslide-1.dll directly in $bin, found $($dlls.Count)"
+        }
+        $output = & $assembly $fixture 2>&1
+    }
+    else { $output = & dotnet $assembly $fixture 2>&1 }
     $code = $LASTEXITCODE
     $text = ($output | Out-String)
     Write-Host $text
@@ -119,14 +162,22 @@ function Invoke-Smoke {
     Write-Host "PASS: $Name"
 }
 
-$tfms = @('net10.0')
-if ($IsWindows) { $tfms += 'net48' }
-foreach ($tfm in $tfms) {
-    Invoke-Smoke -Name $tfm -Tfm $tfm -Extra @() -ExpectedExit 0 -ExpectedText 'vendor=aperio'
+# The net10.0 assembly must stay AnyCPU so it also runs on arm64 hosts.
+Invoke-Smoke -Name 'net10.0' -Tfm 'net10.0' -Extra @() -ExpectedArch 'anycpu' -ExpectedExit 0 -ExpectedText 'vendor=aperio'
+if ($IsWindows) {
+    Invoke-Smoke -Name 'net48' -Tfm 'net48' -Extra @() -ExpectedArch 'x64' -ExpectedExit 0 -ExpectedText 'vendor=aperio'
+    # A default .NET Framework console app: AnyCPU, for which the SDK infers the win-x86 RuntimeIdentifier.
+    Invoke-Smoke -Name 'net48-anycpu' -Tfm 'net48' -Extra @('-p:SmokeAnyCpu=true') -ExpectedArch 'anycpu' -ExpectedExit 0 -ExpectedText 'vendor=aperio'
+
+    # A 32-bit .NET Framework exe cannot load the x64 library: the build must warn. Build only, never run it.
+    Write-Host '== smoke: net48-x86 (build only, expects warning OPENSLIDE001)'
+    $build = Build-Smoke -Name 'net48-x86' -Tfm 'net48' -Extra @('-p:PlatformTarget=x86')
+    if ($build.Log -notmatch 'OPENSLIDE001: .*x64 only') { throw "[net48-x86] build output lacks warning OPENSLIDE001" }
+    Write-Host 'PASS: net48-x86 warns'
 }
 
 # 4. Without the runtime package the core must explain what is missing.
-Invoke-Smoke -Name 'no-runtime' -Tfm 'net10.0' -Extra @('-p:WithoutRuntime=true') -ExpectedExit 3 -ExpectedText 'OpenSlideSharp.runtime'
+Invoke-Smoke -Name 'no-runtime' -Tfm 'net10.0' -Extra @('-p:WithoutRuntime=true') -ExpectedArch 'anycpu' -ExpectedExit 3 -ExpectedText 'OpenSlideSharp.runtime'
 
 # 5. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
 if ($IsWindows) {
