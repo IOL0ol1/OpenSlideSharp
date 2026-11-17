@@ -34,39 +34,43 @@ internal static class ExportSupport
     public static bool IsExportError(Exception ex)
         => ex is OpenSlideException or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException;
 
-    /// <summary>Deletes the output file at <paramref name="path"/>, if there is one, before an export writes it again.</summary>
-    /// <exception cref="IOException">A directory has that name.</exception>
-    public static void DeleteFile(string path)
+    /// <summary>
+    /// The empty file the tool writes first into every output directory it creates. A later export deletes an existing
+    /// directory only if it holds this file (or is empty), so it never deletes a directory it did not write.
+    /// </summary>
+    public const string MarkerFileName = ".openslide-sharp-output";
+
+    /// <summary>
+    /// Checks that the output file <paramref name="path"/> may be overwritten: it is not a directory and not the slide.
+    /// An existing file is otherwise one the tool wrote before (a <c>.dzi</c>), so it may be replaced.
+    /// </summary>
+    /// <exception cref="IOException">It may not.</exception>
+    public static void EnsureReplaceableFile(string path, string slide)
     {
-        if (Directory.Exists(path))
+        string full = Path.GetFullPath(path);
+        if (Directory.Exists(full))
         {
-            throw new IOException($"Refusing to replace '{Path.GetFullPath(path)}': it is a directory.");
+            throw new IOException($"Refusing to replace '{full}': it is a directory.");
         }
 
-        File.Delete(path);
+        if (string.Equals(full, Path.GetFullPath(slide), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new IOException($"Refusing to replace '{full}': it is the slide.");
+        }
     }
 
     /// <summary>
-    /// Deletes the output directory at <paramref name="path"/>, if there is one, before an export writes it again; a
-    /// file with that name is deleted too.
+    /// Checks that the output directory <paramref name="path"/> may be created, or replaced if it exists, without
+    /// deleting anything: see <see cref="PrepareDirectory"/>.
     /// </summary>
-    /// <param name="path">The directory.</param>
-    /// <param name="slide">The slide file, which must not be inside.</param>
-    /// <param name="isOutput">
-    /// Tells whether a top-level entry of the directory is one the export writes. The directory is deleted only if all
-    /// of them are, so that a mistyped <c>-o</c>, or a slide's own data directory (MIRAX keeps <c>name.mrxs</c> next to
-    /// <c>name/</c>), is never deleted.
-    /// </param>
-    /// <exception cref="IOException">
-    /// The directory holds something else, is a root directory, or holds the current directory or the slide.
-    /// </exception>
-    public static void ReplaceDirectory(string path, string slide, Func<FileSystemInfo, bool> isOutput)
+    /// <exception cref="IOException">It may not.</exception>
+    public static void EnsureReplaceableDirectory(string path, string slide)
     {
         string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         if (File.Exists(full))
         {
-            File.Delete(full);
-            return;
+            // For example the slide itself: -r names its directory after the slide without its extension.
+            throw new IOException($"Refusing to write the output directory '{full}': a file has that name.");
         }
 
         if (!Directory.Exists(full))
@@ -74,30 +78,55 @@ internal static class ExportSupport
             return;
         }
 
+        // Defense in depth: none of these should ever hold a marker, but they must never be deleted.
+        string slideFull = Path.GetFullPath(slide);
         bool isRoot = string.Equals(Path.GetPathRoot(full), full, StringComparison.OrdinalIgnoreCase);
-        if (isRoot || IsSameOrInside(Environment.CurrentDirectory, full) || IsSameOrInside(slide, full))
+        if (isRoot || IsSameOrInside(Environment.CurrentDirectory, full) || IsSameOrInside(slideFull, full))
         {
             throw new IOException($"Refusing to replace '{full}': it is a root directory, or holds the current directory or the slide.");
         }
 
-        foreach (FileSystemInfo entry in new DirectoryInfo(full).EnumerateFileSystemInfos())
+        // MIRAX keeps name.mrxs next to a name/ directory with the slide data.
+        if (string.Equals(Path.GetExtension(slideFull), ".mrxs", StringComparison.OrdinalIgnoreCase))
         {
-            if (!isOutput(entry) && !IsTempFile(entry))
+            string data = Path.Combine(Path.GetDirectoryName(slideFull) ?? string.Empty, Path.GetFileNameWithoutExtension(slideFull));
+            if (IsSameOrInside(data, full))
             {
-                throw new IOException(
-                    $"Refusing to replace '{full}': it holds '{entry.Name}', which openslide-sharp does not write. Remove it or choose another output.");
+                throw new IOException($"Refusing to replace '{full}': it holds the data directory of the slide.");
             }
         }
 
-        Directory.Delete(full, recursive: true);
+        if (!File.Exists(Path.Combine(full, MarkerFileName)) && Directory.EnumerateFileSystemEntries(full).Any())
+        {
+            throw new IOException(
+                $"Refusing to replace '{full}': it is not empty and has no {MarkerFileName} file, so openslide-sharp did not write it. " +
+                "Remove it or choose another output.");
+        }
     }
 
-    /// <summary>True for a directory named by a non-negative number: a Deep Zoom level or an OME-Zarr level.</summary>
-    public static bool IsNumberedDirectory(FileSystemInfo entry)
-        => entry is DirectoryInfo && entry.Name.Length > 0 && entry.Name.All(char.IsAsciiDigit);
+    /// <summary>
+    /// Makes <paramref name="path"/> a new, empty output directory holding only the marker file, written first.
+    /// </summary>
+    /// <remarks>
+    /// An existing directory is replaced only if it holds the marker (an earlier output, complete or not) or is empty.
+    /// Nothing is deleted if a file has that name (such as the slide), or if the directory has no marker, is a root
+    /// directory, holds the current directory or the slide, or holds a MIRAX slide's data directory.
+    /// </remarks>
+    /// <param name="path">The output directory.</param>
+    /// <param name="slide">The slide being exported.</param>
+    /// <exception cref="IOException">The directory may not be replaced.</exception>
+    public static void PrepareDirectory(string path, string slide)
+    {
+        EnsureReplaceableDirectory(path, slide);
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (File.Exists(Path.Combine(full, MarkerFileName)))
+        {
+            Directory.Delete(full, recursive: true);
+        }
 
-    private static bool IsTempFile(FileSystemInfo entry)
-        => entry is FileInfo && entry.Name.StartsWith('.') && entry.Name.EndsWith(".tmp", StringComparison.Ordinal);
+        Directory.CreateDirectory(full);
+        File.WriteAllBytes(Path.Combine(full, MarkerFileName), []);
+    }
 
     /// <summary>
     /// The Deep Zoom color rule for one image (the slide or an associated image, each with its own profile): the

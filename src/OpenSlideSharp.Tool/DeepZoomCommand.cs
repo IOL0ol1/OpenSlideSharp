@@ -112,16 +112,12 @@ internal static class DeepZoomCommand
 
         if (!args.Viewer)
         {
-            // Remove the old DZI first: a run that stops early must not leave it pointing at a partial tree.
-            ExportSupport.DeleteFile(name + ".dzi");
-            ExportSupport.ReplaceDirectory(name + "_files", args.Slide, ExportSupport.IsNumberedDirectory);
             await ExportImageAsync(writer, CreateGenerator(slide, null, args, stderr), name, ViewerWriter.SlideName, args, ct)
                 .ConfigureAwait(false);
             return;
         }
 
-        ExportSupport.ReplaceDirectory(name, args.Slide, IsViewerOutput);
-        Directory.CreateDirectory(name);
+        ExportSupport.PrepareDirectory(name, args.Slide);
 
         var dziData = new Dictionary<string, string>(StringComparer.Ordinal);
         var slideImage = CreateGenerator(slide, null, args, stderr);
@@ -142,14 +138,6 @@ internal static class DeepZoomCommand
         writer.WriteFile(Path.Combine(name, "index.html"), Encoding.UTF8.GetBytes(html));
         ViewerWriter.WriteStatic(writer, Path.Combine(name, "static"));
     }
-
-    // What -r writes at the top of its directory: index.html, static/, and a .dzi file and _files/ directory per image.
-    private static bool IsViewerOutput(FileSystemInfo entry) => entry switch
-    {
-        FileInfo file => file.Name is "index.html" || file.Name.EndsWith(".dzi", StringComparison.Ordinal),
-        DirectoryInfo directory => directory.Name is "static" || directory.Name.EndsWith("_files", StringComparison.Ordinal),
-        _ => false,
-    };
 
     private static (DeepZoomGenerator Generator, ColorMode EncodeMode) CreateGenerator(
         OpenSlide slide, string? associated, DeepZoomArguments args, TextWriter stderr)
@@ -178,7 +166,15 @@ internal static class DeepZoomCommand
     {
         DeepZoomGenerator generator = image.Generator;
         string extension = args.Format == ImageFormat.Png ? "png" : "jpeg";
+        string dziPath = basePath + ".dzi";
         string files = basePath + "_files";
+
+        // Check both before changing anything. The old DZI goes first: an export that stops early must not leave it
+        // pointing at a partial tree.
+        ExportSupport.EnsureReplaceableFile(dziPath, args.Slide);
+        ExportSupport.PrepareDirectory(files, args.Slide);
+        File.Delete(dziPath);
+
         var levels = new string[generator.LevelCount];
         for (int level = 0; level < levels.Length; level++)
         {
@@ -214,7 +210,7 @@ internal static class DeepZoomCommand
             ct).ConfigureAwait(false);
 
         string dzi = generator.GetDzi(extension);
-        writer.WriteFile(basePath + ".dzi", Encoding.UTF8.GetBytes(dzi));
+        writer.WriteFile(dziPath, Encoding.UTF8.GetBytes(dzi));
         return dzi;
     }
 }

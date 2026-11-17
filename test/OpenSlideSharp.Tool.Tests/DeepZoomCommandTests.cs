@@ -15,6 +15,8 @@ namespace OpenSlideSharp.Tool.Tests;
 
 public class DeepZoomCommandTests
 {
+    private const string Marker = ".openslide-sharp-output";
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -33,9 +35,14 @@ public class DeepZoomCommandTests
         Assert.Equal(generator.GetDzi("jpeg"), File.ReadAllText(output + ".dzi"));
 
         string files = output + "_files";
-        string[] tiles = Directory.GetFiles(files, "*", SearchOption.AllDirectories);
+        string[] tiles = Directory.GetFiles(files, "*.jpeg", SearchOption.AllDirectories);
         Assert.Equal(generator.TileCount, tiles.Length);
         Assert.Equal(11, tiles.Length);
+
+        // Besides the tiles, only the marker that lets a later run replace the directory.
+        Assert.Equal(
+            new[] { Path.Combine(files, Marker) },
+            Directory.GetFiles(files, "*", SearchOption.AllDirectories).Except(tiles));
         Assert.Equal(
             Enumerable.Range(0, 10).Select(i => i.ToString(CultureInfo.InvariantCulture)),
             Directory.GetDirectories(files).Select(Path.GetFileName).OrderBy(n => int.Parse(n!, CultureInfo.InvariantCulture)));
@@ -67,7 +74,9 @@ public class DeepZoomCommandTests
 
         Assert.Equal(0, code);
         Assert.Contains("Format=\"png\"", File.ReadAllText(output + ".dzi"), StringComparison.Ordinal);
-        string[] tiles = Directory.GetFiles(output + "_files", "*", SearchOption.AllDirectories);
+        string[] tiles = Directory.GetFiles(output + "_files", "*", SearchOption.AllDirectories)
+            .Where(f => Path.GetFileName(f) != Marker)
+            .ToArray();
         Assert.Equal(11, tiles.Length);
         Assert.All(tiles, t => Assert.Equal(".png", Path.GetExtension(t)));
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, File.ReadAllBytes(tiles[0])[..4]);
@@ -139,18 +148,21 @@ public class DeepZoomCommandTests
     {
         using var temp = new TempDirectory();
         string output = temp.Combine("boxes");
+        var args = new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = output };
+        Assert.Equal(0, await DeepZoomCommand.RunAsync(args, new StringWriter(), Token));
+        Assert.True(File.Exists(Path.Combine(output + "_files", Marker)));
         string stale = Path.Combine(output + "_files", "99", "stale.jpeg");
         Directory.CreateDirectory(Path.GetDirectoryName(stale)!);
         File.WriteAllText(stale, "stale");
         File.WriteAllText(output + ".dzi", "stale");
 
-        int code = await DeepZoomCommand.RunAsync(
-            new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = output }, new StringWriter(), Token);
+        int code = await DeepZoomCommand.RunAsync(args, new StringWriter(), Token);
 
         Assert.Equal(0, code);
         Assert.False(File.Exists(stale));
         Assert.False(Directory.Exists(Path.Combine(output + "_files", "99")));
-        Assert.Equal(11, Directory.GetFiles(output + "_files", "*", SearchOption.AllDirectories).Length);
+        Assert.Equal(11, Directory.GetFiles(output + "_files", "*.jpeg", SearchOption.AllDirectories).Length);
+        Assert.True(File.Exists(Path.Combine(output + "_files", Marker)));
         Assert.StartsWith("<Image ", File.ReadAllText(output + ".dzi"), StringComparison.Ordinal);
     }
 
@@ -159,16 +171,21 @@ public class DeepZoomCommandTests
     {
         using var temp = new TempDirectory();
         string output = temp.Combine("boxes");
+        var args = new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = output, Viewer = true };
+        Assert.Equal(0, await DeepZoomCommand.RunAsync(args, new StringWriter(), Token));
+        Assert.True(File.Exists(Path.Combine(output, Marker)));
         string stale = Path.Combine(output, "old_files", "0", "0_0.jpeg");
         Directory.CreateDirectory(Path.GetDirectoryName(stale)!);
         File.WriteAllText(stale, "stale");
+        File.WriteAllText(Path.Combine(output, "notes.txt"), "part of the earlier output now");
 
-        int code = await DeepZoomCommand.RunAsync(
-            new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = output, Viewer = true }, new StringWriter(), Token);
+        int code = await DeepZoomCommand.RunAsync(args, new StringWriter(), Token);
 
         Assert.Equal(0, code);
         Assert.False(Directory.Exists(Path.Combine(output, "old_files")));
+        Assert.False(File.Exists(Path.Combine(output, "notes.txt")));
         Assert.True(File.Exists(Path.Combine(output, "index.html")));
+        Assert.True(File.Exists(Path.Combine(output, Marker)));
     }
 
     [Fact]
@@ -186,13 +203,14 @@ public class DeepZoomCommandTests
             new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = output, Viewer = true }, stderr, Token);
 
         Assert.Equal(1, code);
-        Assert.Contains("Slidedat.ini", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains(Marker, stderr.ToString(), StringComparison.Ordinal);
         Assert.Equal(new[] { foreign }, Directory.GetFileSystemEntries(output));
     }
 
     [Theory]
     [InlineData("deepzoom")]
     [InlineData("omezarr")]
+    [InlineData("omezarr-0.4")]
     public async Task Export_Cancellation_LeavesNoPartialFiles(string command)
     {
         using var temp = new TempDirectory();
@@ -211,7 +229,14 @@ public class DeepZoomCommandTests
                 stderr,
                 cts.Token)
             : await OmeZarrCommand.RunAsync(
-                new OmeZarrArguments(TestFiles.Get("boxes.tiff")) { Output = temp.Combine("boxes.zarr"), ChunkSize = 16, Jobs = 2, FileWritten = Cancel },
+                new OmeZarrArguments(TestFiles.Get("boxes.tiff"))
+                {
+                    Output = temp.Combine("boxes.zarr"),
+                    Version = command == "omezarr-0.4" ? NgffVersion.V0_4 : NgffVersion.V0_5,
+                    ChunkSize = 16,
+                    Jobs = 2,
+                    FileWritten = Cancel,
+                },
                 stderr,
                 cts.Token);
 
@@ -220,11 +245,14 @@ public class DeepZoomCommandTests
         string[] files = Directory.GetFiles(temp.Path, "*", SearchOption.AllDirectories);
         Assert.NotEmpty(files);
         Assert.DoesNotContain(files, f => f.EndsWith(".tmp", StringComparison.Ordinal));
-        Assert.All(files, f => Assert.NotEqual(0, new FileInfo(f).Length));
+        Assert.All(files.Where(f => Path.GetFileName(f) != Marker), f => Assert.NotEqual(0, new FileInfo(f).Length));
 
-        // The metadata is written last, so an interrupted export is not mistaken for a complete one.
+        // The DZI and the root metadata are written last, so an interrupted export is not mistaken for a complete one.
         Assert.False(File.Exists(temp.Combine("boxes.dzi")));
-        Assert.False(File.Exists(Path.Combine(temp.Combine("boxes.zarr"), "zarr.json")));
+        foreach (string rootMetadata in new[] { "zarr.json", ".zgroup", ".zattrs" })
+        {
+            Assert.False(File.Exists(Path.Combine(temp.Combine("boxes.zarr"), rootMetadata)), rootMetadata);
+        }
     }
 
     [Fact]

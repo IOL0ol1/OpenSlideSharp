@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OpenSlideSharp.SkiaSharp;
@@ -107,6 +108,14 @@ internal static class OmeZarrCommand
         string stem = Path.GetFileNameWithoutExtension(args.Slide);
         string output = Path.TrimEndingDirectorySeparator(Path.GetFullPath(args.Output ?? stem + ".zarr"));
         var writer = new TileWriter(args.Jobs, stderr, args.FileWritten);
+        string directory = Path.Combine(Path.GetDirectoryName(output) ?? output, stem + "_associated");
+
+        // Check every output directory before changing anything.
+        ExportSupport.EnsureReplaceableDirectory(output, args.Slide);
+        if (args.Associated)
+        {
+            ExportSupport.EnsureReplaceableDirectory(directory, args.Slide);
+        }
 
         IColorTransform? transform = ExportSupport.OmeZarrColor(
             slide.ColorProfile, args.ColorMode, ExportSupport.Describe(args.Slide, null), stderr);
@@ -118,9 +127,7 @@ internal static class OmeZarrCommand
             return;
         }
 
-        string directory = Path.Combine(Path.GetDirectoryName(output) ?? output, stem + "_associated");
-        ExportSupport.ReplaceDirectory(
-            directory, args.Slide, entry => entry is DirectoryInfo && entry.Name.EndsWith(".zarr", StringComparison.Ordinal));
+        ExportSupport.PrepareDirectory(directory, args.Slide);
         foreach ((string name, string slug) in ViewerWriter.AssignSlugs(slide.AssociatedImages.Keys))
         {
             AssociatedImage image = slide.AssociatedImages[name];
@@ -147,17 +154,13 @@ internal static class OmeZarrCommand
         RenderCacheSize = (int)Math.Clamp(2L * args.Jobs, new OmeZarrOptions().RenderCacheSize, 4096),
     };
 
-    // What a store holds at its top: the group metadata of either Zarr version and the level directories.
-    private static bool IsStoreOutput(FileSystemInfo entry)
-        => entry is FileInfo { Name: "zarr.json" or ".zgroup" or ".zattrs" } || ExportSupport.IsNumberedDirectory(entry);
-
-    // Writes the chunks, then the metadata, so that a store whose export stopped early is not taken for a complete
-    // one. The chunks go out region by region, the channels of a region together, so one render serves all three.
+    // Writes the chunks, then the level metadata, then the root metadata, so that a store whose export stopped early
+    // has no root metadata and is not taken for a complete one. The chunks go out region by region, the channels of a
+    // region together, so one render serves all three.
     private static async Task ExportStoreAsync(
         TileWriter writer, OmeZarrGenerator generator, string store, string displayName, OmeZarrArguments args, CancellationToken ct)
     {
-        ExportSupport.ReplaceDirectory(store, args.Slide, IsStoreOutput);
-        Directory.CreateDirectory(store);
+        ExportSupport.PrepareDirectory(store, args.Slide);
 
         long total = 0;
         foreach (string _ in generator.EnumerateKeys())
@@ -218,11 +221,14 @@ internal static class OmeZarrCommand
             },
             ct).ConfigureAwait(false);
 
-        await writer.RunAsync(progress, metadata, (key, _) =>
+        // One after the other, after every chunk: each level's array metadata, then the root group metadata
+        // (zarr.json for 0.5, .zgroup and .zattrs for 0.4), the only keys without a '/'.
+        foreach (string key in metadata.Where(k => k.Contains('/')).Concat(metadata.Where(k => !k.Contains('/'))))
         {
+            ct.ThrowIfCancellationRequested();
             WriteEntry(writer, generator, store, key);
-            return 1;
-        }, ct).ConfigureAwait(false);
+            progress.Add(1);
+        }
     }
 
     private static void WriteEntry(TileWriter writer, OmeZarrGenerator generator, string store, string key)
