@@ -34,14 +34,9 @@ internal static class LanczosResampler
         if (needH) ksizeH = PrecomputeCoeffs(sourceWidth, width, out boundsH, out kernelH);
         if (needV) ksizeV = PrecomputeCoeffs(sourceHeight, height, out boundsV, out kernelV);
 
-        // Rows of the source that the vertical pass uses.
-        int firstRow = 0, lastRow = sourceHeight;
-        if (needV)
-        {
-            firstRow = boundsV[0];
-            lastRow = boundsV[(height - 1) * 2] + boundsV[(height - 1) * 2 + 1];
-            for (int i = 0; i < height; i++) boundsV[i * 2] -= firstRow;
-        }
+        // Pillow 13 (ImagingResampleInner): if the height shrinks by more than twice the amount the width does,
+        // the vertical pass runs first, which changes the 8-bit rounding of the intermediate image.
+        bool horizontalFirst = !(sourceHeight - height > 0 && sourceHeight - height > (sourceWidth - width) * 2);
 
         if (!needV)
         {
@@ -49,13 +44,26 @@ internal static class LanczosResampler
             return;
         }
 
-        int rows = lastRow - firstRow;
         if (!needH)
         {
-            Vertical(source.Slice(firstRow * sourceWidth * Channels), width, destination, height, boundsV, kernelV, ksizeV);
+            Vertical(source, sourceWidth, destination, height, boundsV, kernelV, ksizeV);
             return;
         }
 
+        if (!horizontalFirst)
+        {
+            byte[] tempV = new byte[(long)height * sourceWidth * Channels];
+            Vertical(source, sourceWidth, tempV, height, boundsV, kernelV, ksizeV);
+            Horizontal(tempV, sourceWidth, destination, width, 0, height, boundsH, kernelH, ksizeH);
+            return;
+        }
+
+        // Rows of the source that the vertical pass uses.
+        int firstRow = boundsV[0];
+        int lastRow = boundsV[(height - 1) * 2] + boundsV[(height - 1) * 2 + 1];
+        for (int i = 0; i < height; i++) boundsV[i * 2] -= firstRow;
+
+        int rows = lastRow - firstRow;
         byte[] temp = new byte[(long)rows * width * Channels];
         Horizontal(source, sourceWidth, temp, width, firstRow, lastRow, boundsH, kernelH, ksizeH);
         Vertical(temp, width, destination, height, boundsV, kernelV, ksizeV);

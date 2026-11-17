@@ -10,6 +10,8 @@ public sealed class DeepZoomOracle
 
     public List<GeometryOracle> Geometry { get; set; } = new();
 
+    public List<TileOracle> Tiles { get; set; } = new();
+
     /// <summary>Parses deepzoom.json once per test run; callers must not modify the result.</summary>
     public static DeepZoomOracle Load() => Cached.Value;
 }
@@ -58,4 +60,32 @@ public sealed class LevelOracle
 
     /// <summary>Each entry is <c>[col, row, x, y, slideLevel, w, h, tileW, tileH]</c>.</summary>
     public long[][] TileInfo { get; set; } = Array.Empty<long[]>();
+}
+
+public sealed class TileOracle
+{
+    /// <summary>A fixture file name, or <c>file#name</c> for an associated image of that file.</summary>
+    public string Source { get; set; } = "";
+
+    public string Kind { get; set; } = "";
+
+    public int TileSize { get; set; }
+
+    public int Overlap { get; set; }
+
+    public int Level { get; set; }
+
+    public long Col { get; set; }
+
+    public long Row { get; set; }
+
+    public int[] ExpectedSize { get; set; } = Array.Empty<int>();
+
+    public int[] PythonSize { get; set; } = Array.Empty<int>();
+
+    public bool Exact { get; set; }
+
+    public int IccLength { get; set; }
+
+    public string File { get; set; } = "";
 }
