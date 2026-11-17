@@ -7,6 +7,7 @@ internal static class Program
     {
         try
         {
+            Console.WriteLine("process=" + (Environment.Is64BitProcess ? "64-bit" : "32-bit"));
             Console.WriteLine("version=" + OpenSlideLibrary.Version);
             using var slide = OpenSlide.Open(args[0]);
             Console.WriteLine("vendor=" + slide.Properties[OpenSlideProperties.Vendor]);
