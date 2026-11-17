@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -10,6 +11,8 @@ namespace OpenSlideSharp.Tool.Tests;
 
 public class OmeZarrCommandTests
 {
+    private const string Marker = ".openslide-sharp-output";
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -45,7 +48,9 @@ public class OmeZarrCommandTests
             Assert.Equal(expected, File.ReadAllBytes(file));
         }
 
-        Assert.Equal(keys.Length, Directory.GetFiles(output, "*", SearchOption.AllDirectories).Length);
+        // Besides the keys, only the marker that lets a later run replace the store.
+        Assert.Equal(keys.Length + 1, Directory.GetFiles(output, "*", SearchOption.AllDirectories).Length);
+        Assert.True(File.Exists(Path.Combine(output, Marker)));
         Assert.Contains($"Tiling slide: {keys.Length}/{keys.Length} tiles", stderr.ToString(), StringComparison.Ordinal);
     }
 
@@ -62,6 +67,8 @@ public class OmeZarrCommandTests
         Assert.True(File.Exists(Path.Combine(output, "zarr.json")));
         Assert.True(File.Exists(temp.Combine(Path.Combine("small_associated", "thumbnail.zarr", "zarr.json"))));
         Assert.True(File.Exists(temp.Combine(Path.Combine("small_associated", "thumbnail.zarr", "0", "zarr.json"))));
+        Assert.True(File.Exists(temp.Combine(Path.Combine("small_associated", Marker))));
+        Assert.True(File.Exists(temp.Combine(Path.Combine("small_associated", "thumbnail.zarr", Marker))));
     }
 
     [Fact]
@@ -69,16 +76,86 @@ public class OmeZarrCommandTests
     {
         using var temp = new TempDirectory();
         string output = temp.Combine("boxes.zarr");
+        var args = new OmeZarrArguments(TestFiles.Get("boxes.tiff")) { Output = output };
+        Assert.Equal(0, await OmeZarrCommand.RunAsync(args, new StringWriter(), Token));
         string stale = Path.Combine(output, "7", "c", "0", "0", "0");
         Directory.CreateDirectory(Path.GetDirectoryName(stale)!);
         File.WriteAllText(stale, "stale");
+        File.WriteAllText(Path.Combine(output, "notes.txt"), "part of the earlier output now");
 
-        int code = await OmeZarrCommand.RunAsync(
-            new OmeZarrArguments(TestFiles.Get("boxes.tiff")) { Output = output }, new StringWriter(), Token);
+        int code = await OmeZarrCommand.RunAsync(args, new StringWriter(), Token);
 
         Assert.Equal(0, code);
         Assert.False(Directory.Exists(Path.Combine(output, "7")));
+        Assert.False(File.Exists(Path.Combine(output, "notes.txt")));
         Assert.True(File.Exists(Path.Combine(output, "zarr.json")));
+        Assert.True(File.Exists(Path.Combine(output, Marker)));
+    }
+
+    [Fact]
+    public async Task OmeZarr_UnmarkedNumberedDirectories_Survive()
+    {
+        using var temp = new TempDirectory();
+        string output = temp.Combine("archive");
+        string[] kept = [Path.Combine(output, "2023", "a.txt"), Path.Combine(output, "2024", "b.txt")];
+        foreach (string file in kept)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, "keep me");
+        }
+
+        var stderr = new StringWriter();
+        int code = await OmeZarrCommand.RunAsync(
+            new OmeZarrArguments(TestFiles.Get("boxes.tiff")) { Output = output }, stderr, Token);
+
+        Assert.Equal(1, code);
+        Assert.Contains(Marker, stderr.ToString(), StringComparison.Ordinal);
+        Assert.Equal(kept.Order(), Directory.GetFiles(output, "*", SearchOption.AllDirectories).Order());
+    }
+
+    [Theory]
+    [InlineData(NgffVersion.V0_4)]
+    [InlineData(NgffVersion.V0_5)]
+    public async Task OmeZarr_RootMetadata_IsWrittenLast(NgffVersion version)
+    {
+        using var temp = new TempDirectory();
+        string output = temp.Combine("boxes.zarr");
+        var written = new ConcurrentQueue<string>();
+
+        int code = await OmeZarrCommand.RunAsync(
+            new OmeZarrArguments(TestFiles.Get("boxes.tiff"))
+            {
+                Output = output,
+                Version = version,
+                ChunkSize = 64,
+                Jobs = 1,
+                FileWritten = path => written.Enqueue(Path.GetRelativePath(output, path).Replace(Path.DirectorySeparatorChar, '/')),
+            },
+            new StringWriter(),
+            Token);
+
+        Assert.Equal(0, code);
+        string[] root = version == NgffVersion.V0_5 ? ["zarr.json"] : [".zgroup", ".zattrs"];
+        string[] order = written.ToArray();
+        Assert.Equal(root.Order(), order[^root.Length..].Order());
+        Assert.DoesNotContain(order[..^root.Length], key => !key.Contains('/'));
+        Assert.Contains(version == NgffVersion.V0_5 ? "0/zarr.json" : "0/.zarray", order);
+    }
+
+    [Fact]
+    public async Task OmeZarr_OutputIsSlide_IsKept()
+    {
+        using var temp = new TempDirectory();
+        string slide = temp.Combine("x.tiff");
+        File.Copy(TestFiles.Get("boxes.tiff"), slide);
+        var stderr = new StringWriter();
+
+        int code = await OmeZarrCommand.RunAsync(new OmeZarrArguments(slide) { Output = slide }, stderr, Token);
+
+        Assert.Equal(1, code);
+        Assert.Contains("x.tiff", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Equal(File.ReadAllBytes(TestFiles.Get("boxes.tiff")), File.ReadAllBytes(slide));
+        Assert.Equal(new[] { slide }, Directory.GetFileSystemEntries(temp.Path));
     }
 
     [Fact]
@@ -95,7 +172,7 @@ public class OmeZarrCommandTests
             new OmeZarrArguments(TestFiles.Get("boxes.tiff")) { Output = output }, stderr, Token);
 
         Assert.Equal(1, code);
-        Assert.Contains("notes.txt", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains(Marker, stderr.ToString(), StringComparison.Ordinal);
         Assert.Equal(new[] { foreign }, Directory.GetFileSystemEntries(output));
     }
 
