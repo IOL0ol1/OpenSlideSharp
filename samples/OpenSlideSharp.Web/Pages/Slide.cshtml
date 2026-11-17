@@ -1,0 +1,7 @@
+@page "/slide/{**path}"
+@model SlideModel
+@{
+    ViewData["Title"] = Model.Slide.Name + " - Slide Viewer";
+    ViewData["BodyClass"] = "viewer";
+}
+<partial name="_Viewer" model="Model.Slide" />
