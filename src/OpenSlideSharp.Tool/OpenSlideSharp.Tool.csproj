@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>openslide-sharp</ToolCommandName>
+    <PackageId>OpenSlideSharp.Tool</PackageId>
+    <PackageTags>openslide wsi pathology deepzoom ome-zarr dotnet-tool</PackageTags>
+    <Description>Command-line tool that exports OpenSlide slides as Deep Zoom (like deepzoom_tile.py) or OME-Zarr.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenSlideSharp.Tool.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <ProjectReference Include="..\OpenSlideSharp\OpenSlideSharp.csproj" />
+    <ProjectReference Include="..\OpenSlideSharp.SkiaSharp\OpenSlideSharp.SkiaSharp.csproj" />
+  </ItemGroup>
+
+  <!-- The viewer files that -r writes to <name>/static/: OpenSeadragon, the scale bar plugin, images and licenses. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\viewer\**" Exclude="..\..\assets\viewer\README.md" LogicalName="viewer/%(RecursiveDir)%(Filename)%(Extension)" Visible="false" />
+  </ItemGroup>
+
+  <!--
+    The native OpenSlide library. Packing (eng/Test-Packages.ps1) sets UseOpenSlideRuntimePackage=true, so the tool
+    package carries every RID through OpenSlideSharp.runtime of the same version; other builds use the binaries in
+    artifacts/native.
+  -->
+  <ItemGroup Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">
+    <PackageReference Include="OpenSlideSharp.runtime" VersionOverride="$(Version)" />
+  </ItemGroup>
+  <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
+
+  <!--
+    SkiaSharp's Windows native assets include libSkiaSharp.pdb (about 85 MB per RID), which would more than double the
+    tool package. Keep the libraries, drop their symbols.
+  -->
+  <Target Name="DropNativeSymbols" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)" Condition="'%(Extension)' == '.pdb'" />
+      <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
+</Project>
