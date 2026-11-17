@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Oracles\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Import Project="..\..\eng\OpenSlideNative.targets" />
