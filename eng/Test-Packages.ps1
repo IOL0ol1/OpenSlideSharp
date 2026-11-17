@@ -221,10 +221,12 @@ if ($IsWindows) {
     $out32 = & $msbuild $vcxproj /nologo /v:minimal /p:Configuration=Release /p:Platform=Win32 "/p:OpenSlideRuntimeVersion=$Version" 2>&1
     $code32 = $LASTEXITCODE
     $text32 = ($out32 | Out-String)
-    Write-Host $text32
-    if ($code32 -eq 0) { throw '[native C++ Win32] build unexpectedly succeeded' }
-    if ($text32 -notmatch 'Windows binaries for x64 only') { throw "[native C++ Win32] output lacks 'Windows binaries for x64 only'" }
+    # The expected MSBuild error is not echoed on success: CI problem matchers would report it as a failure.
+    if ($code32 -eq 0) { Write-Host $text32; throw '[native C++ Win32] build unexpectedly succeeded' }
+    if ($text32 -notmatch 'Windows binaries for x64 only') { Write-Host $text32; throw "[native C++ Win32] output lacks 'Windows binaries for x64 only'" }
     Write-Host 'PASS: native C++ Win32 rejected'
 }
 
 Write-Host 'All package smoke tests passed.'
+# Expected-failure builds above leave a non-zero $LASTEXITCODE, which a CI pwsh step would report as its result.
+exit 0
