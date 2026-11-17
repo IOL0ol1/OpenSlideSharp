@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    .NET Framework (classic) apps without a RuntimeIdentifier get no runtimes/<rid>/native copy from NuGet,
+    and the netstandard2.0 core has no DllImport resolver, so put the win-x64 DLL beside the exe.
+    When a RuntimeIdentifier is set, NuGet already copies it; skip to avoid copying twice.
+  -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' and '$(RuntimeIdentifier)' == ''">
+    <None Include="$(MSBuildThisFileDirectory)../../runtimes/win-x64/native/libopenslide-1.dll"
+          Link="libopenslide-1.dll" Visible="false" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
