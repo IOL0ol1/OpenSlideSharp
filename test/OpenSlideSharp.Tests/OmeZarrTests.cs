@@ -551,6 +551,50 @@ public class OmeZarrTests
         Assert.Null(content);
     }
 
+    [Theory]
+    [InlineData(NgffVersion.V0_5)]
+    [InlineData(NgffVersion.V0_4)]
+    public void ContainsKey_AgreesWithTryGetEntry(NgffVersion version)
+    {
+        // The counting source shows ContainsKey renders nothing.
+        var source = new FlakySource();
+        var generator = new OmeZarrGenerator(source, "flaky", false, Options(version));
+        var keys = generator.EnumerateKeys().ToList();
+        keys.AddRange(HostileKeys().Select(a => (string)a[1]));
+        keys.AddRange(new[] { "0/c/0/0/0", "0/0/0/0", "zarr.json", ".zattrs" });
+
+        var contains = keys.Select(k => generator.ContainsKey(k)).ToList();
+        Assert.Equal(0, source.Reads);
+        Assert.Contains(true, contains);
+        Assert.Contains(false, contains);
+
+        for (int i = 0; i < keys.Count; i++)
+            Assert.Equal(generator.TryGetEntry(keys[i], out _), contains[i]);
+    }
+
+    [Fact]
+    public void ContainsKey_NullKey_Throws()
+    {
+        using OpenSlide osr = OpenBoxes();
+        var generator = new OmeZarrGenerator(osr, Options());
+        Assert.Throws<ArgumentNullException>("key", () => generator.ContainsKey(null!));
+    }
+
+    [Theory]
+    [InlineData(NgffVersion.V0_5)]
+    [InlineData(NgffVersion.V0_4)]
+    public void Keys_LongerThan256_AreRejected(NgffVersion version)
+    {
+        using OpenSlide osr = OpenBoxes();
+        var generator = new OmeZarrGenerator(osr, Options(version));
+        foreach (string key in new[] { new string('0', 257), "0/" + new string('/', 300) })
+        {
+            Assert.False(generator.ContainsKey(key));
+            Assert.False(generator.TryGetEntry(key, out byte[]? content));
+            Assert.Null(content);
+        }
+    }
+
     [Fact]
     public void TryGetEntry_NullKey_Throws()
     {
