@@ -215,8 +215,8 @@ public sealed class OpenSlide : IDisposable
 
     /// <summary>
     /// Gets the slide embedded ICC color profile (<c>openslide_read_icc_profile</c>), or an empty value
-    /// if it has none. The profile is read once and cached, so every access returns the same array instance:
-    /// callers must not modify it.
+    /// if it has none. The profile is read once and cached; the returned memory is read-only and shared by every
+    /// access and by the images read from this slide.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>

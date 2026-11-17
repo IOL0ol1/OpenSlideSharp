@@ -71,7 +71,7 @@ public class GeometryTests
     [Fact]
     public void Geometry_NegativeBoundsSize_FallsBackToLevel0Size()
     {
-        // Ruling R4: a negative bounds-width/height counts as missing (scale 1.0); zero and negative x/y stay as parsed.
+        // A negative bounds width or height counts as missing (scale 1.0); zero, and negative x/y, are kept as parsed.
         var source = new FakeRenderSource(
             "negative-bounds",
             new[] { new SlideSize(1200, 800), new SlideSize(300, 200) },

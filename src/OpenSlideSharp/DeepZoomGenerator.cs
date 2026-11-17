@@ -33,6 +33,7 @@ public sealed class DeepZoomGenerator
     /// <exception cref="ArgumentNullException"><paramref name="slide"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public DeepZoomGenerator(OpenSlide slide, int tileSize = 254, int overlap = 1, bool limitBounds = false, IColorTransform? colorTransform = null)
         : this(SlideRenderSource.Create(slide), tileSize, overlap, limitBounds, colorTransform, slide.ThrowIfUnusable)
     {
@@ -46,6 +47,7 @@ public sealed class DeepZoomGenerator
     /// <exception cref="ArgumentNullException"><paramref name="image"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public DeepZoomGenerator(AssociatedImage image, int tileSize = 254, int overlap = 1, IColorTransform? colorTransform = null)
         : this(AssociatedImageRenderSource.Create(image), tileSize, overlap, false, colorTransform, image.Slide.ThrowIfUnusable)
     {
@@ -135,9 +137,12 @@ public sealed class DeepZoomGenerator
     /// <param name="column">The tile column within the level.</param>
     /// <param name="row">The tile row within the level.</param>
     /// <returns>The tile.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The level, column or row is out of range.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The level, column or row is out of range, or the tile, or the slide region it is rendered from, needs more
+    /// bytes than a .NET array can hold.
+    /// </exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
-    /// <exception cref="OpenSlideException">Reading failed.</exception>
+    /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
     public PixelImage GetTile(int level, long column, long row)
     {
         _ensureUsable?.Invoke();
