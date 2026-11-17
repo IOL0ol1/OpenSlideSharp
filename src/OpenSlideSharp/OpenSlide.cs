@@ -23,12 +23,14 @@ public sealed class OpenSlide : IDisposable
     private readonly SlideSize _dimensions;
     private readonly IReadOnlyList<SlideSize> _levelDimensions;
     private readonly IReadOnlyList<double> _levelDownsamples;
+    private readonly PropertyMap _properties;
     private int _disposed;
 
     private unsafe OpenSlide(string fileName, OpenSlideHandle handle)
     {
         FileName = fileName;
         _handle = handle;
+        _properties = new PropertyMap(this);
 
         // Level metadata never changes, so read it once. The public accessors still run the
         // disposed / sticky-error check on every access, like openslide-python's per-access queries.
@@ -102,6 +104,15 @@ public sealed class OpenSlide : IDisposable
             return _levelDownsamples;
         }
     }
+
+    /// <summary>
+    /// Gets the slide's properties as a live, read-only dictionary: each lookup or enumeration queries OpenSlide.
+    /// A missing key makes the indexer throw <see cref="KeyNotFoundException"/> and <c>TryGetValue</c> return
+    /// <see langword="false"/>. Any access throws <see cref="ObjectDisposedException"/> after the slide is disposed,
+    /// or <see cref="OpenSlideException"/> if it is in the error state. See <see cref="OpenSlideProperties"/> for
+    /// the standard keys.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Properties => _properties;
 
     /// <summary>
     /// Returns the format (vendor) name OpenSlide detects for a file, without opening it
@@ -202,7 +213,7 @@ public sealed class OpenSlide : IDisposable
     }
 
     /// <summary>
-    /// Runs <paramref name="call"/> with the native handle, under the same rules as <see cref="AcquireHandle"/>.
+    /// Runs <paramref name="call"/> with the native handle, under the same rules as <see cref="AcquireHandle"/>. Any <c>byte*</c> that OpenSlide returns points into memory the slide owns, so copy it into managed data inside the call and never return the pointer.
     /// </summary>
     internal T Invoke<T>(Func<IntPtr, T> call)
     {
@@ -223,7 +234,7 @@ public sealed class OpenSlide : IDisposable
     /// Leases the native handle for direct calls (for example with pointers or spans, which a lambda cannot capture).
     /// Acquiring takes a <see cref="System.Runtime.InteropServices.SafeHandle"/> reference and checks the sticky
     /// error state; disposing the lease checks the error state again and then releases the reference, even if
-    /// that check throws. Every native call on an open slide goes through here, directly or via
+    /// that check throws. Any <c>byte*</c> that OpenSlide returns points into memory the slide owns, so copy it into managed data inside the call and never return the pointer. Every native call on an open slide goes through here, directly or via
     /// <see cref="Invoke{T}(Func{IntPtr, T})"/>.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
