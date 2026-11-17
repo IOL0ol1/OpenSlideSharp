@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    Visual Studio C++ (vcxproj) support. Import this file from a packages.config project:
+      <Import Project="packages\OpenSlideSharp.runtime.<version>\build\native\OpenSlideSharp.runtime.targets" />
+    OpenSlide ships Windows binaries for x64 only.
+  -->
+  <ItemDefinitionGroup Condition="'$(Platform)' == 'x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)include;$(MSBuildThisFileDirectory)include\openslide;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libopenslide.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <Target Name="OpenSlideCopyNative" AfterTargets="Build" Condition="'$(Platform)' == 'x64'">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\libopenslide-1.dll"
+          DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="OpenSlideCheckPlatform" BeforeTargets="PrepareForBuild" Condition="'$(Platform)' != 'x64'">
+    <Error Text="OpenSlideSharp.runtime: OpenSlide provides Windows binaries for x64 only; set Platform to x64 (current: $(Platform))." />
+  </Target>
+</Project>

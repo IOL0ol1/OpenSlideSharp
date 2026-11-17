@@ -1,0 +1,24 @@
+<Project>
+  <!--
+    .NET Framework (classic) apps: the netstandard2.0 core has no DllImport resolver, so the win-x64 DLL must sit
+    beside the exe. NuGet copies runtimes/win-x64/native only when the RuntimeIdentifier is an x64 one. Otherwise
+    copy it here: with no RuntimeIdentifier (class libraries), or with the win-x86 one the SDK infers for a default
+    AnyCPU exe (which still runs as a 64-bit process). Skipping x64 RuntimeIdentifiers avoids copying twice.
+  -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' and !$(RuntimeIdentifier.ToLowerInvariant().EndsWith('-x64'))">
+    <None Include="$(MSBuildThisFileDirectory)../../runtimes/win-x64/native/libopenslide-1.dll"
+          Link="libopenslide-1.dll" Visible="false" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    OpenSlide has no 32-bit Windows binaries. Warn when the exe will run as a 32-bit process. This runs just before
+    CoreCompile because the SDK settles PlatformTarget during the build: a default AnyCPU exe evaluates as x86 and is
+    switched back to AnyCPU after package assets are resolved.
+  -->
+  <Target Name="OpenSlideWarnOn32BitProcess"
+          BeforeTargets="CoreCompile"
+          Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' and ('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe') and ('$(PlatformTarget)' == 'x86' or (('$(PlatformTarget)' == 'AnyCPU' or '$(PlatformTarget)' == '') and '$(Prefer32Bit)' == 'true'))">
+    <Warning Code="OPENSLIDE001"
+             Text="OpenSlideSharp.runtime: OpenSlide ships Windows binaries for x64 only, so this app must run as a 64-bit process, but it is built to run as a 32-bit one (PlatformTarget=$(PlatformTarget), Prefer32Bit=$(Prefer32Bit)). Set PlatformTarget to x64, or use AnyCPU with Prefer32Bit set to false." />
+  </Target>
+</Project>

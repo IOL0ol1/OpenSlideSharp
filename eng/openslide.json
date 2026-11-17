@@ -1,0 +1,26 @@
+{
+  "channel": "nightly",
+  "binVersion": "4.0.1.2+20261102.nightly",
+  "openslideVersion": "v4.0.1-49-g174630bf",
+  "openslideCommit": "174630bf",
+  "date": "2026-11-02",
+  "releaseUrl": "https://github.com/openslide/builds/releases/tag/v4.0.1.2%2B20261102.nightly",
+  "assets": {
+    "windows-x64": {
+      "url": "https://github.com/openslide/builds/releases/download/v4.0.1.2%2B20261102.nightly/openslide-bin-4.0.1.2%2B20261102.nightly-windows-x64.zip",
+      "sha256": "a90bc159dcb1a01cb9f11f502cd06aa9bf6561a157ea9f75d6b162423e6bf516"
+    },
+    "linux-x86_64": {
+      "url": "https://github.com/openslide/builds/releases/download/v4.0.1.2%2B20261102.nightly/openslide-bin-4.0.1.2%2B20261102.nightly-linux-x86_64.tar.xz",
+      "sha256": "f4511538be899ea813ee2fc7bb47660765153832890355ac7351451519a2d70e"
+    },
+    "linux-aarch64": {
+      "url": "https://github.com/openslide/builds/releases/download/v4.0.1.2%2B20261102.nightly/openslide-bin-4.0.1.2%2B20261102.nightly-linux-aarch64.tar.xz",
+      "sha256": "3c857f2e440a201e2a7c90be2e9f836db741c045350587936d8a24868bb4c011"
+    },
+    "macos-arm64-x86_64": {
+      "url": "https://github.com/openslide/builds/releases/download/v4.0.1.2%2B20261102.nightly/openslide-bin-4.0.1.2%2B20261102.nightly-macos-arm64-x86_64.tar.xz",
+      "sha256": "df24f56ecfc50e7e591168290876855dbf207963cb0f0433934f206ba78fe7f5"
+    }
+  }
+}

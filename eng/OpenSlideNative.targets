@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <!-- Distro-built SDKs report RIDs such as ubuntu.24.04-x64; the portable RID (linux-x64) matches artifacts/native. -->
+    <OpenSlideNativeRid>$(NETCoreSdkPortableRuntimeIdentifier)</OpenSlideNativeRid>
+    <OpenSlideNativeRid Condition="'$(OpenSlideNativeRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</OpenSlideNativeRid>
+    <OpenSlideNativeDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../artifacts/native/$(OpenSlideNativeRid)'))</OpenSlideNativeDir>
+  </PropertyGroup>
+  <Target Name="CheckOpenSlideNative" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(OpenSlideNativeDir)')" Text="OpenSlide native binaries not found at $(OpenSlideNativeDir). Run eng/Get-OpenSlide.ps1 first." />
+  </Target>
+  <ItemGroup>
+    <None Include="$(OpenSlideNativeDir)/*" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>
