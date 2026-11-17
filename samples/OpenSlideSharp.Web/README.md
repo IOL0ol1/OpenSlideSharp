@@ -7,7 +7,7 @@ dotnet run --project samples/OpenSlideSharp.Web -- path/to/slide.svs      # sing
 dotnet run --project samples/OpenSlideSharp.Web -- path/to/slides/        # directory of slides
 ```
 
-Then open http://127.0.0.1:5000/.
+Under `dotnet run` the working directory is the project directory, so give the path as an absolute one. Then open http://127.0.0.1:5000/.
 
 ## Pages and endpoints
 
