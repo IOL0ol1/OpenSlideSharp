@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj" />
     <Project Path="src/OpenSlideSharp/OpenSlideSharp.csproj" />
   </Folder>
   <Folder Name="/test/">
