@@ -119,7 +119,7 @@ eng/
 public sealed class OpenSlide : IDisposable
 {
     public static string? DetectFormat(string path);        // openslide_detect_vendor
-    public static string LibraryVersion { get; }             // openslide_get_version
+    // 库版本见 OpenSlideLibrary.Version（openslide_get_version）
     public static OpenSlide Open(string path);               // 失败抛 OpenSlideException
     public int LevelCount { get; }
     public SlideSize Dimensions { get; }
@@ -320,7 +320,7 @@ public sealed class PixelImage { int Width; int Height; PixelFormat Format; byte
 - DeepZoom 一致性：层级、瓦片数、各瓦片坐标与尺寸、DZI 文本与 Python 的断言完全一致。
 - Skia：三种颜色模式的输出（是否带 ICC、尺寸、格式）。
 - AspNetCore：用 `WebApplicationFactory` 覆盖 DZI 与瓦片端点、越界瓦片返回 404、路径穿越被拒绝、缓存淘汰时不影响进行中的请求。
-- runtime 包冒烟测试：CI 在四个平台上用打好的 nupkg 新建一个控制台项目，调用 `OpenSlide.LibraryVersion` 并打开 `small.svs`，验证打包和库名探测都正确。
+- runtime 包冒烟测试：CI 在四个平台上用打好的 nupkg 新建一个控制台项目，调用 `OpenSlideLibrary.Version` 并打开 `small.svs`，验证打包和库名探测都正确。
 - C++ 冒烟测试：windows-latest 上用 MSBuild 编译 `test/NativeCppSmoke`（packages.config，从本地源还原 runtime 包，x64），运行后打印 `openslide_get_version()` 并打开 `small.svs`。
 - OME-Zarr：
   - 用官方 NGFF JSON Schema（0.4 与 0.5，放进测试资源）校验生成的元数据。
