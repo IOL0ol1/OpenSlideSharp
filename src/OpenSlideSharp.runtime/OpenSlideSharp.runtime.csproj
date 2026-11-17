@@ -33,6 +33,11 @@
     <None Include="build/net462/OpenSlideSharp.runtime.targets" Pack="true" PackagePath="build/net462/" Visible="false" />
     <None Include="build/net462/OpenSlideSharp.runtime.targets" Pack="true" PackagePath="buildTransitive/net462/" Visible="false" />
 
+    <!-- Visual Studio C++ (packages.config) support: headers, x64 import library and targets. -->
+    <None Include="build/native/OpenSlideSharp.runtime.targets" Pack="true" PackagePath="build/native/" Visible="false" />
+    <None Include="$(OpenSlideNativeRoot)/include/openslide/*.h" Pack="true" PackagePath="build/native/include/openslide/" Visible="false" />
+    <None Include="$(OpenSlideNativeRoot)/msvc/x64/libopenslide.lib" Pack="true" PackagePath="build/native/lib/x64/" Visible="false" />
+
     <None Include="$(OpenSlideNativeRoot)/licenses/**" Pack="true" PackagePath="licenses/%(RecursiveDir)" Visible="false" />
     <None Include="$(OpenSlideNativeRoot)/VERSIONS.md" Pack="true" PackagePath="/" Visible="false" />
     <None Include="$(OpenSlideNativeRoot)/versions.json" Pack="true" PackagePath="/" Visible="false" />
@@ -42,6 +47,8 @@
   <Target Name="CheckOpenSlideNativeForPack" BeforeTargets="GenerateNuspec">
     <Error Condition="!Exists('$(OpenSlideNativeRoot)/%(OpenSlideNativeFile.Identity)')"
            Text="Missing native binary '$(OpenSlideNativeRoot)/%(OpenSlideNativeFile.Identity)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
+    <Error Condition="!Exists('$(OpenSlideNativeRoot)/msvc/x64/libopenslide.lib') or !Exists('$(OpenSlideNativeRoot)/include/openslide/openslide.h') or !Exists('$(OpenSlideNativeRoot)/include/openslide/openslide-features.h')"
+           Text="Missing msvc/x64/libopenslide.lib or include/openslide/*.h under '$(OpenSlideNativeRoot)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
     <Error Condition="!Exists('$(OpenSlideNativeRoot)/licenses') or !Exists('$(OpenSlideNativeRoot)/VERSIONS.md') or !Exists('$(OpenSlideNativeRoot)/versions.json')"
            Text="Missing licenses/, VERSIONS.md or versions.json under '$(OpenSlideNativeRoot)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
   </Target>
