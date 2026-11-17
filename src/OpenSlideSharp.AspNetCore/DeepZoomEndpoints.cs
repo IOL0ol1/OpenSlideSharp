@@ -39,12 +39,13 @@ public static class DeepZoomEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(prefix);
         ArgumentNullException.ThrowIfNull(resolver);
 
+        ILogger logger = EndpointSupport.CreateLogger(endpoints, "OpenSlideSharp.AspNetCore.DeepZoom");
         string pattern = prefix.TrimEnd('/') + "/{**path}";
         return endpoints.MapMethods(
             pattern,
             [HttpMethods.Get, HttpMethods.Head],
-            (HttpContext context, SlideCache cache, IOptions<OpenSlideServerOptions> options, ILoggerFactory loggers) =>
-                Handle(context, cache, options.Value, resolver, loggers.CreateLogger("OpenSlideSharp.AspNetCore.DeepZoom")));
+            (HttpContext context, SlideCache cache, IOptions<OpenSlideServerOptions> options) =>
+                Handle(context, cache, options.Value, resolver, logger));
     }
 
     private static IResult Handle(HttpContext context, SlideCache cache, OpenSlideServerOptions options, ISlideResolver resolver, ILogger logger)
@@ -65,7 +66,11 @@ public static class DeepZoomEndpointRouteBuilderExtensions
         try
         {
             SlideEntry entry = lease.Entry;
-            DeepZoomGenerator generator = entry.GetDeepZoom(request.AssociatedName);
+            if (!EndpointSupport.TryGetGenerator(entry.GetDeepZoom, request.AssociatedName, out DeepZoomGenerator generator))
+            {
+                return Results.NotFound(); // no such associated image
+            }
+
             if (!request.IsTile)
             {
                 string format = options.DeepZoom.Format == ImageFormat.Png ? "png" : "jpeg";
@@ -83,33 +88,16 @@ public static class DeepZoomEndpointRouteBuilderExtensions
             string contentType = request.Format == "png" ? "image/png" : "image/jpeg";
             if (HttpMethods.IsHead(context.Request.Method))
             {
-                return new HeadResult(contentType);
+                return new EndpointSupport.HeadResult(contentType);
             }
 
             PixelImage tile = generator.GetTile(request.Level, request.Column, request.Row);
             byte[] encoded = tile.Encode(imageFormat, options.DeepZoom.Quality, entry.EncodeMode(request.AssociatedName));
             return Results.Bytes(encoded, contentType);
         }
-        catch (KeyNotFoundException)
-        {
-            return Results.NotFound(); // no such associated image
-        }
         catch (OpenSlideException e)
         {
-            Log.SlideError(logger, filePath, path, e);
-            cache.Evict(filePath);
-            return Results.StatusCode(StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    // A HEAD response: the headers of the GET response, no body.
-    private sealed class HeadResult(string contentType) : IResult
-    {
-        public Task ExecuteAsync(HttpContext httpContext)
-        {
-            httpContext.Response.StatusCode = StatusCodes.Status200OK;
-            httpContext.Response.ContentType = contentType;
-            return Task.CompletedTask;
+            return EndpointSupport.SlideError(logger, cache, filePath, path, e);
         }
     }
 }

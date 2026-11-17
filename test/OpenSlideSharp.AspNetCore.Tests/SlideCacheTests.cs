@@ -408,6 +408,7 @@ public class SlideCacheTests
     [InlineData("ChunkSize", 8193)]
     [InlineData("GzipLevel", -1)]
     [InlineData("GzipLevel", 10)]
+    [InlineData("RenderCacheSize", -1)]
     public void Options_Invalid_ThrowOnResolve(string setting, int value)
     {
         var services = new ServiceCollection();
@@ -421,6 +422,7 @@ public class SlideCacheTests
                 case "Quality": o.DeepZoom.Quality = value; break;
                 case "ChunkSize": o.OmeZarr.ChunkSize = value; break;
                 case "GzipLevel": o.OmeZarr.GzipLevel = value; break;
+                case "RenderCacheSize": o.OmeZarr.RenderCacheSize = value; break;
                 default: throw new ArgumentOutOfRangeException(nameof(setting));
             }
         });
@@ -449,6 +451,7 @@ public class SlideCacheTests
         Assert.Equal(512, options.OmeZarr.ChunkSize);
         Assert.Equal(OmeZarrCompression.None, options.OmeZarr.Compression);
         Assert.Equal(6, options.OmeZarr.GzipLevel);
+        Assert.Equal(16, options.OmeZarr.RenderCacheSize);
         Assert.True(options.OmeZarr.LimitBounds);
         Assert.True(options.OmeZarr.AllowCrossOrigin);
 

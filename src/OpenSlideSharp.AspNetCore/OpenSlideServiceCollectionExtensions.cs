@@ -112,6 +112,11 @@ public static class OpenSlideServiceCollectionExtensions
                 failures.Add($"OmeZarr.ChunkSize must be from 16 to 8192, but is {omeZarr.ChunkSize}.");
             }
 
+            if (omeZarr.RenderCacheSize < 0)
+            {
+                failures.Add($"OmeZarr.RenderCacheSize must not be negative, but is {omeZarr.RenderCacheSize}.");
+            }
+
             if (!Enum.IsDefined(omeZarr.Compression))
             {
                 failures.Add($"OmeZarr.Compression {omeZarr.Compression} is not a defined OmeZarrCompression.");
