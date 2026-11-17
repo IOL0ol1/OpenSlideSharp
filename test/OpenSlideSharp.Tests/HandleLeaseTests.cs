@@ -37,7 +37,7 @@ public unsafe class HandleLeaseTests
     [Fact]
     public void Lease_ReleasesReference_EvenWhenErrorCheckThrows()
     {
-        byte[] path = Utf8.ToNullTerminated(TestFiles.Get("boxes.tiff"));
+        byte[] path = Utf8.ToNullTerminated(TestFiles.Get("boxes.tiff"), "path");
         IntPtr osr;
         fixed (byte* p = path)
         {

@@ -113,9 +113,10 @@ public sealed class OpenSlide : IDisposable
     /// <summary>
     /// Gets the slide's properties as a live, read-only dictionary: each lookup or enumeration queries OpenSlide.
     /// A missing key makes the indexer throw <see cref="KeyNotFoundException"/> and <c>TryGetValue</c> return
-    /// <see langword="false"/>. Any access throws <see cref="ObjectDisposedException"/> after the slide is disposed,
-    /// or <see cref="OpenSlideException"/> if it is in the error state. See <see cref="OpenSlideProperties"/> for
-    /// the standard keys.
+    /// <see langword="false"/>. A key containing a NUL character (<c>'\0'</c>) cannot be passed to OpenSlide, so
+    /// looking it up throws <see cref="ArgumentException"/>. Any access throws <see cref="ObjectDisposedException"/>
+    /// after the slide is disposed, or <see cref="OpenSlideException"/> if it is in the error state. See
+    /// <see cref="OpenSlideProperties"/> for the standard keys.
     /// </summary>
     public IReadOnlyDictionary<string, string> Properties => _properties;
 
@@ -126,6 +127,7 @@ public sealed class OpenSlide : IDisposable
     /// <param name="filename">Path of the file to examine.</param>
     /// <returns>The format name, for example <c>"aperio"</c>, or <see langword="null"/> if the file is missing or not a recognized slide.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="filename"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="filename"/> contains a NUL character (<c>'\0'</c>).</exception>
     /// <exception cref="DllNotFoundException">The native OpenSlide library could not be loaded.</exception>
     public static unsafe string? DetectFormat(string filename)
     {
@@ -134,7 +136,7 @@ public sealed class OpenSlide : IDisposable
             throw new ArgumentNullException(nameof(filename));
         }
 
-        byte[] path = Utf8.ToNullTerminated(filename);
+        byte[] path = Utf8.ToNullTerminated(filename, nameof(filename));
         return NativeLibraryLoader.ThrowHelpfulIfMissing(() =>
         {
             fixed (byte* p = path)
@@ -148,6 +150,7 @@ public sealed class OpenSlide : IDisposable
     /// <param name="filename">Path of the slide file. Any Unicode path is supported; it is passed to OpenSlide as UTF-8.</param>
     /// <returns>The open slide. Dispose it to close the file.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="filename"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="filename"/> contains a NUL character (<c>'\0'</c>).</exception>
     /// <exception cref="OpenSlideUnsupportedFormatException">The file is missing or not a recognized slide format.</exception>
     /// <exception cref="OpenSlideException">The format was recognized but OpenSlide could not open the file.</exception>
     /// <exception cref="DllNotFoundException">The native OpenSlide library could not be loaded.</exception>
@@ -158,7 +161,7 @@ public sealed class OpenSlide : IDisposable
             throw new ArgumentNullException(nameof(filename));
         }
 
-        byte[] path = Utf8.ToNullTerminated(filename);
+        byte[] path = Utf8.ToNullTerminated(filename, nameof(filename));
         IntPtr osr = NativeLibraryLoader.ThrowHelpfulIfMissing(() =>
         {
             fixed (byte* p = path)

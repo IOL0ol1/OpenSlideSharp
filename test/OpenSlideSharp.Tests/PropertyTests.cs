@@ -26,6 +26,16 @@ public class PropertyTests
         Assert.Equal(osr.Properties.Count, osr.Properties.Values.Count());
     }
 
+    [Fact] // Native code would stop at the NUL and find "openslide.vendor"; documented on OpenSlide.Properties.
+    public void Properties_KeyWithEmbeddedNul_Throws()
+    {
+        using var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
+        const string key = OpenSlideProperties.Vendor + "\0x";
+        Assert.Equal("key", Assert.Throws<ArgumentException>(() => osr.Properties.ContainsKey(key)).ParamName);
+        Assert.Equal("key", Assert.Throws<ArgumentException>(() => osr.Properties.TryGetValue(key, out _)).ParamName);
+        Assert.Equal("key", Assert.Throws<ArgumentException>(() => osr.Properties[key]).ParamName);
+    }
+
     [Fact] // Hand-written constants must exist in the generated layer with equal values (one-way: nightly may add more).
     public void PropertyConstants_MatchNativeHeader()
     {
