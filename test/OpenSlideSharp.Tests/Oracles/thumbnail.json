@@ -1,0 +1,121 @@
+{
+ "generator": {
+  "openslidePython": "1.4.7",
+  "openslideLibrary": "4.0.1",
+  "pillow": "13.0.0"
+ },
+ "thumbnails": [
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    100,
+    100
+   ],
+   "level": 1,
+   "pythonSize": [
+    100,
+    83
+   ],
+   "exact": true,
+   "file": "thumb-boxes-100x100.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    64,
+    32
+   ],
+   "level": 2,
+   "pythonSize": [
+    39,
+    32
+   ],
+   "exact": true,
+   "file": "thumb-boxes-64x32.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    300,
+    250
+   ],
+   "level": 0,
+   "pythonSize": [
+    300,
+    250
+   ],
+   "exact": true,
+   "file": "thumb-boxes-300x250.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    1000,
+    1000
+   ],
+   "level": 0,
+   "pythonSize": [
+    300,
+    250
+   ],
+   "exact": true,
+   "file": "thumb-boxes-1000x1000.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    299,
+    1
+   ],
+   "level": 3,
+   "pythonSize": [
+    1,
+    1
+   ],
+   "exact": false,
+   "file": "thumb-boxes-299x1.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    1,
+    1
+   ],
+   "level": 3,
+   "pythonSize": [
+    1,
+    1
+   ],
+   "exact": false,
+   "file": "thumb-boxes-1x1.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    150,
+    125
+   ],
+   "level": 1,
+   "pythonSize": [
+    150,
+    125
+   ],
+   "exact": true,
+   "file": "thumb-boxes-150x125.png"
+  },
+  {
+   "source": "boxes.tiff",
+   "maxSize": [
+    149,
+    200
+   ],
+   "level": 1,
+   "pythonSize": [
+    149,
+    124
+   ],
+   "exact": true,
+   "file": "thumb-boxes-149x200.png"
+  }
+ ]
+}

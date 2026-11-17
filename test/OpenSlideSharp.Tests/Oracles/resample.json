@@ -1,0 +1,66 @@
+{
+ "generator": {
+  "openslidePython": "1.4.7",
+  "openslideLibrary": "4.0.1",
+  "pillow": "13.0.0"
+ },
+ "source": "resample-src.png",
+ "outputs": [
+  {
+   "size": [
+    20,
+    11
+   ],
+   "file": "resample-20x11.png"
+  },
+  {
+   "size": [
+    10,
+    40
+   ],
+   "file": "resample-10x40.png"
+  },
+  {
+   "size": [
+    74,
+    46
+   ],
+   "file": "resample-74x46.png"
+  },
+  {
+   "size": [
+    36,
+    23
+   ],
+   "file": "resample-36x23.png"
+  },
+  {
+   "size": [
+    37,
+    5
+   ],
+   "file": "resample-37x5.png"
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "file": "resample-4x3.png"
+  },
+  {
+   "size": [
+    1,
+    1
+   ],
+   "file": "resample-1x1.png"
+  },
+  {
+   "size": [
+    37,
+    23
+   ],
+   "file": "resample-37x23.png"
+  }
+ ]
+}
