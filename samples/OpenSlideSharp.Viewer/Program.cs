@@ -16,6 +16,7 @@ internal static class Program
     {
         if (args.Length > 0 && args[0] == "--check")
         {
+            ParentConsole.AttachIfNoOutput();
             return RunCheck(args, Console.Out);
         }
 
