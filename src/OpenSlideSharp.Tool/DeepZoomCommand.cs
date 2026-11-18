@@ -108,7 +108,7 @@ internal static class DeepZoomCommand
     private static async Task ExportAsync(OpenSlide slide, DeepZoomArguments args, TextWriter stderr, CancellationToken ct)
     {
         string name = Path.TrimEndingDirectorySeparator(args.Output ?? Path.GetFileNameWithoutExtension(args.Slide));
-        var writer = new TileWriter(args.Jobs, stderr, args.FileWritten);
+        var writer = new TileWriter(ExportSupport.LimitJobs(args.Jobs, stderr), stderr, args.FileWritten);
 
         if (!args.Viewer)
         {

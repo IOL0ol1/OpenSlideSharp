@@ -124,6 +124,7 @@ internal static class OmeZarrCommand
             ExportSupport.EnsureReplaceableDirectory(directory, args.Slide);
         }
 
+        args = args with { Jobs = ExportSupport.LimitJobs(args.Jobs, stderr) };
         var writer = new TileWriter(args.Jobs, stderr, args.FileWritten);
         IColorTransform? transform = ExportSupport.OmeZarrColor(
             slide.ColorProfile, args.ColorMode, ExportSupport.Describe(args.Slide, null), stderr);
@@ -149,6 +150,21 @@ internal static class OmeZarrCommand
         }
     }
 
+    /// <summary>
+    /// The render cache size for <paramref name="jobs"/> workers: <c>min(max(2 × jobs, 4), max(jobs, 1 GiB / region))</c>,
+    /// where a region is <c>chunkSize² × 4</c> bytes.
+    /// </summary>
+    /// <remarks>
+    /// Each worker holds the region whose channels it is writing, so the cache keeps twice as many (at least 4), but
+    /// no more than fit in 1 GiB, unless that is fewer than one per worker.
+    /// </remarks>
+    internal static int RenderCacheSize(int jobs, int chunkSize)
+    {
+        long regionBytes = (long)chunkSize * chunkSize * 4;
+        long byBytes = Math.Max(jobs, (1L << 30) / regionBytes);
+        return (int)Math.Min(Math.Max(2L * jobs, 4), byBytes);
+    }
+
     private static OmeZarrOptions CreateOptions(OmeZarrArguments args, bool limitBounds, IColorTransform? transform) => new()
     {
         Version = args.Version,
@@ -157,9 +173,7 @@ internal static class OmeZarrCommand
         GzipLevel = args.GzipLevel,
         LimitBounds = limitBounds,
         ColorTransform = transform,
-
-        // Each worker holds the region it is writing the channels of; leave room for all of them and some more.
-        RenderCacheSize = (int)Math.Clamp(2L * args.Jobs, new OmeZarrOptions().RenderCacheSize, 4096),
+        RenderCacheSize = RenderCacheSize(args.Jobs, args.ChunkSize),
     };
 
     // Writes the chunks, then the level metadata, then the root metadata, so that a store whose export stopped early
