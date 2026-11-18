@@ -408,7 +408,15 @@ public sealed class OpenSlide : IDisposable
     /// Returns <c>width * height * 4</c> after rejecting negative sizes and sizes that do not fit in a .NET array.
     /// Computed in <see langword="long"/>, so large associated image dimensions cannot overflow.
     /// </summary>
-    internal static long CheckedPixelBytes(long width, long height, string what)
+    internal static long CheckedPixelBytes(long width, long height, string what) =>
+        CheckedPixelBytes(width, height, what, nameof(width));
+
+    /// <summary>
+    /// Like <see cref="CheckedPixelBytes(long, long, string)"/>, but a size too large for a .NET array is reported
+    /// as an <see cref="ArgumentOutOfRangeException"/> for <paramref name="paramName"/>: the public parameter that
+    /// led to it.
+    /// </summary>
+    internal static long CheckedPixelBytes(long width, long height, string what, string paramName)
     {
         if (width < 0)
         {
@@ -429,7 +437,7 @@ public sealed class OpenSlide : IDisposable
         if (width != 0 && height > maxLength / 4 / width)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(width), $"A {width} x {height} {what} needs more bytes than a .NET array can hold.");
+                paramName, $"A {width} x {height} {what} needs more bytes than a .NET array can hold.");
         }
 
         return width * height * 4;

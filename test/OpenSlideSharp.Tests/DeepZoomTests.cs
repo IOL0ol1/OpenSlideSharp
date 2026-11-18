@@ -252,6 +252,66 @@ public class DeepZoomTests
     }
 
     [Fact]
+    public void Constructor_HugeTileSizeAndOverlap_AreAccepted()
+    {
+        // openslide-python accepts any tile size and overlap. Here every level is one tile, which has no interior
+        // edge, so the overlap adds nothing and each tile is the whole level.
+        using var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));
+        var whole = new DeepZoomGenerator(osr, tileSize: int.MaxValue, overlap: int.MaxValue);
+        var standard = new DeepZoomGenerator(osr);
+
+        Assert.All(whole.LevelTiles, t => Assert.Equal(new TileGridSize(1, 1), t));
+        Assert.Equal(whole.LevelCount, whole.TileCount);
+        Assert.Contains($"TileSize=\"{int.MaxValue}\" Overlap=\"{int.MaxValue}\"", whole.GetDzi("png"));
+        int top = whole.LevelCount - 1;
+        PixelImage level = whole.GetTile(top, 0, 0);
+        Assert.Equal(whole.LevelDimensions[top], new SlideSize(level.Width, level.Height));
+        Assert.Equal(new TileRegion(0, 0, 0, 300, 250), whole.GetTileCoordinates(top, 0, 0));
+
+        // A level that is one tile with the default size too gives the same pixels.
+        Assert.Equal(new TileGridSize(1, 1), standard.LevelTiles[top - 1]);
+        Assert.Equal(standard.GetTile(top - 1, 0, 0).Data, whole.GetTile(top - 1, 0, 0).Data);
+    }
+
+    [Fact]
+    public void GetTile_TooLargeForAnArray_ThrowsForLevelBeforeReading()
+    {
+        // 40000 x 40000 pixels need 6.4 GB, more than a .NET array holds.
+        var source = FakeRenderSource.SingleLevel(100_000, 100_000);
+        var dz = new DeepZoomGenerator(source, 40_000, 0, false, null);
+        int top = dz.LevelCount - 1;
+
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => dz.GetTile(top, 0, 0));
+
+        Assert.Equal("level", ex.ParamName);
+        Assert.Contains("40000 x 40000", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(0, source.ReadCount);
+        Assert.Equal(new SlideSize(40_000, 40_000), dz.GetTileDimensions(top, 0, 0));
+    }
+
+    [Fact]
+    public void GetTile_HugeOverlap_ReportsTheSizeAndThrowsForLevel()
+    {
+        // An interior tile is the tile size plus twice the overlap: more than int.MaxValue pixels wide here, which
+        // GetTileDimensions and GetTileCoordinates report as is, like openslide-python.
+        const int overlap = int.MaxValue / 2;
+        var source = FakeRenderSource.SingleLevel(1000, 1000);
+        var dz = new DeepZoomGenerator(source, 254, overlap, false, null);
+        int top = dz.LevelCount - 1;
+        long edge = 254 + (2L * overlap);
+
+        Assert.Equal(new SlideSize(edge, edge), dz.GetTileDimensions(top, 1, 1));
+        Assert.Equal(new TileRegion(254 - overlap, 254 - overlap, 0, 1000 - 254 + overlap, 1000 - 254 + overlap), dz.GetTileCoordinates(top, 1, 1));
+        Assert.Equal("level", Assert.Throws<ArgumentOutOfRangeException>(() => dz.GetTile(top, 1, 1)).ParamName);
+        Assert.Equal(0, source.ReadCount);
+
+        // The tiles of a level with one tile have no overlap, so they render.
+        Assert.Equal(new TileGridSize(1, 1), dz.LevelTiles[top - 2]);
+        PixelImage small = dz.GetTile(top - 2, 0, 0);
+        Assert.Equal(dz.LevelDimensions[top - 2], new SlideSize(small.Width, small.Height));
+    }
+
+    [Fact]
     public void Constructor_InvalidParameters_Throw()
     {
         using var osr = OpenSlide.Open(TestFiles.Get("boxes.tiff"));

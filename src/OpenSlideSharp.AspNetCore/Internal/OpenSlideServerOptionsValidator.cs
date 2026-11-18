@@ -50,7 +50,9 @@ internal sealed class OpenSlideServerOptionsValidator : IValidateOptions<OpenSli
             failures.Add($"DeepZoom.Overlap must not be negative, but is {deepZoom.Overlap}.");
         }
 
-        // DeepZoomGenerator's own limit on the tile edge with overlap.
+        // DeepZoomGenerator accepts any tile size and overlap, as openslide-python does, and only GetTile fails for a
+        // tile too large for an array. A server has no use for tile edges this long: fail at startup instead of on
+        // requests.
         if (deepZoom.TileSize >= 1 && deepZoom.Overlap >= 0 && deepZoom.TileSize + (2L * deepZoom.Overlap) > int.MaxValue / 4)
         {
             failures.Add("DeepZoom.TileSize plus twice DeepZoom.Overlap is too large.");
