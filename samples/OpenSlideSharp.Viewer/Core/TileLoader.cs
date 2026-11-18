@@ -27,7 +27,10 @@ namespace OpenSlideSharp.Viewer.Core;
 /// </para>
 /// <para>
 /// <see cref="Dispose"/> stops taking requests, drops the queued ones and waits for the reads in flight, for at most
-/// <see cref="DisposeTimeout"/>. Once it returns no callback starts, and tiles read after it are discarded.
+/// <see cref="DisposeTimeout"/>. Once it returns with no read in flight no callback starts, and tiles read after it
+/// are discarded. A read still in flight past the timeout (0 waits for none) finishes on its own: its tile is
+/// discarded, or added to the cache if it beat <see cref="Dispose"/> by a hair (a disposed cache disposes it), and in
+/// that case <c>loaded</c> may still run once; a failure is not reported.
 /// </para>
 /// </remarks>
 internal sealed class TileLoader : IDisposable

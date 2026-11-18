@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Avalonia;
@@ -370,6 +371,73 @@ public class SlideViewTests
 
             host.WaitForTiles();
             Assert.True(host.View.Cache!.Count > 0);
+        });
+    }
+
+    [Fact]
+    public void SlideView_SwitchSlide_DoesNotWaitForReadsInFlight()
+    {
+        using OpenSlide boxes = Boxes();
+        using OpenSlide small = OpenSlide.Open(TestFiles.Get("small.svs"));
+        using var gate = new ManualResetEventSlim();
+        int boxesReads = 0;
+        int smallReads = 0;
+        var failures = new List<Exception>();
+
+        HeadlessSession.Run(() =>
+        {
+            // The reads of boxes.tiff hang until the gate opens, as on a slow disk or network share.
+            using var host = new ViewHost(configure: view => view.TileReader = (s, grid, key) =>
+            {
+                if (ReferenceEquals(s, boxes))
+                {
+                    Interlocked.Increment(ref boxesReads);
+                    gate.Wait(TimeSpan.FromSeconds(30));
+                }
+                else
+                {
+                    Interlocked.Increment(ref smallReads);
+                }
+
+                return SlideView.ReadTile(s, grid, key);
+            });
+            host.View.LoadFailed += failures.Add;
+            try
+            {
+                host.View.Slide = boxes;
+                HeadlessSession.PumpUntil(() => Volatile.Read(ref boxesReads) > 0, "a read of boxes.tiff starts");
+                TileLoader oldLoader = host.View.Loader!;
+                TileCache oldCache = host.View.Cache!;
+
+                var switching = Stopwatch.StartNew();
+                host.View.Slide = small;
+                switching.Stop();
+
+                Assert.True(switching.ElapsedMilliseconds < 200, $"switching took {switching.ElapsedMilliseconds} ms");
+                Assert.True(oldLoader.IsDisposed);
+                Assert.True(oldLoader.Pending > 0, "the read of boxes.tiff is no longer in flight");
+
+                // As MainWindow does: the old slide is closed once the view has let go of it. The reads held until
+                // now then find it closed, and their failures go nowhere.
+                boxes.Dispose();
+                gate.Set();
+                HeadlessSession.PumpUntil(() => oldLoader.Pending == 0, "the reads of boxes.tiff end");
+                host.WaitForTiles();
+                for (int i = 0; i < 5; i++)
+                {
+                    HeadlessSession.Pump();
+                }
+
+                Assert.Equal(0, oldCache.Count);
+                Assert.Empty(failures);
+                Assert.Same(small, host.View.Slide);
+                Assert.Equal(Volatile.Read(ref smallReads), host.View.TileReads); // the reads of small.svs only
+                Assert.True(host.View.Cache!.Count > 0);
+            }
+            finally
+            {
+                gate.Set();
+            }
         });
     }
 

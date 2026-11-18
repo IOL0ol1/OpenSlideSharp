@@ -28,8 +28,9 @@ namespace OpenSlideSharp.Viewer.Controls;
 /// </para>
 /// <para>
 /// Setting <see cref="Slide"/> builds a new viewport and loading pipeline (tile cache, bitmap cache and loader), and
-/// disposes the old ones, waiting for the old slide's reads in flight. The view does not own the slide: dispose it
-/// after replacing it here. Leaving the visual tree (closing the window) disposes the pipeline too.
+/// disposes the old ones without waiting for the old slide's reads in flight (see <see cref="OpenPipeline"/>). The
+/// view does not own the slide: dispose it after replacing it here. Leaving the visual tree (closing the window)
+/// disposes the pipeline too.
 /// </para>
 /// <para>
 /// Input: dragging with the left button (or a finger) pans, and with Shift held draws a selection; one drag at a
@@ -75,7 +76,6 @@ internal sealed class SlideView : Control
     private (double X, double Y) _selectionStart;
     private Selection? _selectionBeingDrawn;
     private (double Scaling, ImmutablePen Solid, ImmutablePen Dashed)? _pens;
-    private long _tileReads;
     private int _redrawPosted;
 
     public SlideView()
@@ -121,7 +121,7 @@ internal sealed class SlideView : Control
             : null;
 
     /// <summary>Gets the number of tiles read from the slide since it was set (diagnostics and tests).</summary>
-    public long TileReads => Interlocked.Read(ref _tileReads);
+    public long TileReads => _slideState?.Reads ?? 0;
 
     /// <summary>
     /// Gets or sets what reads a tile on the loader threads (by default <see cref="ReadTile"/>); a test hook, taken
@@ -449,7 +449,6 @@ internal sealed class SlideView : Control
         _grid = grid;
         _viewport = viewport;
         _background = background;
-        Interlocked.Exchange(ref _tileReads, 0);
         EndDrag();
         Selections.Clear();
         if (viewport is not null)
@@ -476,12 +475,25 @@ internal sealed class SlideView : Control
         var loader = new TileLoader(
             key =>
             {
-                Interlocked.Increment(ref _tileReads);
+                state.CountRead();
                 return read(slide, grid, key);
             },
             cache,
             LoaderThreads,
-            _ => ScheduleRedraw());
+            _ => ScheduleRedraw())
+        {
+            // Disposing the pipeline (a new slide, File > Close, closing the window) does not wait for the reads in
+            // flight, which can take seconds on a slow disk or network share: the UI thread must not freeze. A read
+            // that outlives the pipeline is harmless:
+            // - its native call holds a lease on the slide's handle (OpenSlideHandle), so disposing the slide meanwhile
+            //   defers openslide_close until the call returns, and a read that starts after it throws
+            //   ObjectDisposedException, which the disposed loader swallows (no Failed event);
+            // - the loader drops a tile read after it was disposed, and the cache disposes a tile added after it was
+            //   disposed, so the pixels go back to the pool and nothing reaches the next slide's cache or bitmaps;
+            // - the callbacks only post a redraw, or check that their SlideState is still the current one, and count
+            //   reads in that SlideState, not in the next slide's.
+            DisposeTimeout = TimeSpan.Zero,
+        };
         var pipeline = new Pipeline(grid, cache, new TileBitmapCache(), loader);
         loader.Failed += error =>
         {
@@ -676,12 +688,18 @@ internal sealed class SlideView : Control
     {
         // Set on a loader thread when a read fails; read by every frame.
         private volatile bool _failed;
+        private long _reads;
 
         public bool Failed
         {
             get => _failed;
             set => _failed = value;
         }
+
+        /// <summary>Gets the number of tiles read from the slide (on the loader threads).</summary>
+        public long Reads => Interlocked.Read(ref _reads);
+
+        public void CountRead() => Interlocked.Increment(ref _reads);
 
         /// <summary>Gets or sets whether <see cref="LoadFailed"/> was raised (UI thread only).</summary>
         public bool Reported { get; set; }
@@ -700,8 +718,9 @@ internal sealed class SlideView : Control
 
         public void Dispose()
         {
-            // The loader first: once it returns no read is running (or, past its timeout, none will be cached) and
-            // no callback will start. Clearing the cache then releases the tiles' pixels, and the bitmaps go last.
+            // The loader first: it starts no more reads and does not wait for those in flight (DisposeTimeout is 0,
+            // see OpenPipeline). Disposing the cache then releases the tiles' pixels, and drops the tiles of reads
+            // still in flight when they arrive. The bitmaps, which only the UI thread touches, go last.
             Loader.Dispose();
             Cache.Dispose();
             Bitmaps.Dispose();
