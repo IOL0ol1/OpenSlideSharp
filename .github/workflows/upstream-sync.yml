@@ -215,6 +215,11 @@ jobs:
   merge:
     needs: [detect, update, ci]
     if: needs.detect.outputs.dry-run == 'false'
+    # The pull request fallback needs the repository setting "Allow GitHub Actions to create and approve pull
+    # requests" (Settings > Actions > General). Without it, opening the pull request fails (HTTP 403), so this job
+    # fails and report-failure opens an issue and deletes the branch. A pull request opened with the workflow token
+    # starts no workflow: CI does not run on it (a required status check would wait forever) until someone closes and
+    # reopens it or pushes to its branch, as its description says.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -271,6 +276,8 @@ jobs:
           if [ -z "$url" ]; then
             body=$(printf '%s\n' \
               "openslide-bin \`$TAG\` passed CI on $SHA in $RUN_URL, but $reason, so it was not merged and nothing was released." \
+              "" \
+              "A workflow opened this pull request, so no CI runs on it by itself: close and reopen it (or push to its branch) to run CI here." \
               "" \
               "Merging this pull request starts the Release workflow, which tests the merged commit again before it publishes.")
             url=$(gh api --method POST "$repo/pulls" -f base=master -f head="$BRANCH" -f title="build: track openslide-bin $BIN_VERSION" -f body="$body" --jq .html_url)
