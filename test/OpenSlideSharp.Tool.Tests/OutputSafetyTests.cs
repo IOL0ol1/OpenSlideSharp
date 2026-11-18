@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +29,7 @@ public class OutputSafetyTests
 
         Assert.Equal(1, code);
         Assert.Contains("x.tiff", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains("a file has that name", stderr.ToString(), StringComparison.Ordinal);
         Assert.Equal(Boxes, File.ReadAllBytes(slide));
         Assert.Equal(new[] { slide }, Directory.GetFileSystemEntries(temp.Path));
     }
@@ -39,13 +41,39 @@ public class OutputSafetyTests
         using var temp = new TempDirectory();
         string slide = temp.Combine("boxes.dzi");
         File.Copy(TestFiles.Get("boxes.tiff"), slide);
+        var stderr = new StringWriter();
 
         int code = await DeepZoomCommand.RunAsync(
-            new DeepZoomArguments(slide) { Output = temp.Combine("boxes") }, new StringWriter(), Token);
+            new DeepZoomArguments(slide) { Output = temp.Combine("boxes") }, stderr, Token);
 
         Assert.Equal(1, code);
+        Assert.Contains("it is the slide", stderr.ToString(), StringComparison.Ordinal);
         Assert.Equal(Boxes, File.ReadAllBytes(slide));
         Assert.Equal(new[] { slide }, Directory.GetFileSystemEntries(temp.Path));
+    }
+
+    [Fact]
+    public async Task OmeZarr_OutputIsAssociatedDirectory_IsRefused()
+    {
+        // --associated writes to <output>/../<stem>_associated: with that very directory as the output, replacing it
+        // for the associated images would delete the store just written.
+        using var temp = new TempDirectory();
+        var outputs = new List<string> { temp.Combine("small_associated") };
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        {
+            outputs.Add(temp.Combine("SMALL_Associated")); // the same directory on these file systems
+        }
+
+        foreach (string output in outputs)
+        {
+            var stderr = new StringWriter();
+            int code = await OmeZarrCommand.RunAsync(
+                new OmeZarrArguments(TestFiles.Get("small.svs")) { Output = output, Associated = true }, stderr, Token);
+
+            Assert.Equal(1, code);
+            Assert.Contains("is also the directory of the associated images", stderr.ToString(), StringComparison.Ordinal);
+            Assert.Empty(Directory.GetFileSystemEntries(temp.Path));
+        }
     }
 
     [Fact]
@@ -129,6 +157,7 @@ public class CurrentDirectoryTests
 
         Assert.Equal(1, code);
         Assert.Contains("boxes", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains("a file has that name", stderr.ToString(), StringComparison.Ordinal);
         Assert.True(File.Exists(slide));
         Assert.Equal(File.ReadAllBytes(TestFiles.Get("boxes.tiff")), File.ReadAllBytes(slide));
         Assert.Equal(new[] { slide }, Directory.GetFileSystemEntries(temp.Path));

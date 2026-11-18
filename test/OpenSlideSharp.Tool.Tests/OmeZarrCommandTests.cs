@@ -154,6 +154,7 @@ public class OmeZarrCommandTests
 
         Assert.Equal(1, code);
         Assert.Contains("x.tiff", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains("a file has that name", stderr.ToString(), StringComparison.Ordinal);
         Assert.Equal(File.ReadAllBytes(TestFiles.Get("boxes.tiff")), File.ReadAllBytes(slide));
         Assert.Equal(new[] { slide }, Directory.GetFileSystemEntries(temp.Path));
     }

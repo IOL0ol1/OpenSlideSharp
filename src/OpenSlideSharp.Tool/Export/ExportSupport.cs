@@ -128,6 +128,13 @@ internal static class ExportSupport
         File.WriteAllBytes(Path.Combine(full, MarkerFileName), []);
     }
 
+    /// <summary>True if two output paths name the same directory: ignoring case on Windows and macOS.</summary>
+    public static bool IsSamePath(string a, string b)
+        => string.Equals(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
     /// <summary>
     /// The Deep Zoom color rule for one image (the slide or an associated image, each with its own profile): the
     /// generator's transform and the mode to encode tiles with. A warning is written when the profile cannot be converted.

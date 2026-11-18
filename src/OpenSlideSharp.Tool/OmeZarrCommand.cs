@@ -110,10 +110,18 @@ internal static class OmeZarrCommand
         var writer = new TileWriter(args.Jobs, stderr, args.FileWritten);
         string directory = Path.Combine(Path.GetDirectoryName(output) ?? output, stem + "_associated");
 
-        // Check every output directory before changing anything.
+        // Check every output directory before changing anything. The associated directory is a sibling of the
+        // output, so they can only clash by being the same: replacing it would delete the store just written.
         ExportSupport.EnsureReplaceableDirectory(output, args.Slide);
         if (args.Associated)
         {
+            if (ExportSupport.IsSamePath(output, directory))
+            {
+                throw new IOException(
+                    $"Refusing to export to '{output}': with --associated it is also the directory of the associated images " +
+                    $"(<output>/../{stem}_associated). Choose another output.");
+            }
+
             ExportSupport.EnsureReplaceableDirectory(directory, args.Slide);
         }
 
