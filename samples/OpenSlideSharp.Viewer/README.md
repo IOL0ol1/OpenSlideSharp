@@ -54,7 +54,7 @@ The native libraries are inside the executable. It extracts them on first start 
 
 ## Licenses
 
-`licenses/` holds the license and notice files of what the executable contains: OpenSlide and the libraries linked into it (LGPL-2.1 and others, with their versions in each platform's `VERSIONS.md` under `openslide-bin/`), SkiaSharp, HarfBuzzSharp, ANGLE, Avalonia, the .NET runtime and the Inter font. `THIRD-PARTY-NOTICES.txt` lists them, and `SOURCE.md` says where OpenSlide's source code is and how to run the viewer with another OpenSlide build (`OPENSLIDE_LIBRARY_PATH`). Keep the folder with the executable. The planned GitHub release builds will ship this publish folder, executable and `licenses/`, as one archive per platform.
+`licenses/` holds the license and notice files of what the executable contains: OpenSlide and the libraries linked into it (LGPL-2.1 and others, under `openslide-bin/<platform>/` for the openslide-bin build of the publish's platform, with their versions in its `VERSIONS.md`), SkiaSharp, HarfBuzzSharp, ANGLE, Avalonia, the .NET runtime and the Inter font. `THIRD-PARTY-NOTICES.txt` lists them. `SOURCE.md`, written at publish time from `openslide-bin/openslide-bin.json`, names the exact openslide-bin build and its source tarball (file name, sha256, the openslide-bin download URL, and the copy attached to the [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) of the same version), and says how to run the viewer with another OpenSlide build (`OPENSLIDE_LIBRARY_PATH`). Keep the folder with the executable. The planned GitHub release builds will ship this publish folder, executable and `licenses/`, as one archive per platform.
 
 ## Known issue on Windows
 

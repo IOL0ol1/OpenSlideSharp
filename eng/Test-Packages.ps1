@@ -396,15 +396,25 @@ $unexpected = @($paths | Where-Object { $_ -ne $viewerName -and -not $_.StartsWi
 if ($paths -notcontains $viewerName -or $unexpected.Count -gt 0) {
     throw "[viewer] expected $viewerName and licenses/ in $viewerPublish, found: $($paths -join ', ')"
 }
-# The license texts of OpenSlide and of the libraries linked into it, from the runtime package: at least those of the
-# openslide-bin archive this RID's library comes from.
+# The license texts of OpenSlide and of the libraries linked into it, from the runtime package: exactly those of the
+# openslide-bin archive this RID's library comes from, and no other platform's.
 $viewerBinKey = @{ 'win-x64' = 'windows-x64'; 'linux-x64' = 'linux-x86_64'; 'linux-arm64' = 'linux-aarch64'; 'osx-arm64' = 'macos-arm64-x86_64'; 'osx-x64' = 'macos-arm64-x86_64' }[$viewerRid]
 foreach ($required in 'licenses/THIRD-PARTY-NOTICES.txt', 'licenses/SOURCE.md', 'licenses/openslide-bin/openslide-bin.json',
     "licenses/openslide-bin/$viewerBinKey/VERSIONS.md", "licenses/openslide-bin/$viewerBinKey/OpenSlide/COPYING.LESSER") {
     if ($paths -notcontains $required) { throw "[viewer] $required is not in $viewerPublish" }
 }
-$binLicenses = @($paths | Where-Object { $_ -like 'licenses/openslide-bin/*/*' })
-Write-Host "licenses/openslide-bin: $($binLicenses.Count) license files"
+$binLicenses = @($paths | Where-Object { $_ -like 'licenses/openslide-bin/*/*' } | ForEach-Object { $_.Substring('licenses/openslide-bin/'.Length) } | Sort-Object)
+$wantBinLicenses = @($runtimeLicenses | Where-Object { $_ -like "$viewerBinKey/*" })
+if (($binLicenses -join "`n") -cne ($wantBinLicenses -join "`n")) {
+    throw "[viewer] licenses/openslide-bin/ has $($binLicenses.Count) files ($((@($binLicenses | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique)) -join ', ')), expected the runtime nupkg's $($wantBinLicenses.Count) under licenses/$viewerBinKey/ only"
+}
+Write-Host "licenses/openslide-bin/$viewerBinKey`: $($binLicenses.Count) license files"
+# SOURCE.md is written at publish from openslide-bin.json: the exact build, its source tarball and the release copy.
+$sourceMd = Get-Content (Join-Path $viewerPublish 'licenses/SOURCE.md') -Raw
+foreach ($phrase in $manifest.binVersion, "openslide-bin-$($manifest.binVersion).tar.gz", $manifest.source.sha256, $manifest.source.url,
+    $manifest.openslideVersion, "https://github.com/IOL0ol1/OpenSlideSharp/releases/tag/v$Version", "openslide-bin/$viewerBinKey/", 'OPENSLIDE_LIBRARY_PATH') {
+    if (-not $sourceMd.Contains("$phrase")) { throw "[viewer] licenses/SOURCE.md does not contain '$phrase'" }
+}
 # The bundle extracts its native libraries when it starts; a fresh extraction directory shows they came from it.
 $viewerExtract = Join-Path $viewerOut 'extract'
 $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = $viewerExtract
