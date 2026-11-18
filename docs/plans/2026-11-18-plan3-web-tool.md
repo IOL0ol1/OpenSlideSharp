@@ -549,7 +549,7 @@ git add -A && git commit -m "feat: add the openslide-sharp tool with deepzoom an
 Run: `pwsh eng/Get-OpenSlide.ps1 -Platform all; pwsh eng/Test-Packages.ps1`
 Expected: `All package smoke tests passed.`
 
-- [ ] **Step 2: 扩展 `verify-omezarr.py` 与 CI job，本机按 CI 步骤跑一遍 Python 校验**（venv 放在 scratchpad）
+- [ ] **Step 2: 扩展 `verify-omezarr.py` 与 CI job，本机按 CI 步骤跑一遍 Python 校验**（venv 放在临时目录）
 - [ ] **Step 3: 更新文档**
 - [ ] **Step 4: 运行全部测试，提交**
 

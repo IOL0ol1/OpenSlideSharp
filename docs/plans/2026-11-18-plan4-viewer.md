@@ -322,7 +322,7 @@ git add -A && git commit -m "feat: add the SlideView control with tiled renderin
 
 - [ ] **Step 2: 运行，确认失败**
 - [ ] **Step 3: 实现**
-- [ ] **Step 4: 运行全部测试，确认通过**；再手动运行一次 `dotnet run --project samples/OpenSlideSharp.Viewer -- test/OpenSlideSharp.Tests/Fixtures/boxes.tiff`，用截图确认窗口正常显示，然后关闭。在报告里附上截图的保存路径（放在 scratchpad 中）。
+- [ ] **Step 4: 运行全部测试，确认通过**；再手动运行一次 `dotnet run --project samples/OpenSlideSharp.Viewer -- test/OpenSlideSharp.Tests/Fixtures/boxes.tiff`，用截图确认窗口正常显示，然后关闭。在报告里附上截图的保存路径（放在临时目录中）。
 - [ ] **Step 5: Commit**
 
 ```bash
