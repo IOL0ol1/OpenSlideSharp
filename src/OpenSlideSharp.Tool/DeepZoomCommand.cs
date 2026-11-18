@@ -69,6 +69,12 @@ internal static class DeepZoomCommand
         {
             try
             {
+                if (CheckTileSizes(slide, args) is { } tooLarge)
+                {
+                    stderr.WriteLine($"openslide-sharp: {tooLarge}");
+                    return ExportSupport.InvalidArguments;
+                }
+
                 await ExportAsync(slide, args, stderr, ct).ConfigureAwait(false);
                 return ExportSupport.Success;
             }
@@ -103,6 +109,64 @@ internal static class DeepZoomCommand
         }
 
         return null;
+    }
+
+    // DeepZoomGenerator accepts any tile size and overlap and lets GetTile reject a tile, or the slide region read
+    // for it, that needs more bytes than a .NET array can hold. Here that would happen after the old output was
+    // moved aside and deleted, so every image the export writes is checked first, with the same rule. Large values
+    // alone are fine: a tile never extends past its level, so a small slide with a large -s has small tiles. A
+    // tile's width and its region's width depend only on its column: all interior columns are TileSize + 2 *
+    // Overlap wide, and their regions only shrink to the right (they are clipped to the level), so the widest are
+    // in column 0, 1 or the last one. Likewise for rows.
+    private static string? CheckTileSizes(OpenSlide slide, DeepZoomArguments args)
+    {
+        var images = new List<(DeepZoomGenerator Generator, string Name)>
+        {
+            (new DeepZoomGenerator(slide, args.TileSize, args.Overlap, args.LimitBounds), ExportSupport.Describe(args.Slide, null)),
+        };
+        if (args.Viewer)
+        {
+            foreach (KeyValuePair<string, AssociatedImage> image in slide.AssociatedImages)
+            {
+                images.Add((new DeepZoomGenerator(image.Value, args.TileSize, args.Overlap), ExportSupport.Describe(args.Slide, image.Key)));
+            }
+        }
+
+        foreach ((DeepZoomGenerator generator, string name) in images)
+        {
+            for (int level = 0; level < generator.LevelCount; level++)
+            {
+                TileGridSize grid = generator.LevelTiles[level];
+                foreach (long column in Widest(grid.Columns))
+                {
+                    foreach (long row in Widest(grid.Rows))
+                    {
+                        SlideSize tile = generator.GetTileDimensions(level, column, row);
+                        TileRegion region = generator.GetTileCoordinates(level, column, row);
+                        string? what = TooLarge(tile.Width, tile.Height) ? $"a {tile.Width} x {tile.Height} tile at level {level} of {name}"
+                            : TooLarge(region.Width, region.Height) ? $"a tile at level {level} of {name} read from a {region.Width} x {region.Height} slide region"
+                            : null;
+                        if (what is not null)
+                        {
+                            return $"--size {args.TileSize} and --overlap {args.Overlap} make {what}, which needs more bytes than " +
+                                "a .NET array can hold. Choose a smaller -s/--size or -e/--overlap.";
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+
+        static IEnumerable<long> Widest(long count) => new[] { 0L, 1L, count - 1 }.Where(i => i >= 0 && i < count).Distinct();
+
+        // OpenSlide.CheckedPixelBytes, which GetTile uses: width * height * 4 bytes must fit in an array.
+        static bool TooLarge(long width, long height)
+        {
+            width = Math.Max(width, 0);
+            height = Math.Max(height, 0);
+            return width != 0 && height > Array.MaxLength / 4 / width;
+        }
     }
 
     private static async Task ExportAsync(OpenSlide slide, DeepZoomArguments args, TextWriter stderr, CancellationToken ct)

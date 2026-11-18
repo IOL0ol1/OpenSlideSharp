@@ -51,6 +51,7 @@ Every key of the store is written as a file, with `/` in the key as directories.
 - Every file is written to `.<file>.tmp` next to it and then moved into place, so no file is ever partially written. The `.dzi` is written after the tiles, and the OME-Zarr root metadata (`zarr.json`, or `.zgroup` and `.zattrs`) after every chunk and level, so an interrupted export is not mistaken for a complete one.
 - Progress goes to stderr, at most once a second: `Tiling <image>: <done>/<total> tiles`. Warnings (see [Color](#color)) and errors go to stderr too, prefixed with `openslide-sharp:`.
 - Ctrl+C stops the export once the files being written are complete.
+- Before anything is written, `deepzoom` checks that each tile, and the slide region read for it, fits in a .NET array (`width × height × 4` bytes, just under 2 GiB); with an `-s` or `-e` too large for that it stops with exit code 2. A tile never extends past its level, so a tile size larger than the slide is fine.
 - Exit codes: 0 on success, 1 if the slide cannot be opened or the export fails, 2 for invalid arguments, 130 when canceled.
 - `-j` above 4 × the processor count is lowered to that, with a note on stderr.
 
