@@ -65,16 +65,25 @@ function Get-MaxNuGetVersion {
 }
 
 function Get-PublishedNuGetVersions {
-    <# All versions of a package on nuget.org (flat container, lower-case ids and versions). 404 means none. #>
+    <# All versions of a package on nuget.org (flat container, lower-case ids and versions). 404, any other non-200 status and an empty list are errors. #>
     [CmdletBinding()]
     param([string]$PackageId = 'openslidesharp')
     $url = "https://api.nuget.org/v3-flatcontainer/$($PackageId.ToLowerInvariant())/index.json"
     $r = Invoke-WebRequest -Uri $url -SkipHttpErrorCheck -Headers @{ 'User-Agent' = 'OpenSlideSharp-release' }
-    if ($r.StatusCode -eq 404) { return @() }
     if ($r.StatusCode -ne 200) { throw "GET $url returned HTTP $($r.StatusCode)." }
     $json = $r.Content | ConvertFrom-Json
     if ($null -eq $json -or -not ($json.PSObject.Properties.Name -contains 'versions')) { throw "GET $url returned no 'versions' list." }
-    [string[]]@($json.versions)
+    Assert-PublishedNuGetVersions ([string[]]@($json.versions)) $PackageId
 }
 
-Export-ModuleMember -Function ConvertTo-NuGetVersion, Compare-NuGetVersion, Get-MaxNuGetVersion, Get-PublishedNuGetVersions
+function Assert-PublishedNuGetVersions {
+    <# The package is known to exist on nuget.org, so an empty list means a broken fetch, not "nothing published". #>
+    [CmdletBinding()]
+    param([string[]]$Versions, [string]$PackageId = 'openslidesharp')
+    if (@($Versions | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -eq 0) {
+        throw "nuget.org returned no published versions for $PackageId, which is known to exist; refusing to continue without the monotonic check."
+    }
+    [string[]]@($Versions)
+}
+
+Export-ModuleMember -Function ConvertTo-NuGetVersion, Compare-NuGetVersion, Get-MaxNuGetVersion, Get-PublishedNuGetVersions, Assert-PublishedNuGetVersions

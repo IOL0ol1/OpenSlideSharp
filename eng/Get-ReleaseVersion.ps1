@@ -40,6 +40,8 @@ function Get-NextSuffix([string]$Base, [string[]]$Tags) {
 function Get-ReleaseVersionInfo {
     param([Parameter(Mandatory)]$Manifest, [string[]]$PublishedVersions, [string[]]$ExistingTags)
     $bin = [string]$Manifest.binVersion
+    # Existing tags and published versions both occupy a number (published versions are written as tags: v<version>).
+    $ExistingTags = @($ExistingTags) + @(@($PublishedVersions) | Where-Object { $_ } | ForEach-Object { "v$_" })
     $core = ($bin -split '\+')[0]
     if ($core -notmatch '^\d+(\.\d+){2,3}$') { throw "Unsupported binVersion '$bin'." }
     $nums = [int[]]@($core -split '\.')
@@ -65,6 +67,8 @@ function Get-ReleaseVersionInfo {
         throw "Version $version is not higher than the highest version published on nuget.org ($max); refusing to release an out-of-order version."
     }
 
+    $osv = [string]$Manifest.openslideVersion
+    $upstreamVersion = if ($osv -match '-g[0-9a-fA-F]+$') { $osv } else { "$osv.g$($Manifest.openslideCommit)" }
     $tarball = "openslide-bin-$bin.tar.gz"
     $notes = @(
         "OpenSlideSharp $version, built against OpenSlide binaries from openslide-bin ``$bin``.",
@@ -77,7 +81,8 @@ function Get-ReleaseVersionInfo {
     [ordered]@{
         version              = $version
         prerelease           = $version.Contains('-')
-        informationalVersion = "$version+openslide.$($Manifest.openslideVersion)"
+        openslideUpstreamVersion = $upstreamVersion
+        informationalVersion = "$version+openslide.$upstreamVersion"
         tag                  = "v$version"
         releaseName          = "OpenSlideSharp $version"
         notes                = $notes
@@ -87,7 +92,11 @@ function Get-ReleaseVersionInfo {
 if ($SelfTest) {
     $results = [System.Collections.Generic.List[object]]::new()
     function Test-Case([string]$Name, [scriptblock]$Body) {
-        try { $ok = [bool](& $Body) } catch { $ok = $false; $Name += " (threw: $($_.Exception.Message))" }
+        try {
+            # A case must produce exactly one boolean; stray output (e.g. a negative case that did not throw) is a failure.
+            $out = @(& $Body)
+            $ok = $out.Count -eq 1 -and $out[0] -is [bool] -and $out[0]
+        } catch { $ok = $false; $Name += " (threw: $($_.Exception.Message))" }
         $results.Add([pscustomobject]@{ Name = $Name; Ok = $ok })
     }
     function New-Manifest($Channel, $Bin, $OsVersion, $Commit, $Date) {
@@ -126,18 +135,27 @@ if ($SelfTest) {
     Test-Case 'stable manifest, v4.0.1.2 and .1 exist -> .2' {
         (Get-Version $stable -Tags 'v4.0.1.2', 'v4.0.1.3-nightly.20260620.gfe79a971.1') -eq '4.0.1.3-nightly.20260620.gfe79a971.2' }
     Test-Case 'monotonic: published 4.0.1.3 rejects nightly 4.0.1.3-nightly...' {
-        try { Get-Version $nightly -Published '1.1.2', '4.0.1.3'; $false } catch { $_.Exception.Message -match 'not higher' } }
-    Test-Case 'monotonic: published version equal to the computed one is rejected' {
-        try { Get-Version $stable -Published '4.0.1.2'; $false } catch { $_.Exception.Message -match 'not higher' } }
-    Test-Case 'published versions are lower-case and compared case-insensitively' {
-        try { Get-Version $nightly -Published $nb.ToLowerInvariant(); $false } catch { $_.Exception.Message -match 'not higher' } }
+        try { $null = Get-Version $nightly -Published '1.1.2', '4.0.1.3'; $false } catch { $_.Exception.Message -match 'not higher' } }
+    Test-Case 'monotonic: published 4.0.1.4 rejects stable 4.0.1.2' {
+        try { $null = Get-Version $stable -Published '4.0.1.4'; $false } catch { $_.Exception.Message -match 'not higher' } }
+    Test-Case 'base already published, no tag -> .1' { (Get-Version $nightly -Published '1.1.2', $nb) -eq "$nb.1" }
+    Test-Case 'published lower-case version counts case-insensitively -> .1' {
+        (Get-Version $nightly -Published $nb.ToLowerInvariant()) -eq "$nb.1" }
+    Test-Case 'published .2 and tag .1 -> .3' { (Get-Version $nightly -Published '1.1.2', "$nb.2" -Tags "v$nb.1") -eq "$nb.3" }
+    Test-Case 'published .1 and tags base, .2 -> .3' { (Get-Version $nightly -Published "$nb.1" -Tags "v$nb", "v$nb.2") -eq "$nb.3" }
+    Test-Case 'empty fetched published list is refused' {
+        try { $null = Assert-PublishedNuGetVersions @(); $false } catch { $_.Exception.Message -match 'no published versions' } }
+    Test-Case 'non-empty fetched published list is accepted' { @(Assert-PublishedNuGetVersions @('1.1.2')).Count -eq 1 }
     Test-Case 'empty published list is accepted' { (Get-Version $nightly -Published @()) -eq $nb }
 
     $info = Get-ReleaseVersionInfo -Manifest $nightly -PublishedVersions @('1.1.2') -ExistingTags @()
     Test-Case 'nightly is a prerelease; stable is not' {
         $info.prerelease -eq $true -and (Get-ReleaseVersionInfo -Manifest $stable -PublishedVersions @() -ExistingTags @()).prerelease -eq $false }
-    Test-Case 'informationalVersion = version+openslide.<openslideVersion>' {
-        $info.informationalVersion -eq "$nb+openslide.v4.0.1-49-g174630bf" }
+    Test-Case 'informationalVersion = version+openslide.<openslideUpstreamVersion>' {
+        $info.informationalVersion -eq "$nb+openslide.v4.0.1-49-g174630bf" -and $info.openslideUpstreamVersion -eq 'v4.0.1-49-g174630bf' }
+    Test-Case 'stable: openslideUpstreamVersion gets the commit appended' {
+        $s = Get-ReleaseVersionInfo -Manifest $stable -PublishedVersions @('1.1.2') -ExistingTags @()
+        $s.openslideUpstreamVersion -eq 'v4.0.1.gfe79a971' -and $s.informationalVersion -eq '4.0.1.2+openslide.v4.0.1.gfe79a971' }
     Test-Case 'tag and releaseName' { $info.tag -eq "v$nb" -and $info.releaseName -eq "OpenSlideSharp $nb" }
     Test-Case 'notes name versions, commit, source URL and the attached tarball with its sha256' {
         $info.notes -match [regex]::Escape('4.0.1.2+20261102.nightly') -and $info.notes -match 'v4\.0\.1-49-g174630bf' -and

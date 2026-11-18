@@ -4,7 +4,7 @@
 .SYNOPSIS
   Lists the upstream openslide-bin releases that should be synced into eng/openslide.json, as a JSON array.
 .DESCRIPTION
-  Looks at the latest stable openslide-bin release and the latest nightly in openslide/builds. A release is a
+  Looks at the highest stable openslide-bin release (from the release list, not releases/latest) and the latest nightly in openslide/builds. A release is a
   candidate only when its NuGet version (version table in Get-ReleaseVersion.ps1) is strictly higher than the manifest's
   and than the highest version published on nuget.org. Old-series maintenance releases are therefore skipped, and the
   manifest never goes down. Output order is ascending by NuGet version, stable first. No update prints [].
@@ -75,6 +75,16 @@ function Get-UpstreamCandidates {
     $candidates.ToArray()
 }
 
+function Select-LatestStableRelease($Releases) {
+    # The highest stable release by NuGet order. releases/latest is creation-ordered and can point at an old-series maintenance release.
+    $best = $null
+    foreach ($r in @($Releases)) {
+        if ($r.prerelease -or $r.draft -or [string]$r.tag_name -notmatch '^v\d+(\.\d+){2,3}$') { continue }
+        if ($null -eq $best -or (Compare-NuGetVersion ([string]$r.tag_name -replace '^v', '') ([string]$best.tag_name -replace '^v', '')) -gt 0) { $best = $r }
+    }
+    $best
+}
+
 function Invoke-GitHubApi([string]$Path) {
     $headers = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'OpenSlideSharp-upstream-sync' }
     if ($env:GITHUB_TOKEN) { $headers.Authorization = "Bearer $($env:GITHUB_TOKEN)" }
@@ -87,7 +97,11 @@ function Invoke-GitHubApi([string]$Path) {
 if ($SelfTest) {
     $results = [System.Collections.Generic.List[object]]::new()
     function Test-Case([string]$Name, [scriptblock]$Body) {
-        try { $ok = [bool](& $Body) } catch { $ok = $false; $Name += " (threw: $($_.Exception.Message))" }
+        try {
+            # A case must produce exactly one boolean; stray output (e.g. a negative case that did not throw) is a failure.
+            $out = @(& $Body)
+            $ok = $out.Count -eq 1 -and $out[0] -is [bool] -and $out[0]
+        } catch { $ok = $false; $Name += " (threw: $($_.Exception.Message))" }
         $results.Add([pscustomobject]@{ Name = $Name; Ok = $ok })
     }
     function New-Manifest($Channel, $Bin, $OsVersion, $Commit, $Date) {
@@ -136,7 +150,16 @@ if ($SelfTest) {
     Test-Case 'nothing exists upstream' { (Find $stableManifest $null $null).Count -eq 0 }
     Test-Case 'empty published list is accepted' { (Find $stableManifest (New-Stable 'v4.0.2.0') $null @()).Count -eq 1 }
     Test-Case 'nightly release without an OpenSlide row in the notes is an error' {
-        try { Find $stableManifest $null ([pscustomobject]@{ tag_name = 'v4.0.1.3+20261110.nightly'; body = 'nothing' }); $false } catch { $_.Exception.Message -match 'OpenSlide' } }
+        try { $null = Find $stableManifest $null ([pscustomobject]@{ tag_name = 'v4.0.1.3+20261110.nightly'; body = 'nothing' }); $false } catch { $_.Exception.Message -match 'lists no OpenSlide version' } }
+    Test-Case 'latest stable is the highest, not the newest created (old-series maintenance release listed first)' {
+        $rel = @((New-Stable 'v4.0.0.14'), (New-Stable 'v4.0.1.2'), (New-Stable 'v4.0.1.1'), [pscustomobject]@{ tag_name = 'v9.9.9.9'; prerelease = $true; draft = $false })
+        (Select-LatestStableRelease $rel).tag_name -eq 'v4.0.1.2' -and
+        (Select-LatestStableRelease @((New-Stable 'v4.0.0.14'), (New-Stable 'v4.0.2.0'), (New-Stable 'v4.0.1.9'))).tag_name -eq 'v4.0.2.0' }
+    Test-Case 'a newer-created old-series stable does not hide the new stable' {
+        $latest = Select-LatestStableRelease @((New-Stable 'v4.0.0.14'), (New-Stable 'v4.0.2.0'))
+        $c = Find $stableManifest $latest $null
+        $c.Count -eq 1 -and $c[0].tag -eq 'v4.0.2.0' }
+    Test-Case 'no stable releases at all gives $null' { $null -eq (Select-LatestStableRelease @()) }
     Test-Case 'Compare 4.0.1.3-nightly.20261102.g174630bf < 4.0.1.3' {
         (Compare-NuGetVersion '4.0.1.3-nightly.20261102.g174630bf' '4.0.1.3') -eq -1 }
     Test-Case 'Compare 1.1.2 < 4.0.1.2' { (Compare-NuGetVersion '1.1.2' '4.0.1.2') -eq -1 }
@@ -153,7 +176,7 @@ try {
     $manifestObject = Get-Content -Raw -Path $Manifest | ConvertFrom-Json
     if ($null -eq $PSBoundParameters['PublishedVersions']) { $PublishedVersions = Get-PublishedNuGetVersions }
 
-    $stable = Invoke-GitHubApi 'repos/openslide/openslide-bin/releases/latest'
+    $stable = Select-LatestStableRelease (Invoke-GitHubApi 'repos/openslide/openslide-bin/releases?per_page=100')
     $nightly = $null
     foreach ($r in (Invoke-GitHubApi 'repos/openslide/builds/releases?per_page=30')) {
         if ($r.prerelease -and -not $r.draft -and $r.assets.Count -gt 0) { $nightly = $r; break }
