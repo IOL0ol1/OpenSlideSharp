@@ -190,6 +190,46 @@ public class OmeZarrCommandTests
         Assert.Contains("unopenable.tiff", stderr.ToString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(1, 512, 4)]
+    [InlineData(8, 512, 16)]
+    [InlineData(600, 512, 1024)]  // 1 GiB of 1 MiB regions
+    [InlineData(3, 4096, 6)]
+    [InlineData(16, 4096, 16)]    // 1 GiB of 64 MiB regions
+    [InlineData(8, 8192, 8)]      // one region per job, even past 1 GiB
+    [InlineData(64, 8192, 64)]
+    public void RenderCacheSize_IsBoundedByBytes(int jobs, int chunkSize, int expected)
+    {
+        Assert.Equal(expected, OmeZarrCommand.RenderCacheSize(jobs, chunkSize));
+    }
+
+    [Fact]
+    public async Task Jobs_AboveFourTimesProcessorCount_AreLowered()
+    {
+        using var temp = new TempDirectory();
+        int max = 4 * Environment.ProcessorCount;
+
+        var deepZoom = new StringWriter();
+        int deepZoomCode = await DeepZoomCommand.RunAsync(
+            new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = temp.Combine("boxes"), Jobs = max + 1 }, deepZoom, Token);
+        var omeZarr = new StringWriter();
+        int omeZarrCode = await OmeZarrCommand.RunAsync(
+            new OmeZarrArguments(TestFiles.Get("boxes.tiff")) { Output = temp.Combine("boxes.zarr"), Jobs = max + 1 }, omeZarr, Token);
+
+        Assert.True(deepZoomCode == 0, deepZoom.ToString());
+        Assert.True(omeZarrCode == 0, omeZarr.ToString());
+        foreach (string stderr in new[] { deepZoom.ToString(), omeZarr.ToString() })
+        {
+            Assert.Contains($"--jobs {max + 1} is more than 4 times the processor count; using {max}.", stderr, StringComparison.Ordinal);
+        }
+
+        // At the limit, no note.
+        var quiet = new StringWriter();
+        Assert.Equal(0, await DeepZoomCommand.RunAsync(
+            new DeepZoomArguments(TestFiles.Get("boxes.tiff")) { Output = temp.Combine("boxes"), Jobs = max }, quiet, Token));
+        Assert.DoesNotContain("--jobs", quiet.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Program_ParsesArguments()
     {

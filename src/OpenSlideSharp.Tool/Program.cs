@@ -169,7 +169,7 @@ internal static class Program
         new Option<int>("--jobs", "-j")
         {
             HelpName = "count",
-            Description = "Number of worker threads.",
+            Description = "Number of worker threads, at most 4 times the processor count (more is lowered to that).",
             DefaultValueFactory = _ => Environment.ProcessorCount,
         },
         1);

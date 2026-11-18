@@ -193,6 +193,22 @@ internal static class ExportSupport
         File.WriteAllBytes(Path.Combine(full, MarkerFileName), []);
     }
 
+    /// <summary>
+    /// The number of worker threads to use: <paramref name="jobs"/>, but at most 4 times the processor count, with a
+    /// note on stderr when it is lowered. More threads only add memory (each holds a tile or chunk) and contention.
+    /// </summary>
+    public static int LimitJobs(int jobs, TextWriter stderr)
+    {
+        int max = 4 * Environment.ProcessorCount;
+        if (jobs <= max)
+        {
+            return jobs;
+        }
+
+        stderr.WriteLine($"openslide-sharp: note: --jobs {jobs} is more than 4 times the processor count; using {max}.");
+        return max;
+    }
+
     /// <summary>True if two output paths name the same directory: ignoring case on Windows and macOS.</summary>
     public static bool IsSamePath(string a, string b)
         => string.Equals(
