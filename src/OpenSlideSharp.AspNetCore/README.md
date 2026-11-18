@@ -1,6 +1,6 @@
 # OpenSlideSharp.AspNetCore
 
-ASP.NET Core support for serving [OpenSlide](https://openslide.org/) slides with [OpenSlideSharp](https://www.nuget.org/packages/OpenSlideSharp): options, slide resolvers and a shared slide cache, for Deep Zoom and OME-Zarr endpoints.
+ASP.NET Core endpoints that serve [OpenSlide](https://openslide.org/) slides with [OpenSlideSharp](https://www.nuget.org/packages/OpenSlideSharp): Deep Zoom for OpenSeadragon, like openslide-python's `deepzoom_server.py`, and OME-Zarr for viewers such as vizarr, with a shared slide cache.
 
 ```csharp
 using OpenSlideSharp.AspNetCore;
@@ -8,6 +8,12 @@ using OpenSlideSharp.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenSlide(builder.Configuration.GetSection("OpenSlide"));
 // or: builder.Services.AddOpenSlide(options => options.DeepZoom.TileSize = 510);
+
+var app = builder.Build();
+var slides = new DirectorySlideResolver("/data/slides");
+app.MapDeepZoom("/dz", slides);
+app.MapOmeZarr("/zarr", slides);
+app.Run();
 ```
 
 The native library is not included. Add the [OpenSlideSharp.runtime](https://www.nuget.org/packages/OpenSlideSharp.runtime) package, or provide your own OpenSlide 4.x build.
@@ -34,6 +40,34 @@ The native library is not included. Add the [OpenSlideSharp.runtime](https://www
 
 Associated images (label, macro, thumbnail) are always shown whole, whatever `LimitBounds` says.
 
+## Endpoints
+
+`MapDeepZoom(prefix, resolver)` answers GET and HEAD:
+
+| URL | Response |
+|---|---|
+| `{prefix}/{slide}.dzi` | the DZI document, `application/xml` |
+| `{prefix}/{slide}_files/{level}/{col}_{row}.{jpeg\|png}` | a tile, `image/jpeg` or `image/png` |
+| `{prefix}/{slide}/associated/{name}.dzi` and `{prefix}/{slide}/associated/{name}_files/...` | the same for an associated image |
+
+The DZI names `DeepZoom:Format`; a tile URL may ask for either format.
+
+`MapOmeZarr(prefix, resolver)` answers GET, HEAD and OPTIONS:
+
+| URL | Response |
+|---|---|
+| `{prefix}/{slide}.zarr/{key}` | an entry of the store: metadata (`zarr.json`, or `.zgroup`, `.zattrs` and `.zarray` for NGFF 0.4) as `application/json`, chunks as `application/octet-stream` |
+| `{prefix}/{slide}/associated/{name}.zarr/{key}` | the same for an associated image |
+
+A viewer opens `{prefix}/{slide}.zarr` as the store. HEAD answers 200 and the Content-Type for an existing key without rendering the chunk. With `OmeZarr:AllowCrossOrigin`, every response carries `Access-Control-Allow-Origin: *`, and OPTIONS answers 204 with `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`, so a viewer on another origin can read the store.
+
+`{slide}` is the name the resolver knows (see [Resolvers](#resolvers)): the fixed name of a `SingleSlideResolver`, or the `/`-separated path below the root of a `DirectorySlideResolver`, such as `a/boxes.tiff`. `{name}` is an associated image name, such as `macro`, escaped as one URL segment (`Uri.EscapeDataString`).
+
+Status codes:
+
+- 404: an unknown slide or associated image, a path outside the root, a file OpenSlide cannot open, a level, tile or chunk outside the pyramid, a tile format other than `jpeg` or `png`, and an unknown key, including probes such as `.zmetadata`.
+- 500: the slide is in the OpenSlide error state. It is evicted from the cache, and the next request opens it again.
+
 ## Resolvers
 
 An `ISlideResolver` turns the `{slide}` part of a URL into a file:
@@ -57,7 +91,17 @@ Within a cached slide, each image (the slide and each associated image) gets its
 | `Embed` | unconverted, profile embedded | unconverted (OME-Zarr cannot hold a profile) |
 | `Ignore` | unconverted, no profile | unconverted |
 
-Images without a profile are served the same way in every mode. A warning is logged once per image when a profile cannot be converted, and once per image when `Embed` meets OME-Zarr. Slides that cannot be opened are logged at debug level.
+Images without a profile are served the same way in every mode.
+
+## Logging
+
+| Category | Level | When |
+|---|---|---|
+| `OpenSlideSharp.AspNetCore.SlideCache` | Warning | an image's profile cannot be converted (`Default`), or `Embed` meets OME-Zarr; once per image while its slide stays open |
+| `OpenSlideSharp.AspNetCore.SlideCache` | Debug | a file cannot be opened as a slide (the request gets a 404) |
+| `OpenSlideSharp.AspNetCore.DeepZoom`, `OpenSlideSharp.AspNetCore.OmeZarr` | Error | a request found the slide in the OpenSlide error state (500, slide evicted) |
+
+Requests that succeed are not logged; use ASP.NET Core's request logging for that.
 
 ## Known issues
 
