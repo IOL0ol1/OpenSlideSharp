@@ -30,23 +30,64 @@
     <OpenSlideSharpVersion Condition="'$(OpenSlideSharpVersion)' == ''">$(Version)</OpenSlideSharpVersion>
   </PropertyGroup>
   <ItemGroup Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">
-    <PackageReference Include="OpenSlideSharp.runtime" VersionOverride="$(OpenSlideSharpVersion)" />
+    <PackageReference Include="OpenSlideSharp.runtime" VersionOverride="$(OpenSlideSharpVersion)" GeneratePathProperty="true" />
   </ItemGroup>
   <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
 
   <!--
-    A single-file publish (see README.md) is the one file a user downloads: the native libraries (OpenSlide, SkiaSharp,
-    HarfBuzzSharp, and ANGLE on Windows or Avalonia.Native on macOS) go inside the executable and are extracted on
-    first start, and a self-contained bundle is compressed to about half its size. Symbols and XML documentation are
-    left out of the publish folder.
+    A single-file publish (see README.md) is a folder with the executable and licenses/. The native libraries
+    (OpenSlide, SkiaSharp, HarfBuzzSharp, and ANGLE on Windows or Avalonia.Native on macOS) go inside the executable
+    and are extracted on first start, and a self-contained bundle is compressed to about half its size. Symbols and
+    XML documentation are left out of the publish folder.
   -->
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
   </PropertyGroup>
-  <Target Name="PublishOnlyTheExecutable" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishSingleFile)' == 'true'">
+  <Target Name="PublishWithoutSymbols" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishSingleFile)' == 'true'">
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' or '%(Extension)' == '.xml'" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Every publish has licenses/ next to the executable, with the notices of what it contains:
+    - openslide-bin/: OpenSlide's and its libraries' licenses and VERSIONS.md, from OpenSlideSharp.runtime (or, without
+      it, from artifacts/native);
+    - <package id>/: the LICENSE* and THIRD-PARTY-NOTICES* files of each NuGet package (the .NET runtime pack of a
+      self-contained publish among them) with a file in the publish;
+    - OpenSlideSharp/LICENSE, THIRD-PARTY-NOTICES.txt (a list of the components and their licenses) and SOURCE.md
+      (where OpenSlide's source is, and how to use another OpenSlide build).
+    They stay out of a single-file bundle.
+  -->
+  <Target Name="PublishLicenses" AfterTargets="PublishWithoutSymbols;ComputeResolvedFilesToPublishList">
+    <PropertyGroup>
+      <_OpenSlideBinDir Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">$(PkgOpenSlideSharp_runtime)</_OpenSlideBinDir>
+      <_OpenSlideBinDir Condition="'$(UseOpenSlideRuntimePackage)' != 'true'">$(MSBuildThisFileDirectory)..\..\artifacts\native</_OpenSlideBinDir>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_OpenSlideBinDir)/VERSIONS.md') or !Exists('$(_OpenSlideBinDir)/licenses')"
+           Text="OpenSlide's licenses/ and VERSIONS.md are not in '$(_OpenSlideBinDir)'." />
+    <ItemGroup>
+      <!-- The folder of each package with a file in the publish: the part of the file's path up to <id>/<version>/. -->
+      <_ViewerPackageFile Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.NuGetPackageId)' != ''"
+                          PackageDir="$([System.Text.RegularExpressions.Regex]::Match('%(ResolvedFileToPublish.FullPath)', '(?i)^.*[\\/]%(ResolvedFileToPublish.NuGetPackageId)[\\/]%(ResolvedFileToPublish.NuGetPackageVersion)[\\/]').Value)" />
+      <_ViewerPackage Include="@(_ViewerPackageFile->'%(PackageDir)'->Distinct())" Condition="'%(_ViewerPackageFile.PackageDir)' != ''" />
+      <_ViewerPackageLicense Include="%(_ViewerPackage.Identity)LICENSE*;%(_ViewerPackage.Identity)THIRD-PARTY-NOTICES*"
+                             PackageId="%(_ViewerPackage.NuGetPackageId)" />
+
+      <_OpenSlideBinLicense Include="$(_OpenSlideBinDir)/licenses/**" />
+
+      <_ViewerLicense Include="@(_OpenSlideBinLicense)"
+                      RelativePath="licenses/openslide-bin/%(_OpenSlideBinLicense.RecursiveDir)%(_OpenSlideBinLicense.Filename)%(_OpenSlideBinLicense.Extension)" />
+      <_ViewerLicense Include="$(_OpenSlideBinDir)/VERSIONS.md" RelativePath="licenses/openslide-bin/VERSIONS.md" />
+      <_ViewerLicense Include="@(_ViewerPackageLicense)"
+                      RelativePath="licenses/%(_ViewerPackageLicense.PackageId)/%(_ViewerPackageLicense.Filename)%(_ViewerPackageLicense.Extension)" />
+      <_ViewerLicense Include="$(MSBuildThisFileDirectory)..\..\LICENSE" RelativePath="licenses/OpenSlideSharp/LICENSE" />
+      <_ViewerLicense Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.txt" RelativePath="licenses/THIRD-PARTY-NOTICES.txt" />
+      <_ViewerLicense Include="$(MSBuildThisFileDirectory)SOURCE.md" RelativePath="licenses/SOURCE.md" />
+
+      <ResolvedFileToPublish Include="@(_ViewerLicense)" RelativePath="%(_ViewerLicense.RelativePath)"
+                             CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     </ItemGroup>
   </Target>
 

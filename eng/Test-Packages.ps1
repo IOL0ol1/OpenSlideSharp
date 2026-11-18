@@ -3,7 +3,8 @@
 Packs OpenSlideSharp, OpenSlideSharp.SkiaSharp, OpenSlideSharp.runtime, OpenSlideSharp.AspNetCore and the
 OpenSlideSharp.Tool .NET tool into artifacts/smoke-feed and proves the nupkgs work for real consumers (net10.0,
 an ASP.NET Core app, net48 x64 and AnyCPU, no-runtime, the installed tool, the desktop viewer published
-self-contained as one file for this machine's RID, and a Visual Studio C++ project), plus the 32-bit build warning.
+self-contained as one executable with its licenses for this machine's RID, and a Visual Studio C++ project), plus
+the 32-bit build warning.
 
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
@@ -301,8 +302,9 @@ finally {
     Remove-Item $toolTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 6. The desktop viewer, published the way its releases are: self-contained, one file, for this machine's RID, with
-# the native OpenSlide library from the runtime package in the feed. --check reads the slide without a window.
+# 6. The desktop viewer, published the way its releases will be: self-contained, one executable and its licenses, for
+# this machine's RID, with the native OpenSlide library from the runtime package in the feed. --check reads the slide
+# without a window.
 Write-Host '== smoke: viewer (self-contained single file)'
 $hostArch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 # Picked the way eng/Get-OpenSlide.ps1 picks this machine's binaries.
@@ -318,12 +320,24 @@ Invoke-Native dotnet @('publish', (Join-Path $root 'samples/OpenSlideSharp.Viewe
     "-p:RestoreAdditionalProjectSources=$feed", '--artifacts-path', $viewerOut)
 $viewerPublish = Join-Path $viewerOut "publish/OpenSlideSharp.Viewer/release_$viewerRid"
 $viewerName = $IsWindows ? 'OpenSlideSharp.Viewer.exe' : 'OpenSlideSharp.Viewer'
-# The publish folder is exactly the file a release attaches: the native libraries are inside it.
-$published = @(Get-ChildItem $viewerPublish -Recurse -File)
-$published | ForEach-Object { Write-Host ("published: {0} ({1:N1} MB)" -f $_.Name, ($_.Length / 1MB)) }
-if ($published.Count -ne 1 -or $published[0].Name -ne $viewerName) {
-    throw "[viewer] expected only $viewerName in $viewerPublish, found: $(($published | ForEach-Object { $_.Name }) -join ', ')"
+# The publish folder is exactly what a release archives: the executable, with the native libraries inside it, and
+# licenses/ with the notices of what it contains.
+$published = @(Get-ChildItem $viewerPublish -Recurse -File | ForEach-Object {
+        [pscustomobject]@{ Path = [IO.Path]::GetRelativePath($viewerPublish, $_.FullName) -replace '\\', '/'; Length = $_.Length }
+    })
+$published | ForEach-Object { Write-Host ("published: {0} ({1:N1} KB)" -f $_.Path, ($_.Length / 1KB)) }
+$paths = @($published | ForEach-Object Path)
+$unexpected = @($paths | Where-Object { $_ -ne $viewerName -and -not $_.StartsWith('licenses/') })
+if ($paths -notcontains $viewerName -or $unexpected.Count -gt 0) {
+    throw "[viewer] expected $viewerName and licenses/ in $viewerPublish, found: $($paths -join ', ')"
 }
+foreach ($required in 'licenses/THIRD-PARTY-NOTICES.txt', 'licenses/SOURCE.md', 'licenses/openslide-bin/VERSIONS.md') {
+    if ($paths -notcontains $required) { throw "[viewer] $required is not in $viewerPublish" }
+}
+# The license texts of OpenSlide and of the libraries linked into it, from the runtime package.
+if (-not ($paths | Where-Object { $_ -like 'licenses/openslide-bin/OpenSlide/*' })) { throw "[viewer] OpenSlide's license is not in licenses/openslide-bin/" }
+$binLicenses = @($paths | Where-Object { $_ -like 'licenses/openslide-bin/*/*' })
+Write-Host "licenses/openslide-bin: $($binLicenses.Count) license files"
 # The bundle extracts its native libraries when it starts; a fresh extraction directory shows they came from it.
 $viewerExtract = Join-Path $viewerOut 'extract'
 $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = $viewerExtract
