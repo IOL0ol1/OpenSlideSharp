@@ -39,8 +39,13 @@ on:
 permissions:
   contents: read
 
+# One group per ref: a dry run dispatched on a branch must not take the queue slot of a release of master (GitHub keeps
+# one running and one pending run per group, and a newer pending run cancels the older). When called, github.ref is the
+# caller's, so the upstream sync's calls and pushes to master share publish-refs/heads/master and run one at a time.
+# Not release-${{ github.ref }}: group names are case insensitive, and ci.yml, called below, takes the group
+# ${{ github.workflow }}-${{ github.ref }}, which is Release-refs/heads/... here; the call would wait for this run.
 concurrency:
-  group: release
+  group: publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
