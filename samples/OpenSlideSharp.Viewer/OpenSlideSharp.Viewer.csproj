@@ -34,4 +34,20 @@
   </ItemGroup>
   <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
 
+  <!--
+    A single-file publish (see README.md) is the one file a user downloads: the native libraries (OpenSlide, SkiaSharp,
+    HarfBuzzSharp, and ANGLE on Windows or Avalonia.Native on macOS) go inside the executable and are extracted on
+    first start, and a self-contained bundle is compressed to about half its size. Symbols and XML documentation are
+    left out of the publish folder.
+  -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <Target Name="PublishOnlyTheExecutable" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' or '%(Extension)' == '.xml'" />
+    </ItemGroup>
+  </Target>
+
 </Project>

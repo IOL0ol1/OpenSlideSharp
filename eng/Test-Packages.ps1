@@ -2,8 +2,8 @@
 <#
 Packs OpenSlideSharp, OpenSlideSharp.SkiaSharp, OpenSlideSharp.runtime, OpenSlideSharp.AspNetCore and the
 OpenSlideSharp.Tool .NET tool into artifacts/smoke-feed and proves the nupkgs work for real consumers (net10.0,
-an ASP.NET Core app, net48 x64 and AnyCPU, no-runtime, the installed tool and a Visual Studio C++ project), plus the
-32-bit build warning.
+an ASP.NET Core app, net48 x64 and AnyCPU, no-runtime, the installed tool, the desktop viewer published
+self-contained as one file for this machine's RID, and a Visual Studio C++ project), plus the 32-bit build warning.
 
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
@@ -301,7 +301,53 @@ finally {
     Remove-Item $toolTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 6. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
+# 6. The desktop viewer, published the way its releases are: self-contained, one file, for this machine's RID, with
+# the native OpenSlide library from the runtime package in the feed. --check reads the slide without a window.
+Write-Host '== smoke: viewer (self-contained single file)'
+$hostArch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+# Picked the way eng/Get-OpenSlide.ps1 picks this machine's binaries.
+$viewerRid = if ($IsWindows -and $hostArch -eq 'X64') { 'win-x64' }
+elseif ($IsLinux -and $hostArch -eq 'X64') { 'linux-x64' }
+elseif ($IsLinux -and $hostArch -eq 'Arm64') { 'linux-arm64' }
+elseif ($IsMacOS -and $hostArch -eq 'Arm64') { 'osx-arm64' }
+elseif ($IsMacOS -and $hostArch -eq 'X64') { 'osx-x64' }
+else { throw "[viewer] OpenSlide publishes no binaries for this platform ($hostArch)" }
+$viewerOut = Join-Path $artifacts 'smoke/viewer'
+Invoke-Native dotnet @('publish', (Join-Path $root 'samples/OpenSlideSharp.Viewer'), '-c', 'Release', '-r', $viewerRid, '--self-contained',
+    '-p:PublishSingleFile=true', '-p:UseOpenSlideRuntimePackage=true', "-p:OpenSlideSharpVersion=$Version",
+    "-p:RestoreAdditionalProjectSources=$feed", '--artifacts-path', $viewerOut)
+$viewerPublish = Join-Path $viewerOut "publish/OpenSlideSharp.Viewer/release_$viewerRid"
+$viewerName = $IsWindows ? 'OpenSlideSharp.Viewer.exe' : 'OpenSlideSharp.Viewer'
+# The publish folder is exactly the file a release attaches: the native libraries are inside it.
+$published = @(Get-ChildItem $viewerPublish -Recurse -File)
+$published | ForEach-Object { Write-Host ("published: {0} ({1:N1} MB)" -f $_.Name, ($_.Length / 1MB)) }
+if ($published.Count -ne 1 -or $published[0].Name -ne $viewerName) {
+    throw "[viewer] expected only $viewerName in $viewerPublish, found: $(($published | ForEach-Object { $_.Name }) -join ', ')"
+}
+# The bundle extracts its native libraries when it starts; a fresh extraction directory shows they came from it.
+$viewerExtract = Join-Path $viewerOut 'extract'
+$env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = $viewerExtract
+try {
+    # Piped, so that PowerShell waits for the viewer, a GUI program on Windows, and captures what it prints.
+    $output = & (Join-Path $viewerPublish $viewerName) --check $fixture 2>&1 | Out-String
+    $code = $LASTEXITCODE
+}
+finally {
+    Remove-Item Env:DOTNET_BUNDLE_EXTRACT_BASE_DIR -ErrorAction SilentlyContinue
+}
+Write-Host $output
+if ($code -ne 0) { throw "[viewer] --check exited with code $code, expected 0" }
+foreach ($line in 'openslide=4.', 'slide=16x16') {
+    if ($output -notmatch [regex]::Escape($line)) { throw "[viewer] --check output does not contain '$line'" }
+}
+$extracted = @(Get-ChildItem $viewerExtract -Recurse -File | ForEach-Object { $_.Name })
+$extracted | ForEach-Object { Write-Host "extracted: $_" }
+foreach ($lib in 'libopenslide-1', 'libSkiaSharp', 'libHarfBuzzSharp') {
+    if (-not ($extracted | Where-Object { [IO.Path]::GetFileNameWithoutExtension($_) -eq $lib })) { throw "[viewer] $lib is not in the bundle" }
+}
+Write-Host "PASS: viewer ($viewerRid)"
+
+# 7. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
 if ($IsWindows) {
     $cppProj = Join-Path $root 'test/NativeCppSmoke'
     $nuget = Join-Path $artifacts 'tools/nuget.exe'
