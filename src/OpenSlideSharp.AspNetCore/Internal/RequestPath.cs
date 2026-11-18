@@ -123,14 +123,15 @@ internal readonly record struct OmeZarrRequest(string Slide, string? AssociatedN
 
     /// <summary>
     /// Parses the part of the URL after the endpoint prefix, without a leading <c>'/'</c>: the slide part, then
-    /// <c>.zarr/</c>, then the key. A path that ends at <c>.zarr</c> has no key. Returns <see langword="false"/>
-    /// for every other form, and for a key longer than <see cref="OmeZarrGenerator.MaxKeyLength"/>; the endpoint
-    /// answers all of them with 404.
+    /// <c>.zarr/</c>, then the key. The store ends at the last <c>.zarr/</c>, since no key contains one while a
+    /// slide path may (a slide in a directory named <c>x.zarr</c>). A path that ends at <c>.zarr</c> has no key.
+    /// Returns <see langword="false"/> for every other form, and for a key longer than
+    /// <see cref="OmeZarrGenerator.MaxKeyLength"/>; the endpoint answers all of them with 404.
     /// </summary>
     public static bool TryParse(string path, out OmeZarrRequest request)
     {
         request = default;
-        int marker = string.IsNullOrEmpty(path) ? -1 : path.IndexOf(StoreMarker, StringComparison.Ordinal);
+        int marker = string.IsNullOrEmpty(path) ? -1 : path.LastIndexOf(StoreMarker, StringComparison.Ordinal);
         if (marker < 0)
         {
             return false;
