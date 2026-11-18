@@ -715,7 +715,7 @@ internal sealed class SlideView : Control
                 DrawThumbnail(context, grid, viewport, scaling, view0);
             }
 
-            DrawTiles(context, pipeline, viewport, scaling, level, view0);
+            DrawLevel(context, pipeline, viewport, scaling, level, view0);
         }
 
         if (_slideState is { Failed: true })
@@ -729,11 +729,11 @@ internal sealed class SlideView : Control
         pipeline.Loader.Request(_coarse); // also drops what earlier frames queued and this one no longer needs
     }
 
-    // Draws the tiles of level in view, or of a slide whose coarsest level has more tiles than the pipeline's limit
+    // Draws the tiles of level in view or, on a slide whose coarsest level has more tiles than the pipeline's limit
     // (a single large level, say), as many as the limit allows, those nearest the centre; the thumbnail stands in
     // for the rest. Lists the missing tiles, centre first, in _missing, and the coarse tiles to read before them in
     // _coarse.
-    private void DrawTiles(
+    private void DrawLevel(
         DrawingContext context,
         Pipeline pipeline,
         Viewport viewport,
