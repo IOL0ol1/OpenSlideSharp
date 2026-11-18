@@ -14,7 +14,8 @@
 .PARAMETER Rid
   win-x64, linux-x64, linux-arm64, osx-arm64 or osx-x64. Default: this machine's.
 .PARAMETER Feed
-  A folder with OpenSlideSharp.runtime.<Version>.nupkg.
+  A folder with OpenSlideSharp.runtime.<Version>.nupkg. The restore takes OpenSlideSharp* packages from it only, never
+  from nuget.org, and the publish fails unless the resolved runtime package is that nupkg.
 .PARAMETER OpenSlideUpstreamVersion
   Passed to the build, which then sets InformationalVersion (see Directory.Build.props).
 .PARAMETER ArtifactsPath
@@ -35,6 +36,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+Import-Module (Join-Path $PSScriptRoot 'LocalFeed.psm1') -Force
 
 $root = Split-Path -Parent $PSScriptRoot
 $fixture = Join-Path $root 'test/OpenSlideSharp.Tests/Fixtures/small.svs'
@@ -64,7 +66,6 @@ if (-not $Rid) {
 $binKey = @{ 'win-x64' = 'windows-x64'; 'linux-x64' = 'linux-x86_64'; 'linux-arm64' = 'linux-aarch64'; 'osx-arm64' = 'macos-arm64-x86_64'; 'osx-x64' = 'macos-arm64-x86_64' }[$Rid]
 if (-not $binKey) { throw "openslide-bin has no build for '$Rid'. Use win-x64, linux-x64, linux-arm64, osx-arm64 or osx-x64." }
 
-# Restore resolves a relative source against the project folder, so pass it in full.
 $Feed = Get-FullPath $Feed
 $runtimeNupkg = Join-Path $Feed "OpenSlideSharp.runtime.$Version.nupkg"
 if (-not (Test-Path -PathType Leaf $runtimeNupkg)) { throw "$runtimeNupkg not found: the viewer takes the native OpenSlide library from it." }
@@ -72,13 +73,16 @@ $ArtifactsPath = Get-FullPath ($ArtifactsPath ? $ArtifactsPath : (Join-Path $roo
 $publish = Join-Path $ArtifactsPath "publish/OpenSlideSharp.Viewer/release_$Rid"
 # The folder must hold this publish's files only.
 Remove-Item $publish -Recurse -Force -ErrorAction SilentlyContinue
+# OpenSlideSharp.runtime from the feed only, never from nuget.org (see eng/LocalFeed.psm1).
+$nugetConfig = New-LocalFeedConfig -Feed $Feed -Path (Join-Path $ArtifactsPath 'NuGet.config')
 
 Write-Host "== viewer: publish $Rid ($Version)"
 $publishArgs = @('publish', (Join-Path $root 'samples/OpenSlideSharp.Viewer'), '-c', 'Release', '-r', $Rid, '--self-contained',
     '-p:PublishSingleFile=true', '-p:UseOpenSlideRuntimePackage=true', "-p:Version=$Version", "-p:OpenSlideSharpVersion=$Version",
-    "-p:RestoreAdditionalProjectSources=$Feed", '--artifacts-path', $ArtifactsPath)
+    "-p:RestoreConfigFile=$nugetConfig", '--artifacts-path', $ArtifactsPath)
 if ($OpenSlideUpstreamVersion) { $publishArgs += "-p:OpenSlideUpstreamVersion=$OpenSlideUpstreamVersion" }
 Invoke-Native dotnet $publishArgs
+Assert-RestoredFromFeed -AssetsFile (Join-Path $ArtifactsPath 'obj/OpenSlideSharp.Viewer/project.assets.json') -Feed $Feed -Require 'OpenSlideSharp.runtime'
 
 # The publish folder is exactly what a release archives: the executable, with the native libraries inside it, and
 # licenses/ with the notices of what it contains.

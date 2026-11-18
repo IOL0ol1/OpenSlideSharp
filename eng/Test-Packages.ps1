@@ -7,7 +7,9 @@ self-contained as one executable with its licenses for this machine's RID, and a
 the 32-bit build warning.
 
 Packing first checks, with eng/Get-OpenSlide.ps1 -Platform all -Verify, that artifacts/native holds exactly the
-binaries and notices eng/openslide.json pins.
+binaries and notices eng/openslide.json pins. Every restore of an OpenSlideSharp package (the tool pack, the smoke
+builds, the tool install, the viewer) takes it from artifacts/smoke-feed only, never from nuget.org, and is checked to
+have got the feed's nupkg.
 
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
@@ -31,6 +33,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($SkipPack -and $PackOnly) { throw '-SkipPack and -PackOnly cannot be used together.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+Import-Module (Join-Path $PSScriptRoot 'LocalFeed.psm1') -Force
 
 $root = Split-Path -Parent $PSScriptRoot
 $artifacts = Join-Path $root 'artifacts'
@@ -69,12 +72,15 @@ else {
     }
 
     # The tool carries the native library of every RID through OpenSlideSharp.runtime, restored from the feed just
-    # packed. It restores into the isolated cache, so smoke versions never reach the user's NuGet cache, and builds
-    # into its own artifacts folder, so the regular build output keeps its own restore.
+    # packed, and from nowhere else (see eng/LocalFeed.psm1). It restores into the isolated cache, so smoke versions
+    # never reach the user's NuGet cache, and builds into its own artifacts folder, so the regular build output keeps
+    # its own restore.
     $env:NUGET_PACKAGES = $packages
+    $toolArtifacts = Join-Path $artifacts 'smoke/pack-tool'
+    $nugetConfig = New-LocalFeedConfig -Feed $feed -Path (Join-Path $toolArtifacts 'NuGet.config')
     Invoke-Native dotnet (@('pack', (Join-Path $root 'src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj'), '-c', 'Release', '-o', $feed) +
-        $versionProps + @('-p:UseOpenSlideRuntimePackage=true', "-p:RestoreAdditionalProjectSources=$feed",
-            '--artifacts-path', (Join-Path $artifacts 'smoke/pack-tool')))
+        $versionProps + @('-p:UseOpenSlideRuntimePackage=true', "-p:RestoreConfigFile=$nugetConfig", '--artifacts-path', $toolArtifacts))
+    Assert-RestoredFromFeed -AssetsFile (Join-Path $toolArtifacts 'obj/OpenSlideSharp.Tool/project.assets.json') -Feed $feed -Require 'OpenSlideSharp.runtime'
 }
 
 # 2. Assert nupkg contents.
@@ -310,7 +316,8 @@ if ($PackOnly) {
 # 3. Consume the packages from an isolated global cache.
 $env:NUGET_PACKAGES = $packages
 
-# Builds the smoke project; returns the output folder and the captured build log.
+# Builds the smoke project; returns the output folder and the captured build log. Its NuGet.config maps OpenSlideSharp*
+# to the feed only; the packages it restored must be the feed's.
 function Build-Smoke {
     param([string]$Name, [string]$Tfm, [string[]]$Extra)
     $out = Join-Path $artifacts "smoke/$Name"
@@ -318,6 +325,7 @@ function Build-Smoke {
     $code = $LASTEXITCODE
     Write-Host $log
     if ($code -ne 0) { throw "[$Name] dotnet build failed with exit code $code" }
+    Assert-RestoredFromFeed -AssetsFile (Join-Path $out 'obj/PackageSmoke/project.assets.json') -Feed $feed -Require 'OpenSlideSharp'
     return [pscustomobject]@{ Bin = (Join-Path $out "bin/PackageSmoke/release_$Tfm"); Log = $log }
 }
 
@@ -394,7 +402,13 @@ Write-Host '== smoke: openslide-sharp tool'
 $toolTemp = Join-Path ($env:RUNNER_TEMP ? $env:RUNNER_TEMP : [IO.Path]::GetTempPath()) ('oss-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 try {
     $toolPath = Join-Path $toolTemp 'bin'
-    Invoke-Native dotnet @('tool', 'install', 'OpenSlideSharp.Tool', '--tool-path', $toolPath, '--add-source', $feed, '--version', $Version)
+    # From the feed only: a tool package has no dependencies, so the feed is its only source.
+    Invoke-Native dotnet @('tool', 'install', 'OpenSlideSharp.Tool', '--tool-path', $toolPath, '--source', $feed, '--version', $Version)
+    $lower = "openslidesharp.tool/$($Version.ToLowerInvariant())"
+    $installed = Join-Path $toolPath ".store/$lower/$lower/openslidesharp.tool.$($Version.ToLowerInvariant()).nupkg"
+    if ((Get-NupkgSha512 $installed) -cne (Get-NupkgSha512 (Join-Path $feed "OpenSlideSharp.Tool.$Version.nupkg"))) {
+        throw "[tool] the installed $installed is not the feed's OpenSlideSharp.Tool.$Version.nupkg"
+    }
     $toolExe = Join-Path $toolPath $(if ($IsWindows) { 'openslide-sharp.exe' } else { 'openslide-sharp' })
     $toolOut = Join-Path $toolTemp 'small'
     Invoke-Native $toolExe @('deepzoom', $fixture, '-o', $toolOut)
