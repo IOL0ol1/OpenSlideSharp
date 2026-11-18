@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="using:OpenSlideSharp.Viewer"
+        xmlns:controls="using:OpenSlideSharp.Viewer.Controls"
+        mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="768"
+        x:Class="OpenSlideSharp.Viewer.MainWindow"
+        Title="OpenSlide Viewer"
+        Width="1024" Height="768"
+        DragDrop.AllowDrop="True">
+
+  <Window.Styles>
+    <!-- Small enough for the three tab headers to fit on one row in the default pane width. -->
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="6,0" />
+    </Style>
+    <Style Selector="ListBox.compact ListBoxItem">
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <!-- Their shortcuts use the platform's command key (Ctrl, or Cmd on macOS): see MainWindow(). -->
+        <MenuItem x:Name="OpenMenuItem" Header="_Open…" Click="OnOpenClick" />
+        <MenuItem x:Name="CloseMenuItem" Header="_Close" IsEnabled="False" Click="OnCloseClick" />
+        <Separator />
+        <MenuItem Header="E_xit" Click="OnExitClick" />
+      </MenuItem>
+      <!-- The view handles these keys itself while it has the focus; the menu only shows them. -->
+      <MenuItem x:Name="ViewMenu" Header="_View" IsEnabled="False">
+        <MenuItem Header="_Fit" InputGesture="Z" Click="OnFitClick" />
+        <MenuItem Header="_1:1" InputGesture="D1" Click="OnOneToOneClick" />
+        <MenuItem Header="_Center" InputGesture="Space" Click="OnCenterClick" />
+      </MenuItem>
+    </Menu>
+
+    <Border DockPanel.Dock="Bottom" Padding="8,4" BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <DockPanel>
+        <TextBlock x:Name="ErrorText" DockPanel.Dock="Right" Margin="24,0,0,0" Foreground="#C42B1C" IsVisible="False"
+                   TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="ActivityText" DockPanel.Dock="Right" Margin="24,0,0,0" IsVisible="False"
+                   TextTrimming="CharacterEllipsis" />
+        <StackPanel Orientation="Horizontal" Spacing="24">
+          <TextBlock x:Name="CoordinatesText" MinWidth="150" />
+          <TextBlock x:Name="ZoomText" MinWidth="110" />
+          <TextBlock x:Name="ViewSizeText" IsVisible="False" />
+          <TextBlock x:Name="SelectionSizeText" IsVisible="False" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="320,4,*">
+      <Grid RowDefinitions="Auto,*" Margin="8,8,4,8">
+        <controls:Navigator x:Name="Navigator" HorizontalAlignment="Center" Margin="0,0,0,8" />
+
+        <TabControl x:Name="Tabs" Grid.Row="1" Padding="0,4,0,0">
+          <TabItem x:Name="PropertiesTab" Header="Properties">
+            <ListBox x:Name="PropertyList" Classes="compact" SelectionMode="Multiple" Grid.IsSharedSizeScope="True"
+                     KeyDown="OnPropertyListKeyDown">
+              <ListBox.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="_Copy" Click="OnCopyClick" />
+                  <MenuItem Header="Copy _value" Click="OnCopyValueClick" />
+                </ContextMenu>
+              </ListBox.ContextMenu>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="local:PropertyRow">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" SharedSizeGroup="Key" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Key}" Margin="0,0,12,0" Opacity="0.75" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Value}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </TabItem>
+
+          <TabItem x:Name="ImagesTab" Header="Associated images">
+            <ListBox x:Name="ImageList" Classes="compact" DoubleTapped="OnImageListDoubleTapped"
+                     KeyDown="OnImageListKeyDown">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="local:AssociatedImageRow">
+                  <DockPanel ToolTip.Tip="Double-click to open">
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Size}" Margin="12,0,0,0" Opacity="0.75" />
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  </DockPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </TabItem>
+
+          <TabItem x:Name="SelectionsTab" Header="Selections">
+            <ListBox x:Name="SelectionsList" Classes="compact" SelectionChanged="OnSelectionsListChanged">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="local:SelectionRow">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="Delete" Margin="4,0,0,0" Padding="6,2"
+                            Click="OnDeleteSelectionClick" />
+                    <Button DockPanel.Dock="Right" Content="Zoom to" Margin="8,0,0,0" Padding="6,2"
+                            Click="OnZoomToSelectionClick" />
+                    <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Text}" />
+                  </DockPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </TabItem>
+        </TabControl>
+      </Grid>
+
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+
+      <Panel Grid.Column="2">
+        <controls:SlideView x:Name="Viewer" />
+        <TextBlock x:Name="DropHint" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"
+                   IsHitTestVisible="False" Text="Open a slide with File → Open, or drop one here." />
+      </Panel>
+    </Grid>
+  </DockPanel>
+</Window>

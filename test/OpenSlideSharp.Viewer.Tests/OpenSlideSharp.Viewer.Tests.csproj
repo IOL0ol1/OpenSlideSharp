@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Avalonia.Headless" />
+    <PackageReference Include="Avalonia.Skia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\OpenSlideSharp.Viewer\OpenSlideSharp.Viewer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The slide fixtures live in the core test project; link them rather than keep a second copy in git. -->
+    <None Include="..\OpenSlideSharp.Tests\Fixtures\**" Link="Fixtures\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\..\eng\OpenSlideNative.targets" />
+
+</Project>
