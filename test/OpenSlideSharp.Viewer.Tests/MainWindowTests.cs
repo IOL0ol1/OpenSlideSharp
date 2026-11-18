@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -298,6 +299,121 @@ public class MainWindowTests
         {
             File.Delete(text);
         }
+    }
+
+    [Fact]
+    public void Open_UnexpectedFailure_ShowsErrorAndKeepsRunning()
+    {
+        HeadlessSession.Run(() =>
+        {
+            using var host = new WindowHost();
+            host.Open("boxes.tiff");
+            OpenSlide boxes = host.Window.Viewer.Slide!;
+            // Not one of the failures OpenSlide reports for a bad file: a broken native library, say.
+            host.Window.OpenSlideFile = _ => throw new EntryPointNotFoundException("openslide_open is missing.");
+
+            host.Open("small.svs");
+
+            Assert.True(host.Window.ErrorText.IsVisible);
+            Assert.Equal("Cannot open small.svs: openslide_open is missing.", host.Window.ErrorText.Text);
+            Assert.Same(boxes, host.Window.Viewer.Slide);
+            Assert.Equal($"{AppTitle} — boxes.tiff", host.Window.Title);
+
+            // The same from a drop, whose handler nothing awaits.
+            host.Window.ErrorText.Text = null;
+            using var data = new DataTransfer();
+            data.Add(DataTransferItem.CreateFile(host.File("small.svs")));
+            foreach (RawDragEventType type in new[] { RawDragEventType.DragEnter, RawDragEventType.DragOver, RawDragEventType.Drop })
+            {
+                host.Window.DragDrop(new Point(600, 300), type, data, DragDropEffects.Copy);
+            }
+
+            HeadlessSession.PumpUntil(() => host.Window.ErrorText.Text is not null, "the failure is shown");
+            Assert.Equal("Cannot open small.svs: openslide_open is missing.", host.Window.ErrorText.Text);
+
+            host.Window.OpenSlideFile = OpenSlide.Open;
+            host.Open("small.svs");
+            Assert.False(host.Window.ErrorText.IsVisible);
+            Assert.Equal($"{AppTitle} — small.svs", host.Window.Title);
+        });
+    }
+
+    [Fact]
+    public void Properties_ClipboardFailure_ShowsErrorAndKeepsRunning()
+    {
+        HeadlessSession.Run(() =>
+        {
+            using var host = new WindowHost();
+            host.Open("small.svs");
+            host.Window.SetClipboardText = _ => throw new InvalidOperationException("The clipboard is busy.");
+            ListBox list = host.Window.PropertyList;
+            PropertyRow first = host.Window.PropertyRows[0];
+            list.SelectedItems!.Add(first);
+            HeadlessSession.Pump();
+            Assert.True(((Control)list.ContainerFromItem(first)!).Focus());
+
+            // Ctrl+C runs an event handler that nothing awaits.
+            host.Window.KeyPressQwerty(PhysicalKey.C, RawInputModifiers.Control);
+            host.Window.KeyReleaseQwerty(PhysicalKey.C, RawInputModifiers.Control);
+            HeadlessSession.PumpUntil(() => host.Window.ErrorText.IsVisible, "the failure is shown");
+
+            Assert.Equal("Cannot copy the properties: The clipboard is busy.", host.Window.ErrorText.Text);
+            host.Open("boxes.tiff"); // still running
+            Assert.Equal($"{AppTitle} — boxes.tiff", host.Window.Title);
+        });
+    }
+
+    [Fact]
+    public void Open_ShowsOpeningInTheStatusBarUntilDone()
+    {
+        using var gate = new ManualResetEventSlim();
+        HeadlessSession.Run(() =>
+        {
+            using var host = new WindowHost();
+            host.Window.OpenSlideFile = path =>
+            {
+                gate.Wait(TimeSpan.FromSeconds(30));
+                return OpenSlide.Open(path);
+            };
+            try
+            {
+                Task open = host.Window.OpenAsync(TestFiles.Get("boxes.tiff"));
+                HeadlessSession.Pump();
+
+                Assert.True(host.Window.ActivityText.IsVisible);
+                Assert.Equal("Opening boxes.tiff…", host.Window.ActivityText.Text);
+
+                gate.Set();
+                HeadlessSession.PumpUntil(() => open.IsCompleted, "boxes.tiff is opened");
+                Assert.False(host.Window.ActivityText.IsVisible);
+                Assert.Equal($"{AppTitle} — boxes.tiff", host.Window.Title);
+
+                // Until the error, for a file that cannot be opened.
+                gate.Reset();
+                open = host.Window.OpenAsync(TestFiles.Get("unopenable.tiff"));
+                HeadlessSession.Pump();
+                Assert.Equal("Opening unopenable.tiff…", host.Window.ActivityText.Text);
+                gate.Set();
+                HeadlessSession.PumpUntil(() => open.IsCompleted, "unopenable.tiff is tried");
+                Assert.False(host.Window.ActivityText.IsVisible);
+                Assert.Contains("unopenable.tiff", host.Window.ErrorText.Text);
+
+                // File > Close while opening: the open is dropped, and so is its message.
+                gate.Reset();
+                open = host.Window.OpenAsync(TestFiles.Get("small.svs"));
+                HeadlessSession.Pump();
+                host.Window.CloseSlide();
+                Assert.False(host.Window.ActivityText.IsVisible);
+                gate.Set();
+                HeadlessSession.PumpUntil(() => open.IsCompleted, "small.svs is opened and dropped");
+                Assert.False(host.Window.ActivityText.IsVisible);
+                Assert.Null(host.Window.Viewer.Slide);
+            }
+            finally
+            {
+                gate.Set();
+            }
+        });
     }
 
     [Fact]

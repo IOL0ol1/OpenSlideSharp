@@ -24,7 +24,9 @@ namespace OpenSlideSharp.Viewer;
 /// <remarks>
 /// A slide is opened from the command line (see <see cref="App"/>), File → Open, or by dropping a file on the
 /// window. A file that cannot be opened is reported in the status bar and the slide shown stays. Opening another
-/// slide, File → Close and closing the window close the slide shown, after the view has stopped reading it.
+/// slide, File → Close and closing the window close the slide shown, once the view has let go of it (a read still in
+/// flight keeps the native slide open until it returns). An event handler never lets an exception escape: what goes
+/// wrong is shown in the status bar.
 /// </remarks>
 internal sealed partial class MainWindow : Window
 {
@@ -62,6 +64,7 @@ internal sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SetClipboardText = text => Clipboard is { } clipboard ? clipboard.SetTextAsync(text) : Task.CompletedTask;
         Viewer.ViewChanged += UpdateStatus;
         Viewer.LoadFailed += OnLoadFailed;
         Viewer.Selections.Changed += OnSelectionsChanged;
@@ -79,44 +82,61 @@ internal sealed partial class MainWindow : Window
 
     internal IReadOnlyList<AssociatedImageWindow> ImageWindows => _imageWindows;
 
+    /// <summary>Gets or sets what opens a slide file, on a background thread; a test hook.</summary>
+    internal Func<string, OpenSlide> OpenSlideFile { get; set; } = OpenSlide.Open;
+
+    /// <summary>Gets or sets what puts text on the clipboard; a test hook.</summary>
+    internal Func<string, Task> SetClipboardText { get; set; }
+
     /// <summary>
     /// Opens the slide at <paramref name="path"/> (on a background thread) and shows it instead of the current
-    /// one. If it cannot be opened, the status bar says why and the current slide stays. An open overtaken by a
-    /// newer one, or by File → Close, is dropped when it finishes.
+    /// one; meanwhile the status bar says it is opening the file. If it cannot be opened, whatever the reason, the
+    /// status bar says why and the current slide stays. An open overtaken by a newer one, or by File → Close, is
+    /// dropped when it finishes.
     /// </summary>
     public async Task OpenAsync(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
         int request = ++_openRequest;
-        LoadedSlide loaded;
+        string name = Path.GetFileName(path);
+        ClearError();
+        ShowActivity($"Opening {name}…");
         try
         {
-            loaded = await Task.Run(() => LoadedSlide.Load(path));
+            Func<string, OpenSlide> open = OpenSlideFile;
+            LoadedSlide loaded = await Task.Run(() => LoadedSlide.Load(path, open));
+            if (request != _openRequest || _closed)
+            {
+                loaded.Dispose();
+                return;
+            }
+
+            Show(loaded);
         }
-        catch (Exception e) when (e is OpenSlideException or IOException or UnauthorizedAccessException
-            or ArgumentException or DllNotFoundException)
+        catch (Exception e)
+        {
+            // Not only a file OpenSlide rejects (OpenSlideException) or cannot read: a native library that is missing
+            // or broken (DllNotFoundException, EntryPointNotFoundException, BadImageFormatException), no memory. Each
+            // is reported, and the viewer goes on with the slide it shows.
+            if (request == _openRequest && !_closed)
+            {
+                ShowError($"Cannot open {name}: {e.Message}");
+            }
+        }
+        finally
         {
             if (request == _openRequest && !_closed)
             {
-                ShowError($"Cannot open {Path.GetFileName(path)}: {e.Message}");
+                HideActivity();
             }
-
-            return;
         }
-
-        if (request != _openRequest || _closed)
-        {
-            loaded.Dispose();
-            return;
-        }
-
-        Show(loaded);
     }
 
     /// <summary>Closes the slide shown (File → Close).</summary>
     internal void CloseSlide()
     {
         _openRequest++; // an open still running is dropped
+        HideActivity();
         Viewer.Slide = null; // the view stops reading the slide before it is closed
         _slide?.Dispose();
         _slide = null;
@@ -174,9 +194,9 @@ internal sealed partial class MainWindow : Window
         string text = string.Join(
             Environment.NewLine,
             _propertyRows.Where(selected.Contains).Select(row => valuesOnly ? row.Value : row.Key + "\t" + row.Value));
-        if (text.Length > 0 && Clipboard is { } clipboard)
+        if (text.Length > 0)
         {
-            await clipboard.SetTextAsync(text);
+            await SetClipboardText(text);
         }
     }
 
@@ -229,6 +249,8 @@ internal sealed partial class MainWindow : Window
         return null; // the navigator still works, without a picture
     }
 
+    // Shows a slide just opened. If the view cannot take it, the slide is closed, the exception propagates (OpenAsync
+    // reports it) and the slide shown stays; past that point the window owns the slide.
     private void Show(LoadedSlide loaded)
     {
         try
@@ -236,11 +258,10 @@ internal sealed partial class MainWindow : Window
             // First, so that the view stops reading the old slide before it is closed.
             Viewer.Slide = loaded.Slide;
         }
-        catch (OpenSlideException e)
+        catch
         {
-            ShowError($"Cannot open {Path.GetFileName(loaded.Path)}: {e.Message}");
             loaded.Dispose();
-            return;
+            throw;
         }
 
         _slide?.Dispose();
@@ -288,6 +309,32 @@ internal sealed partial class MainWindow : Window
         ErrorText.Text = null;
         ToolTip.SetTip(ErrorText, null);
         ErrorText.IsVisible = false;
+    }
+
+    private void ShowActivity(string message)
+    {
+        ActivityText.Text = message;
+        ActivityText.IsVisible = true;
+    }
+
+    private void HideActivity()
+    {
+        ActivityText.Text = null;
+        ActivityText.IsVisible = false;
+    }
+
+    // Runs the work of an event handler. An exception thrown out of an async void handler would end the process,
+    // so whatever it throws (a busy clipboard, a file picker that fails, no memory) is shown in the status bar.
+    private async void RunHandler(Func<Task> work, string failure)
+    {
+        try
+        {
+            await work();
+        }
+        catch (Exception e)
+        {
+            ShowError($"{failure}: {e.Message}");
+        }
     }
 
     private void OnLoadFailed(Exception error) =>
@@ -340,7 +387,9 @@ internal sealed partial class MainWindow : Window
         return size.Length > 0 ? $"{text} ({size})" : text;
     }
 
-    private async void OnOpenClick(object? sender, RoutedEventArgs e)
+    private void OnOpenClick(object? sender, RoutedEventArgs e) => RunHandler(PickAndOpenAsync, "Cannot open a slide");
+
+    private async Task PickAndOpenAsync()
     {
         IReadOnlyList<IStorageFile> files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -371,12 +420,19 @@ internal sealed partial class MainWindow : Window
     }
 
     // Opens the first of the files dropped.
-    private async void OnDrop(object? sender, DragEventArgs e)
+    private void OnDrop(object? sender, DragEventArgs e)
     {
-        if (e.DataTransfer.TryGetFiles() is [IStorageItem first, ..])
+        try
         {
-            e.Handled = true;
-            await OpenStorageItemAsync(first);
+            if (e.DataTransfer.TryGetFiles() is [IStorageItem first, ..])
+            {
+                e.Handled = true;
+                RunHandler(() => OpenStorageItemAsync(first), "Cannot open " + first.Name);
+            }
+        }
+        catch (Exception error)
+        {
+            ShowError($"Cannot open the dropped file: {error.Message}");
         }
     }
 
@@ -391,25 +447,34 @@ internal sealed partial class MainWindow : Window
         return Task.CompletedTask;
     }
 
-    private async void OnPropertyListKeyDown(object? sender, KeyEventArgs e)
+    private void OnPropertyListKeyDown(object? sender, KeyEventArgs e)
     {
         if (this.GetPlatformSettings()?.HotkeyConfiguration.Copy.Any(gesture => gesture.Matches(e)) == true)
         {
             e.Handled = true;
-            await CopyPropertiesAsync(valuesOnly: false);
+            CopyProperties(valuesOnly: false);
         }
     }
 
-    private async void OnCopyClick(object? sender, RoutedEventArgs e) => await CopyPropertiesAsync(valuesOnly: false);
+    private void OnCopyClick(object? sender, RoutedEventArgs e) => CopyProperties(valuesOnly: false);
 
-    private async void OnCopyValueClick(object? sender, RoutedEventArgs e) => await CopyPropertiesAsync(valuesOnly: true);
+    private void OnCopyValueClick(object? sender, RoutedEventArgs e) => CopyProperties(valuesOnly: true);
+
+    private void CopyProperties(bool valuesOnly) =>
+        RunHandler(() => CopyPropertiesAsync(valuesOnly), "Cannot copy the properties");
 
     private void OnImageListDoubleTapped(object? sender, TappedEventArgs e)
     {
         if ((e.Source as Control)?.DataContext is AssociatedImageRow row)
         {
             e.Handled = true;
-            ShowAssociatedImage(row.Name);
+            RunHandler(
+                () =>
+                {
+                    ShowAssociatedImage(row.Name);
+                    return Task.CompletedTask;
+                },
+                $"Cannot show the {row.Name} image");
         }
     }
 
@@ -418,7 +483,13 @@ internal sealed partial class MainWindow : Window
         if (e.Key == Key.Enter && ImageList.SelectedItem is AssociatedImageRow row)
         {
             e.Handled = true;
-            ShowAssociatedImage(row.Name);
+            RunHandler(
+                () =>
+                {
+                    ShowAssociatedImage(row.Name);
+                    return Task.CompletedTask;
+                },
+                $"Cannot show the {row.Name} image");
         }
     }
 
@@ -466,9 +537,9 @@ internal sealed partial class MainWindow : Window
 
         public double? ObjectivePower { get; } = StatusFormatter.Number(slide.Properties, OpenSlideProperties.ObjectivePower);
 
-        public static LoadedSlide Load(string path)
+        public static LoadedSlide Load(string path, Func<string, OpenSlide> open)
         {
-            OpenSlide slide = OpenSlide.Open(path);
+            OpenSlide slide = open(path);
             try
             {
                 PropertyRow[] properties = PropertyRowsOf(slide.Properties);

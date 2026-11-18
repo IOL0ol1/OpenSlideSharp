@@ -45,6 +45,8 @@
       <DockPanel>
         <TextBlock x:Name="ErrorText" DockPanel.Dock="Right" Margin="24,0,0,0" Foreground="#C42B1C" IsVisible="False"
                    TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="ActivityText" DockPanel.Dock="Right" Margin="24,0,0,0" IsVisible="False"
+                   TextTrimming="CharacterEllipsis" />
         <StackPanel Orientation="Horizontal" Spacing="24">
           <TextBlock x:Name="CoordinatesText" MinWidth="150" />
           <TextBlock x:Name="ZoomText" MinWidth="110" />
