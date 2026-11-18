@@ -255,6 +255,30 @@ public class ColorTransformTests
     }
 
     [Fact]
+    public void GetCached_IsKeyedByTheProfileArrayReference()
+    {
+        byte[] profile = File.ReadAllBytes(TestFiles.Get("icc/swap-rb-matrix.icc"));
+        IColorTransform? first = SkiaColorTransform.GetCached(profile);
+        Assert.NotNull(first);
+
+        // The same array gives the same transform; an equal copy is another key.
+        Assert.Same(first, SkiaColorTransform.GetCached(profile));
+        Assert.NotSame(first, SkiaColorTransform.GetCached((byte[])profile.Clone()));
+
+        // A profile that is only part of its array is not cached.
+        var padded = new byte[profile.Length + 1];
+        profile.CopyTo(padded, 1);
+        var part = new ReadOnlyMemory<byte>(padded, 1, profile.Length);
+        Assert.NotSame(SkiaColorTransform.GetCached(part), SkiaColorTransform.GetCached(part));
+
+        // The bytes are not looked at again: an array changed after the first call keeps the old transform, which is
+        // why callers must not change it.
+        Array.Clear(profile);
+        Assert.Null(SkiaColorTransform.Create(profile));
+        Assert.Same(first, SkiaColorTransform.GetCached(profile));
+    }
+
+    [Fact]
     public void Apply_ConcurrentCalls_AreConsistent()
     {
         var transform = SkiaColorTransform.Create(Icc("swap-rb-matrix.icc"))!;
