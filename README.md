@@ -130,6 +130,26 @@ dotnet run -c Release --project samples/OpenSlideSharp.Web -- /path/to/slide.svs
 
 Then open <http://127.0.0.1:5000/>. Give an absolute path: under `dotnet run` the working directory is the project directory.
 
+## Desktop viewer
+
+[`samples/OpenSlideSharp.Viewer`](samples/OpenSlideSharp.Viewer/README.md) is an Avalonia viewer for Windows, Linux and macOS, like openslide-java's demo viewer. From a checkout:
+
+```sh
+pwsh eng/Get-OpenSlide.ps1
+dotnet run -c Release --project samples/OpenSlideSharp.Viewer -- /path/to/slide.svs    # or File → Open, or drop a file
+```
+
+| Input | Action |
+|---|---|
+| Drag | Pan |
+| Wheel | Zoom at the pointer |
+| Shift + drag | Select a rectangle |
+| Arrow keys, `W` `A` `S` `D` | Pan by 100 pixels |
+| `+` or `=`, `-` | Zoom in, out |
+| `Z` | Fit the slide to the window |
+| `1` | Zoom to 1:1 (level 0) |
+| Space | Center the slide |
+
 ## Known issues
 
 On Windows, corrupt JPEG or PNG data in a slide terminates the whole process with `0xC0000409`, and the failure cannot be caught. Services that open untrusted slides on Windows should decode them in a separate worker process. See [the details](docs/known-issues/windows-cfg-longjmp-crash.md).
