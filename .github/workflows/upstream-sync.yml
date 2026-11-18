@@ -127,7 +127,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Only the push step gets the token; the steps before it run downloaded tools.
+          # The token is not left in .git/config, where every step, and the tools it downloads and runs (ClangSharp,
+          # libclang, openslide-bin), could read it; only the Pin step (GitHub API) and the push step get it, in env.
+          # This job's token can write contents, though, and an earlier step can still change what a later one runs
+          # (GITHUB_PATH, GITHUB_ENV, git hooks), so this keeps the token out of plain sight, not from a malicious tool.
           persist-credentials: false
       - uses: actions/setup-dotnet@v6
         with:
