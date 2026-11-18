@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
@@ -77,6 +78,42 @@ public class OutputSafetyTests
             Assert.Contains("is also the directory of the associated images", stderr.ToString(), StringComparison.Ordinal);
             Assert.Empty(Directory.GetFileSystemEntries(temp.Path));
         }
+    }
+
+    [Theory]
+    [InlineData("omezarr")]
+    [InlineData("deepzoom")]
+    [InlineData("deepzoom -r")]
+    public async Task Output_IsSymlinkToMarkedDirectory_IsRefused(string command)
+    {
+        // Replacing the output moves it aside and deletes it: through a link, that would delete the files of the
+        // directory it points to, even though the marker there says the tool wrote them.
+        using var temp = new TempDirectory();
+        string target = temp.Combine("target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, Marker), string.Empty);
+        File.WriteAllText(Path.Combine(target, "keep.txt"), "not the tool's");
+        string slide = TestFiles.Get("boxes.tiff");
+        string output = temp.Combine("boxes");
+        string link = command switch
+        {
+            "omezarr" => temp.Combine("boxes.zarr"),
+            "deepzoom" => output + "_files",
+            _ => output,
+        };
+        CreateDirectoryLinkOrSkip(link, target);
+        string[] before = Snapshot(target);
+        var stderr = new StringWriter();
+
+        int code = command == "omezarr"
+            ? await OmeZarrCommand.RunAsync(new OmeZarrArguments(slide) { Output = link }, stderr, Token)
+            : await DeepZoomCommand.RunAsync(new DeepZoomArguments(slide) { Output = output, Viewer = command == "deepzoom -r" }, stderr, Token);
+
+        Assert.Equal(1, code);
+        Assert.Contains("is a link", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot(target));
+        Assert.NotNull(new DirectoryInfo(link).LinkTarget);
+        Assert.Equal(new[] { link, target }.Order(StringComparer.Ordinal), Directory.GetFileSystemEntries(temp.Path).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -183,6 +220,45 @@ public class OutputSafetyTests
 
     private static string[] Leftovers(string directory) =>
         Directory.GetDirectories(directory, "*.openslide-sharp-old-*");
+
+    // A symbolic link to a directory; on Windows without the right to create one (Developer Mode or an elevated
+    // process), a directory junction, which the tool must treat the same way. Skips only if neither can be made.
+    private static void CreateDirectoryLinkOrSkip(string link, string target)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(link, target);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (OperatingSystem.IsWindows() && TryCreateJunction(link, target))
+            {
+                return;
+            }
+
+            Assert.Skip($"Cannot create a symbolic link here: {e.Message}");
+        }
+    }
+
+    private static bool TryCreateJunction(string link, string target)
+    {
+        var info = new ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        info.ArgumentList.Add("/c");
+        info.ArgumentList.Add("mklink");
+        info.ArgumentList.Add("/J");
+        info.ArgumentList.Add(link);
+        info.ArgumentList.Add(target);
+        using Process process = Process.Start(info)!;
+        process.StandardOutput.ReadToEnd();
+        process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return process.ExitCode == 0 && Directory.Exists(link);
+    }
 
     // Keeps a level directory from being deleted: a tile held open on Windows, or no write permission elsewhere
     // (which root ignores; the test then sees a plain success).
