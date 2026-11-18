@@ -30,11 +30,11 @@ A nightly version increments the fourth number, then carries the build date and 
 
 Releases are made by GitHub Actions:
 
-- Every day, the Upstream sync workflow looks for a newer openslide-bin release or nightly build. It pins the next one in `eng/openslide.json`, regenerates the bindings, runs CI, fast-forwards `master` and releases that commit. It takes one build per run, a release before a nightly. A build that fails changes nothing, and gets one issue titled `Upstream sync failed: openslide-bin <tag>`. If `master` moved during the run, the update comes as a pull request instead.
+- Every day, the Upstream sync workflow looks for a newer openslide-bin release or nightly build. It pins the next one in `eng/openslide.json`, regenerates the bindings, runs CI, fast-forwards `master` and releases that commit. It takes one build per run, a release before a nightly. A build that fails before the fast-forward, in CI for example, changes nothing. A failure at any step gets one issue titled `Upstream sync failed: openslide-bin <tag>`, which says whether `master` was fast-forwarded already; if it was, only the release is left, and "Re-run failed jobs" on the run finishes it. If `master` moved during the run, the update comes as a pull request instead.
 - A push to `master` that changes `src/**`, `eng/openslide.json` or `Directory.*.props` releases that commit.
 - Other changes, such as to the viewer sample or the `eng/` scripts, are released by running the Release workflow by hand.
 
-A release tests the commit on all platforms, pushes the five packages to nuget.org, tags the commit `v<version>` and creates a GitHub release with the packages, the viewer archives and the openslide-bin source tarball. Without the `NUGET_API_KEY` secret it is a dry run: it builds and checks everything, publishes nothing and lists what it would release in the run summary.
+A release tests the commit on all platforms, pushes the five packages to nuget.org, tags the commit `v<version>` and creates a GitHub release with the packages, the viewer archives and the openslide-bin source tarball. Without the `NUGET_API_KEY` secret it is a dry run: it builds and checks everything, publishes nothing and lists what it would release in the run summary. Only the release is a dry run then: the daily sync still commits each newer build (as IOL0ol1) and fast-forwards `master` to it.
 
 ## Install
 
