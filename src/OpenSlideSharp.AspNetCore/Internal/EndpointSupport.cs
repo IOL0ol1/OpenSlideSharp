@@ -11,9 +11,22 @@ namespace OpenSlideSharp.AspNetCore.Internal;
 /// <summary>What the Deep Zoom and OME-Zarr endpoints have in common.</summary>
 internal static class EndpointSupport
 {
-    /// <summary>Creates the logger of an endpoint group once, when it is mapped.</summary>
-    public static ILogger CreateLogger(IEndpointRouteBuilder endpoints, string category)
-        => endpoints.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(category);
+    /// <summary>
+    /// Checks, when an endpoint group is mapped, that <c>AddOpenSlide</c> registered the services it needs, and
+    /// creates its logger.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><c>AddOpenSlide</c> was not called.</exception>
+    public static ILogger Prepare(IEndpointRouteBuilder endpoints, string method, string category)
+    {
+        IServiceProvider services = endpoints.ServiceProvider;
+        if (services.GetService<IServiceProviderIsService>() is { } isService && !isService.IsService(typeof(SlideCache)))
+        {
+            throw new InvalidOperationException(
+                $"{method} needs the OpenSlide services. Call builder.Services.AddOpenSlide(...) before building the app.");
+        }
+
+        return services.GetRequiredService<ILoggerFactory>().CreateLogger(category);
+    }
 
     /// <summary>
     /// Gets the generator of an image through <paramref name="get"/>. Only the lookup of an associated image name

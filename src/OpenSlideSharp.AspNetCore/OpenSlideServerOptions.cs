@@ -15,6 +15,13 @@ public sealed class OpenSlideServerOptions
     public int SlideCacheSize { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets the size in MiB of the OpenSlide tile cache that all slides of the <see cref="SlideCache"/>
+    /// share (<see cref="OpenSlide.SetCache"/>), as openslide-python's <c>deepzoom_multiserver.py</c> does. At
+    /// least 0; the default is 128. 0 keeps OpenSlide's own cache of each slide (32 MiB per open slide).
+    /// </summary>
+    public int TileCacheSize { get; set; } = 128;
+
+    /// <summary>
     /// Gets or sets how ICC color profiles are handled, for Deep Zoom tiles and OME-Zarr chunks alike. The default
     /// is <see cref="ColorMode.Default"/>, which converts each image (the slide and every associated image, each with
     /// its own profile) to sRGB when it can.
@@ -26,6 +33,32 @@ public sealed class OpenSlideServerOptions
 
     /// <summary>Gets the OME-Zarr settings.</summary>
     public OmeZarrServerOptions OmeZarr { get; } = new();
+
+    /// <summary>Copies every setting into a new object, so later changes to this one do not reach the copy.</summary>
+    internal OpenSlideServerOptions Clone()
+    {
+        var copy = new OpenSlideServerOptions
+        {
+            SlideCacheSize = SlideCacheSize,
+            TileCacheSize = TileCacheSize,
+            ColorMode = ColorMode,
+        };
+
+        copy.DeepZoom.TileSize = DeepZoom.TileSize;
+        copy.DeepZoom.Overlap = DeepZoom.Overlap;
+        copy.DeepZoom.Format = DeepZoom.Format;
+        copy.DeepZoom.Quality = DeepZoom.Quality;
+        copy.DeepZoom.LimitBounds = DeepZoom.LimitBounds;
+
+        copy.OmeZarr.Version = OmeZarr.Version;
+        copy.OmeZarr.ChunkSize = OmeZarr.ChunkSize;
+        copy.OmeZarr.RenderCacheSize = OmeZarr.RenderCacheSize;
+        copy.OmeZarr.Compression = OmeZarr.Compression;
+        copy.OmeZarr.GzipLevel = OmeZarr.GzipLevel;
+        copy.OmeZarr.LimitBounds = OmeZarr.LimitBounds;
+        copy.OmeZarr.AllowCrossOrigin = OmeZarr.AllowCrossOrigin;
+        return copy;
+    }
 }
 
 /// <summary>Deep Zoom settings of <see cref="OpenSlideServerOptions"/>, matching the openslide-python examples.</summary>

@@ -5,6 +5,9 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -181,6 +184,21 @@ public class OmeZarrEndpointTests
             using HttpResponseMessage response = await closed.Client.SendAsync(request, TestContext.Current.CancellationToken);
             Assert.False(response.Headers.Contains("Access-Control-Allow-Headers"));
         }
+    }
+
+    [Fact]
+    public void Map_WithoutAddOpenSlide_ThrowsAtMapTime()
+    {
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        using WebApplication app = builder.Build();
+        var resolver = new SingleSlideResolver(TestFiles.Get("boxes.tiff"), "boxes");
+
+        var deepZoom = Assert.Throws<InvalidOperationException>(() => app.MapDeepZoom("/dz", resolver));
+        var omeZarr = Assert.Throws<InvalidOperationException>(() => app.MapOmeZarr("/zarr", resolver));
+
+        Assert.Contains("AddOpenSlide", deepZoom.Message, StringComparison.Ordinal);
+        Assert.Contains("AddOpenSlide", omeZarr.Message, StringComparison.Ordinal);
     }
 
     [Fact]
