@@ -430,6 +430,135 @@ public class SlideViewTests
     }
 
     [Fact]
+    public void SlideView_NewSlide_ShowsACoarseLevelBeforeTheTargetLevel()
+    {
+        using OpenSlide slide = Boxes();
+        using var gate = new ManualResetEventSlim();
+        var levelsRead = new ConcurrentQueue<int>();
+
+        HeadlessSession.Run(() =>
+        {
+            // One loader thread, and level 0 held: if a level-0 tile were read first, nothing would ever load.
+            using var host = new ViewHost(configure: view =>
+            {
+                view.LoaderThreads = 1;
+                view.TileReader = (s, grid, key) =>
+                {
+                    levelsRead.Enqueue(key.Level);
+                    if (key.Level == 0)
+                    {
+                        gate.Wait(TimeSpan.FromSeconds(30));
+                    }
+
+                    return SlideView.ReadTile(s, grid, key);
+                };
+            });
+            try
+            {
+                // Fitted to the window, the slide is drawn from level 0, and nothing is cached yet.
+                host.View.Slide = slide;
+                HeadlessSession.PumpUntil(() => levelsRead.Contains(0), "the coarse tiles are read and level 0 is next");
+                RenderedFrame frame = host.Capture();
+
+                Assert.Equal(0, host.View.TargetLevel);
+                Assert.NotEqual(0, levelsRead.First());
+                Assert.False(host.View.Cache!.Contains(new TileKey(0, 0, 0)));
+                int coloured = frame.Count(c => !RenderedFrame.IsWhite(c));
+                Assert.True(coloured >= 1000, $"only {coloured} pixels are not background white");
+                Assert.True(frame.Count(RenderedFrame.IsRed) > 0 && frame.Count(RenderedFrame.IsBlue) > 0, "the boxes are not drawn");
+            }
+            finally
+            {
+                gate.Set();
+            }
+
+            host.WaitForTiles();
+            Assert.True(host.View.Cache!.Contains(new TileKey(0, 0, 0)));
+        });
+    }
+
+    [Fact]
+    public void SlideView_ReadFailure_StaysReportedWhenTheViewIsAttachedAgain()
+    {
+        using OpenSlide slide = Boxes();
+        var error = new OpenSlideException("corrupt tile");
+
+        HeadlessSession.Run(() =>
+        {
+            using var host = new ViewHost(configure: view => view.TileReader = (_, _, _) => throw error);
+            int failures = 0;
+            host.View.LoadFailed += _ => failures++;
+            host.View.Slide = slide;
+            HeadlessSession.PumpUntil(() => failures > 0, "the failure is reported");
+            long reads = host.View.TileReads;
+
+            // Out of the window and back: a new loader, but the slide is still known to fail.
+            host.Window.Content = null;
+            HeadlessSession.Pump();
+            Assert.Null(host.View.Loader);
+            host.Window.Content = host.View;
+            for (int i = 0; i < 20; i++)
+            {
+                HeadlessSession.Pump();
+                Thread.Sleep(5);
+            }
+
+            Assert.NotNull(host.View.Loader);
+            Assert.Equal(1, failures);
+            Assert.Equal(reads, host.View.TileReads);
+
+            // Setting the slide again tries it again.
+            host.View.Slide = null;
+            host.View.Slide = slide;
+            HeadlessSession.PumpUntil(() => failures == 2, "the failure is reported again");
+        });
+    }
+
+    [Fact]
+    public void SlideView_AnotherPointerPressed_KeepsTheDrag()
+    {
+        using OpenSlide slide = Boxes();
+
+        HeadlessSession.Run(() =>
+        {
+            using var host = new ViewHost(slide);
+            Viewport viewport = host.View.Viewport!;
+            (double x, double y, double downsample) = (viewport.CenterX, viewport.CenterY, viewport.Downsample);
+
+            // Panning with one finger: a second one touching down, moving and lifting changes nothing.
+            IHeadlessTouchPointer first = host.Window.TouchBegin(new Point(100, 100));
+            host.Window.TouchMove(first, new Point(120, 100));
+            IHeadlessTouchPointer second = host.Window.TouchBegin(new Point(300, 200));
+            host.Window.TouchMove(second, new Point(320, 230));
+            Assert.Equal((x - (20 * downsample), y), (viewport.CenterX, viewport.CenterY));
+            host.Window.TouchMove(first, new Point(140, 100));
+            host.Window.TouchEnd(second, new Point(320, 230));
+            host.Window.TouchMove(first, new Point(160, 100));
+            host.Window.TouchEnd(first, new Point(160, 100));
+
+            Assert.Equal(x - (60 * downsample), viewport.CenterX, 9);
+            Assert.Equal(y, viewport.CenterY, 9);
+
+            // Drawing a selection: the second finger moves neither its start nor its end.
+            (double x0, double y0) = viewport.ScreenToSlide(100, 80);
+            (double x1, double y1) = viewport.ScreenToSlide(220, 200);
+            first = host.Window.TouchBegin(new Point(100, 80), RawInputModifiers.Shift);
+            host.Window.TouchMove(first, new Point(150, 120), RawInputModifiers.Shift);
+            second = host.Window.TouchBegin(new Point(300, 250), RawInputModifiers.Shift);
+            host.Window.TouchMove(second, new Point(310, 260), RawInputModifiers.Shift);
+            host.Window.TouchEnd(second, new Point(310, 260), RawInputModifiers.Shift);
+            host.Window.TouchMove(first, new Point(220, 200), RawInputModifiers.Shift);
+            host.Window.TouchEnd(first, new Point(220, 200), RawInputModifiers.Shift);
+
+            Selection selection = Assert.Single(host.View.Selections.Items);
+            Assert.Equal(x0, selection.X0, 9);
+            Assert.Equal(y0, selection.Y0, 9);
+            Assert.Equal(x1 - x0, selection.Width0, 9);
+            Assert.Equal(y1 - y0, selection.Height0, 9);
+        });
+    }
+
+    [Fact]
     public void SlideView_RapidZoom_KeepsBitmapsWithinTheCache()
     {
         using OpenSlide slide = Boxes();

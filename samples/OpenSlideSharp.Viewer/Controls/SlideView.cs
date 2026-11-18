@@ -21,8 +21,10 @@ namespace OpenSlideSharp.Viewer.Controls;
 /// <para>
 /// Each frame draws the tiles of the level that suits the zoom (<see cref="TileGrid.BestLevelForDownsample"/> of
 /// the downsample per device pixel), aligned to device pixels. A tile not loaded yet is stood in for by the cached
-/// tiles of coarser levels, scaled up; the missing tiles are requested centre first. A frame never reads the slide:
-/// the <see cref="TileLoader"/> reads on its own threads, and each tile it loads schedules one redraw at most.
+/// tiles of coarser levels, scaled up; the missing tiles are requested centre first. Where no cached tile stands in
+/// (a slide just opened, or a part of it not seen yet), the tiles two levels up are requested before them, so a
+/// low-resolution image shows quickly and is then replaced. A frame never reads the slide: the
+/// <see cref="TileLoader"/> reads on its own threads, and each tile it loads schedules one redraw at most.
 /// </para>
 /// <para>
 /// Setting <see cref="Slide"/> builds a new viewport and loading pipeline (tile cache, bitmap cache and loader), and
@@ -30,15 +32,19 @@ namespace OpenSlideSharp.Viewer.Controls;
 /// after replacing it here. Leaving the visual tree (closing the window) disposes the pipeline too.
 /// </para>
 /// <para>
-/// Input: dragging with the left button pans, and with Shift held draws a selection; the wheel zooms around the
-/// pointer by 2^(1/4) a notch. Keys, while the view has the focus (it takes it when clicked): the arrows or W, A,
-/// S and D pan by 100 pixels, + (or =) and - zoom around the centre, Z fits the slide, 1 zooms to one slide pixel per
-/// screen pixel and Space centres the slide.
+/// Input: dragging with the left button (or a finger) pans, and with Shift held draws a selection; one drag at a
+/// time, so other buttons or fingers pressed meanwhile are ignored. The wheel zooms around the pointer by 2^(1/4) a
+/// notch. Keys, while the view has the focus (it takes it when clicked): the arrows or W, A, S and D pan by 100
+/// pixels, + (or =) and - zoom around the centre, Z fits the slide, 1 zooms to one slide pixel per screen pixel and
+/// Space centres the slide.
 /// </para>
 /// </remarks>
 internal sealed class SlideView : Control
 {
     private const double KeyboardPan = 100;
+
+    // How many levels above the target level the quick stand-ins are read from (see DrawTiles).
+    private const int CoarseLevelStep = 2;
 
     private static readonly double ZoomStep = Math.Pow(2, 0.25);
     private static readonly ImmutableSolidColorBrush SelectionBrush = new(Color.FromRgb(0xFF, 0xD0, 0x00));
@@ -52,8 +58,11 @@ internal sealed class SlideView : Control
     private static readonly Action<byte[]> ReturnPixels = pixels => PixelPool.Return(pixels);
 
     private readonly List<TileKey> _missing = new();
+    private readonly List<TileKey> _coarse = new();
+    private readonly HashSet<TileKey> _coarseSeen = new();
     private readonly List<(Bitmap Bitmap, Rect Source, Rect Destination)> _coarser = new();
     private OpenSlide? _slide;
+    private SlideState? _slideState;
     private TileGrid? _grid;
     private Viewport? _viewport;
     private Pipeline? _pipeline;
@@ -61,6 +70,7 @@ internal sealed class SlideView : Control
     private bool _attached;
     private Point? _pointer;
     private DragMode _drag;
+    private IPointer? _dragPointer;
     private Point _dragFrom;
     private (double X, double Y) _selectionStart;
     private Selection? _selectionBeingDrawn;
@@ -86,7 +96,8 @@ internal sealed class SlideView : Control
     public event Action? ViewChanged;
 
     /// <summary>
-    /// Raised on the UI thread, once per slide, when reading a tile fails; the view then reads no more tiles of it.
+    /// Raised on the UI thread, once per slide, when reading a tile fails; the view then reads no more tiles of it,
+    /// even after leaving the visual tree and coming back, until <see cref="Slide"/> is set again.
     /// </summary>
     public event Action<Exception>? LoadFailed;
 
@@ -120,6 +131,9 @@ internal sealed class SlideView : Control
 
     /// <summary>Gets or sets the tile cache budget, taken when the loading pipeline is built.</summary>
     internal long CacheBudgetBytes { get; set; } = TileCache.DefaultBudgetBytes;
+
+    /// <summary>Gets or sets the number of loader threads, taken when the loading pipeline is built.</summary>
+    internal int LoaderThreads { get; set; } = Math.Min(4, Environment.ProcessorCount);
 
     /// <summary>Gets the level the last frame drew.</summary>
     internal int TargetLevel { get; private set; }
@@ -217,12 +231,16 @@ internal sealed class SlideView : Control
         Focus(NavigationMethod.Pointer);
         PointerPoint point = e.GetCurrentPoint(this);
         _pointer = point.Position;
-        if (_viewport is not { } viewport || !point.Properties.IsLeftButtonPressed)
+        // One drag at a time: a press during one (another finger, say) neither restarts it nor moves its anchor.
+        if (_drag != DragMode.None
+            || _viewport is not { } viewport
+            || point.Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed)
         {
             return;
         }
 
         _drag = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? DragMode.Select : DragMode.Pan;
+        _dragPointer = e.Pointer;
         _dragFrom = point.Position;
         _selectionStart = viewport.ScreenToSlide(point.Position.X, point.Position.Y);
         e.Pointer.Capture(this);
@@ -234,7 +252,7 @@ internal sealed class SlideView : Control
         base.OnPointerMoved(e);
         Point position = e.GetPosition(this);
         _pointer = position;
-        if (_viewport is { } viewport)
+        if (_viewport is { } viewport && e.Pointer == _dragPointer)
         {
             if (_drag == DragMode.Pan)
             {
@@ -255,7 +273,7 @@ internal sealed class SlideView : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        if (e.InitialPressMouseButton != MouseButton.Left || _drag == DragMode.None)
+        if (_drag == DragMode.None || e.Pointer != _dragPointer || e.InitialPressMouseButton != MouseButton.Left)
         {
             return;
         }
@@ -277,7 +295,10 @@ internal sealed class SlideView : Control
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
-        EndDrag(); // another control took the pointer: a selection being drawn is dropped
+        if (e.Pointer == _dragPointer)
+        {
+            EndDrag(); // another control took the pointer: a selection being drawn is dropped
+        }
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
@@ -424,6 +445,7 @@ internal sealed class SlideView : Control
         }
 
         _slide = slide;
+        _slideState = slide is null ? null : new SlideState();
         _grid = grid;
         _viewport = viewport;
         _background = background;
@@ -443,7 +465,8 @@ internal sealed class SlideView : Control
 
     private void OpenPipeline()
     {
-        if (_pipeline is not null || !_attached || _slide is not { } slide || _grid is not { } grid)
+        if (_pipeline is not null || !_attached || _slide is not { } slide || _slideState is not { } state
+            || _grid is not { } grid)
         {
             return;
         }
@@ -457,16 +480,23 @@ internal sealed class SlideView : Control
                 return read(slide, grid, key);
             },
             cache,
-            Math.Min(4, Environment.ProcessorCount),
+            LoaderThreads,
             _ => ScheduleRedraw());
         var pipeline = new Pipeline(grid, cache, new TileBitmapCache(), loader);
-        loader.Failed += error => Dispatcher.UIThread.Post(() =>
+        loader.Failed += error =>
         {
-            if (ReferenceEquals(pipeline, _pipeline))
+            // The failure belongs to the slide, not to this loader: a loader built after leaving the visual tree
+            // and coming back must not read the slide again, nor report it again.
+            state.Failed = true;
+            Dispatcher.UIThread.Post(() =>
             {
-                LoadFailed?.Invoke(error);
-            }
-        });
+                if (ReferenceEquals(state, _slideState) && !state.Reported)
+                {
+                    state.Reported = true;
+                    LoadFailed?.Invoke(error);
+                }
+            });
+        };
         _pipeline = pipeline;
         InvalidateVisual();
     }
@@ -506,7 +536,13 @@ internal sealed class SlideView : Control
         (double left0, double top0) = viewport.ScreenToSlide(0, 0);
         (double right0, double bottom0) = viewport.ScreenToSlide(viewport.ViewWidth, viewport.ViewHeight);
 
+        // Missing tiles that nothing cached stands in for are first covered from a coarse level, two levels up
+        // (4 to 16 times coarser on the usual pyramids, so a few tiles cover a screenful), read before the
+        // target tiles: a slide just opened, or a part of it not seen yet, shows a low-resolution image quickly.
+        int coarseLevel = Math.Min(level + CoarseLevelStep, grid.LevelCount - 1);
         _missing.Clear();
+        _coarse.Clear();
+        _coarseSeen.Clear();
         using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.HighQuality }))
         {
             foreach (TileKey key in grid.VisibleTiles(level, left0, top0, right0, bottom0))
@@ -515,31 +551,49 @@ internal sealed class SlideView : Control
                 {
                     (double left, double top, double right, double bottom) = grid.Bounds(key);
                     context.DrawImage(bitmap, new Rect(bitmap.Size), OnScreen(viewport, scaling, left, top, right, bottom));
+                    continue;
                 }
-                else
+
+                _missing.Add(key);
+                if (!DrawCoarser(context, pipeline, viewport, scaling, key) && coarseLevel > level)
                 {
-                    _missing.Add(key);
-                    DrawCoarser(context, pipeline, viewport, scaling, key);
+                    (double left, double top, double right, double bottom) = grid.Bounds(key);
+                    foreach (TileKey coarse in grid.VisibleTiles(coarseLevel, left, top, right, bottom))
+                    {
+                        if (_coarseSeen.Add(coarse))
+                        {
+                            _coarse.Add(coarse);
+                        }
+                    }
                 }
             }
         }
 
+        if (_slideState is { Failed: true })
+        {
+            return; // reading this slide failed: no more requests for it
+        }
+
+        SortCenterFirst(_coarse, grid, viewport.CenterX, viewport.CenterY);
         SortCenterFirst(_missing, grid, viewport.CenterX, viewport.CenterY);
-        pipeline.Loader.Request(_missing); // also drops what earlier frames queued and this one no longer needs
+        _coarse.AddRange(_missing);
+        pipeline.Loader.Request(_coarse); // also drops what earlier frames queued and this one no longer needs
     }
 
     /// <summary>
     /// Stands in for a tile not loaded yet with the cached tiles of coarser levels: from the next level up to the
     /// first one whose cached tiles cover the whole tile, drawing coarser levels first so finer ones end up on top.
+    /// Returns whether one level covered the whole tile.
     /// </summary>
-    private void DrawCoarser(DrawingContext context, Pipeline pipeline, Viewport viewport, double scaling, TileKey key)
+    private bool DrawCoarser(DrawingContext context, Pipeline pipeline, Viewport viewport, double scaling, TileKey key)
     {
         TileGrid grid = pipeline.Grid;
         (double areaLeft, double areaTop, double areaRight, double areaBottom) = grid.Bounds(key);
         _coarser.Clear();
-        for (int level = key.Level + 1; level < grid.LevelCount; level++)
+        bool covered = false;
+        for (int level = key.Level + 1; level < grid.LevelCount && !covered; level++)
         {
-            bool covered = true;
+            covered = true;
             double downsample = grid.LevelDownsample(level);
             foreach (TileKey coarse in grid.VisibleTiles(level, areaLeft, areaTop, areaRight, areaBottom))
             {
@@ -561,17 +615,14 @@ internal sealed class SlideView : Control
                     (bottom - top) / downsample);
                 _coarser.Add((bitmap, source, OnScreen(viewport, scaling, left, top, right, bottom)));
             }
-
-            if (covered)
-            {
-                break;
-            }
         }
 
         for (int i = _coarser.Count - 1; i >= 0; i--)
         {
             context.DrawImage(_coarser[i].Bitmap, _coarser[i].Source, _coarser[i].Destination);
         }
+
+        return covered;
     }
 
     private Bitmap? BitmapOf(Pipeline pipeline, TileKey key) =>
@@ -612,11 +663,28 @@ internal sealed class SlideView : Control
     private void EndDrag()
     {
         _drag = DragMode.None;
+        _dragPointer = null;
         if (_selectionBeingDrawn is not null)
         {
             _selectionBeingDrawn = null;
             InvalidateVisual();
         }
+    }
+
+    /// <summary>What the view keeps about the slide while it is set, across loading pipelines.</summary>
+    private sealed class SlideState
+    {
+        // Set on a loader thread when a read fails; read by every frame.
+        private volatile bool _failed;
+
+        public bool Failed
+        {
+            get => _failed;
+            set => _failed = value;
+        }
+
+        /// <summary>Gets or sets whether <see cref="LoadFailed"/> was raised (UI thread only).</summary>
+        public bool Reported { get; set; }
     }
 
     /// <summary>The loading machinery of one slide: built when a slide is set, disposed together.</summary>
