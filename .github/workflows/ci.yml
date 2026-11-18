@@ -181,3 +181,17 @@ jobs:
       - name: Smoke-test the packed packages
         shell: pwsh
         run: ./eng/Test-Packages.ps1 -SkipPack -Version 0.0.0-ci.${{ github.run_number }}
+
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Self-test the release version script
+        shell: pwsh
+        run: ./eng/Get-ReleaseVersion.ps1 -SelfTest
+      - name: Self-test the upstream update script
+        shell: pwsh
+        run: ./eng/Find-UpstreamUpdate.ps1 -SelfTest
