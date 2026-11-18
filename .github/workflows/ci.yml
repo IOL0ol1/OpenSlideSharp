@@ -219,6 +219,9 @@ jobs:
       - name: Self-test the upstream update script
         shell: pwsh
         run: ./eng/Find-UpstreamUpdate.ps1 -SelfTest
+      - name: Self-test the upstream sync failure report
+        shell: pwsh
+        run: ./eng/Report-SyncFailure.ps1 -SelfTest
 
   actionlint:
     runs-on: ubuntu-latest
