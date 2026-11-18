@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/samples/">
+    <Project Path="samples/OpenSlideSharp.Viewer/OpenSlideSharp.Viewer.csproj" />
     <Project Path="samples/OpenSlideSharp.Web/OpenSlideSharp.Web.csproj" />
   </Folder>
   <Folder Name="/src/">
@@ -14,5 +15,6 @@
     <Project Path="test/OpenSlideSharp.AspNetCore.Tests/OpenSlideSharp.AspNetCore.Tests.csproj" />
     <Project Path="test/OpenSlideSharp.Web.Tests/OpenSlideSharp.Web.Tests.csproj" />
     <Project Path="test/OpenSlideSharp.Tool.Tests/OpenSlideSharp.Tool.Tests.csproj" />
+    <Project Path="test/OpenSlideSharp.Viewer.Tests/OpenSlideSharp.Viewer.Tests.csproj" />
   </Folder>
 </Solution>

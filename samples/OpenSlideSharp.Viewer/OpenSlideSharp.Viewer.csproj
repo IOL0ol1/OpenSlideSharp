@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>OpenSlideSharp.Viewer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenSlideSharp.Viewer.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <ProjectReference Include="..\..\src\OpenSlideSharp\OpenSlideSharp.csproj" />
+  </ItemGroup>
+
+  <!--
+    The native OpenSlide library. A self-contained publish sets UseOpenSlideRuntimePackage=true and takes it from
+    OpenSlideSharp.runtime (OpenSlideSharpVersion, default the build's Version, restored from a feed that has it, see
+    eng/Test-Packages.ps1); other builds use the binaries in artifacts/native.
+  -->
+  <PropertyGroup>
+    <OpenSlideSharpVersion Condition="'$(OpenSlideSharpVersion)' == ''">$(Version)</OpenSlideSharpVersion>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">
+    <PackageReference Include="OpenSlideSharp.runtime" VersionOverride="$(OpenSlideSharpVersion)" />
+  </ItemGroup>
+  <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
+
+</Project>
