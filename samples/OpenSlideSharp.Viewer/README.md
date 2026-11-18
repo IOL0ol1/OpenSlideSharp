@@ -11,7 +11,7 @@ Open a slide from the command line, with File → Open, or by dropping it on the
 
 ## Download
 
-Each [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) has the viewer for three platforms:
+Each 4.x [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) has the viewer for three platforms:
 
 | Platform | Archive |
 |---|---|
@@ -67,7 +67,15 @@ dotnet publish samples/OpenSlideSharp.Viewer -c Release -r win-x64 --self-contai
   -p:UseOpenSlideRuntimePackage=true -p:OpenSlideSharpVersion=<version>
 ```
 
-`artifacts/publish/OpenSlideSharp.Viewer/release_win-x64/` then holds `OpenSlideSharp.Viewer.exe`, which runs without .NET installed, and `licenses/`. The other runtime identifiers are `linux-x64`, `linux-arm64`, `osx-arm64` and `osx-x64`. OpenSlide comes from the `OpenSlideSharp.runtime` package of that version, restored from nuget.org or from a folder given with `-p:RestoreAdditionalProjectSources=<folder>`, as `eng/Test-Packages.ps1` does.
+`artifacts/publish/OpenSlideSharp.Viewer/release_win-x64/` then holds `OpenSlideSharp.Viewer.exe`, which runs without .NET installed, and `licenses/`. The other runtime identifiers are `linux-x64`, `linux-arm64`, `osx-arm64` and `osx-x64`. OpenSlide comes from the `OpenSlideSharp.runtime` package of that version, restored from nuget.org.
+
+To publish with an `OpenSlideSharp.runtime` package in a local folder instead, such as the one `pwsh eng/Test-Packages.ps1 -PackOnly -Version <version>` packs into `artifacts/smoke-feed` (after `pwsh eng/Get-OpenSlide.ps1 -Platform all`), use the script the releases use:
+
+```sh
+pwsh eng/Publish-Viewer.ps1 -Rid win-x64 -Version <version> -Feed artifacts/smoke-feed
+```
+
+It restores `OpenSlideSharp*` packages from that folder only, checks that the runtime package came from it, checks the publish folder (under `artifacts/viewer/<rid>/`) and, for this machine's runtime identifier, runs `--check`. Do not add the folder to `dotnet publish` as a second package source (for example with `-p:RestoreAdditionalProjectSources`): with the same package and version in two sources, NuGet may take either one.
 
 The native libraries are inside the executable. It extracts them on first start to `%TEMP%\.net` on Windows and `~/.net` on Linux and macOS (or to `DOTNET_BUNDLE_EXTRACT_BASE_DIR`), and reuses them after that. The folders that older versions of the viewer extracted there can be deleted.
 
