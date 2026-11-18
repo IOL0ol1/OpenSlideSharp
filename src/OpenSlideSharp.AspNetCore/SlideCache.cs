@@ -17,13 +17,14 @@ namespace OpenSlideSharp.AspNetCore;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Slides are keyed by <see cref="Path.GetFullPath(string)"/>, ignoring case on Windows. When several requests
-/// ask for a slide that is not open yet, it is opened once and they all wait for it. A slide that cannot be opened
-/// is not remembered, so the next request tries again.
+/// Slides are keyed by <see cref="Path.GetFullPath(string)"/>, ignoring case on Windows and respecting it elsewhere.
+/// When several requests ask for a slide that is not open yet, it is opened once and they all wait for it. A slide
+/// that cannot be opened is not remembered, so the next request tries again, and it never takes the place of a
+/// cached slide: a slide counts towards <see cref="OpenSlideServerOptions.SlideCacheSize"/> only once it is open.
 /// </para>
 /// <para>
 /// A slide leaves the cache when it is the least recently used one and room is needed, or through
-/// <see cref="Evict"/>. It is closed once it has left the cache and every lease on it has been disposed, so
+/// <see cref="Evict(string)"/>. It is closed once it has left the cache and every lease on it has been disposed, so
 /// requests still using it are not disturbed. All members are thread-safe.
 /// </para>
 /// </remarks>
@@ -36,8 +37,11 @@ public sealed class SlideCache : IDisposable
     private readonly ILogger<SlideCache> _logger;
     private readonly int _capacity;
     private readonly Lock _lock = new();
-    private readonly Dictionary<string, LinkedListNode<CacheItem>> _items = new(KeyComparer);
-    private readonly LinkedList<CacheItem> _recency = new(); // most recently used first
+
+    // Every slide in the cache, open or still being opened; only open ones are in _recency and count towards the
+    // capacity, so a file that turns out not to be a slide never evicts one that is.
+    private readonly Dictionary<string, CacheItem> _items = new(KeyComparer);
+    private readonly LinkedList<CacheItem> _recency = new(); // open slides, most recently used first
     private bool _disposed;
     private int _openCount;
 
@@ -93,41 +97,27 @@ public sealed class SlideCache : IDisposable
             return null;
         }
 
-        CacheItem item;
-        List<CacheItem>? evicted = null;
+        CacheItem? item;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_items.TryGetValue(key, out LinkedListNode<CacheItem>? node))
+            if (_items.TryGetValue(key, out item))
             {
-                _recency.Remove(node);
-                _recency.AddFirst(node);
-                item = node.Value;
+                if (item.Node is not null)
+                {
+                    _recency.Remove(item.Node);
+                    _recency.AddFirst(item.Node);
+                }
             }
             else
             {
+                // Pending until it is open: it lets concurrent requests share the open, but takes no room yet.
                 item = new CacheItem(this, key);
-                _items.Add(key, _recency.AddFirst(item));
-                while (_items.Count > _capacity)
-                {
-                    CacheItem oldest = _recency.Last!.Value;
-                    _recency.RemoveLast();
-                    _items.Remove(oldest.Key);
-                    (evicted ??= []).Add(oldest);
-                }
+                _items.Add(key, item);
             }
 
             // While the item is cached the cache holds a reference, so the count is above zero here.
             item.AddRef();
-        }
-
-        // Closing slides takes native calls; do it outside the lock.
-        if (evicted is not null)
-        {
-            foreach (CacheItem oldest in evicted)
-            {
-                oldest.Release();
-            }
         }
 
         SlideEntry? entry;
@@ -150,6 +140,7 @@ public sealed class SlideCache : IDisposable
             return null;
         }
 
+        Promote(item);
         return new SlideLease(item, entry);
     }
 
@@ -168,17 +159,30 @@ public sealed class SlideCache : IDisposable
             return;
         }
 
-        CacheItem? removed = null;
+        CacheItem? item;
         lock (_lock)
         {
-            if (_items.Remove(key, out LinkedListNode<CacheItem>? node))
+            if (!_items.TryGetValue(key, out item))
             {
-                _recency.Remove(node);
-                removed = node.Value;
+                return;
             }
         }
 
-        removed?.Release();
+        Remove(item);
+    }
+
+    /// <summary>
+    /// Removes the slide instance of <paramref name="lease"/> from the cache, if it is still the cached one. Unlike
+    /// <see cref="Evict(string)"/>, it never removes a newer instance that another request has opened since.
+    /// Does nothing if the lease has been disposed.
+    /// </summary>
+    internal void Evict(SlideLease lease)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        if (lease.Item is { } item)
+        {
+            Remove(item);
+        }
     }
 
     /// <summary>
@@ -195,9 +199,13 @@ public sealed class SlideCache : IDisposable
             }
 
             _disposed = true;
-            items = [.. _recency];
+            items = [.. _items.Values];
             _items.Clear();
             _recency.Clear();
+            foreach (CacheItem item in items)
+            {
+                item.Node = null;
+            }
         }
 
         foreach (CacheItem item in items)
@@ -222,18 +230,56 @@ public sealed class SlideCache : IDisposable
         }
     }
 
+    // Counts a newly opened slide towards the capacity, evicting the least recently used ones beyond it. Does nothing
+    // if the item was promoted already, or has left the cache while it was being opened.
+    private void Promote(CacheItem item)
+    {
+        List<CacheItem>? evicted = null;
+        lock (_lock)
+        {
+            if (_disposed || item.Node is not null
+                || !_items.TryGetValue(item.Key, out CacheItem? current) || current != item)
+            {
+                return;
+            }
+
+            item.Node = _recency.AddFirst(item);
+            while (_recency.Count > _capacity)
+            {
+                CacheItem oldest = _recency.Last!.Value;
+                _recency.RemoveLast();
+                oldest.Node = null;
+                _items.Remove(oldest.Key);
+                (evicted ??= []).Add(oldest);
+            }
+        }
+
+        // Closing slides takes native calls; do it outside the lock.
+        if (evicted is not null)
+        {
+            foreach (CacheItem oldest in evicted)
+            {
+                oldest.Release();
+            }
+        }
+    }
+
     // Removes the item if it is still the cached one for its key, and releases the cache's reference to it.
     private void Remove(CacheItem item)
     {
         lock (_lock)
         {
-            if (!_items.TryGetValue(item.Key, out LinkedListNode<CacheItem>? node) || node.Value != item)
+            if (!_items.TryGetValue(item.Key, out CacheItem? current) || current != item)
             {
                 return;
             }
 
             _items.Remove(item.Key);
-            _recency.Remove(node);
+            if (item.Node is not null)
+            {
+                _recency.Remove(item.Node);
+                item.Node = null;
+            }
         }
 
         item.Release();
@@ -273,6 +319,9 @@ public sealed class SlideCache : IDisposable
         }
 
         public string Key { get; }
+
+        /// <summary>The item's place in the recency list once its slide is open; null while pending or removed. Guarded by the cache lock.</summary>
+        public LinkedListNode<CacheItem>? Node { get; set; }
 
         public SlideEntry? GetEntry() => _entry.Value;
 

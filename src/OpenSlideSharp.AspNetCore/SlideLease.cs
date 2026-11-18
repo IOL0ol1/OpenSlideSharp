@@ -29,6 +29,9 @@ public sealed class SlideLease : IDisposable
         }
     }
 
+    /// <summary>The cache slot this lease holds, or <see langword="null"/> once the lease has been disposed.</summary>
+    internal SlideCache.CacheItem? Item => Volatile.Read(ref _item);
+
     /// <summary>
     /// Returns the lease, which closes the slide if it has left the cache and this was its last lease. The lease is
     /// returned only once; disposing it again does nothing.
