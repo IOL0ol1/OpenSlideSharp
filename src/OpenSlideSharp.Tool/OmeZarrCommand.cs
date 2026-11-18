@@ -107,7 +107,6 @@ internal static class OmeZarrCommand
     {
         string stem = Path.GetFileNameWithoutExtension(args.Slide);
         string output = Path.TrimEndingDirectorySeparator(Path.GetFullPath(args.Output ?? stem + ".zarr"));
-        var writer = new TileWriter(args.Jobs, stderr, args.FileWritten);
         string directory = Path.Combine(Path.GetDirectoryName(output) ?? output, stem + "_associated");
 
         // Check every output directory before changing anything. The associated directory is a sibling of the
@@ -125,17 +124,18 @@ internal static class OmeZarrCommand
             ExportSupport.EnsureReplaceableDirectory(directory, args.Slide);
         }
 
+        var writer = new TileWriter(args.Jobs, stderr, args.FileWritten);
         IColorTransform? transform = ExportSupport.OmeZarrColor(
             slide.ColorProfile, args.ColorMode, ExportSupport.Describe(args.Slide, null), stderr);
         var generator = new OmeZarrGenerator(slide, CreateOptions(args, args.LimitBounds, transform));
-        await ExportStoreAsync(writer, generator, output, "slide", args, ct).ConfigureAwait(false);
+        await ExportStoreAsync(writer, generator, output, "slide", args, stderr, ct).ConfigureAwait(false);
 
         if (!args.Associated)
         {
             return;
         }
 
-        ExportSupport.PrepareDirectory(directory, args.Slide);
+        ExportSupport.PrepareDirectory(directory, args.Slide, stderr);
         foreach ((string name, string slug) in ViewerWriter.AssignSlugs(slide.AssociatedImages.Keys))
         {
             AssociatedImage image = slide.AssociatedImages[name];
@@ -144,7 +144,7 @@ internal static class OmeZarrCommand
 
             // An associated image has no bounds of its own.
             var imageGenerator = new OmeZarrGenerator(image, CreateOptions(args, false, imageTransform));
-            await ExportStoreAsync(writer, imageGenerator, Path.Combine(directory, slug + ".zarr"), name, args, ct)
+            await ExportStoreAsync(writer, imageGenerator, Path.Combine(directory, slug + ".zarr"), name, args, stderr, ct)
                 .ConfigureAwait(false);
         }
     }
@@ -166,9 +166,15 @@ internal static class OmeZarrCommand
     // has no root metadata and is not taken for a complete one. The chunks go out region by region, the channels of a
     // region together, so one render serves all three.
     private static async Task ExportStoreAsync(
-        TileWriter writer, OmeZarrGenerator generator, string store, string displayName, OmeZarrArguments args, CancellationToken ct)
+        TileWriter writer,
+        OmeZarrGenerator generator,
+        string store,
+        string displayName,
+        OmeZarrArguments args,
+        TextWriter stderr,
+        CancellationToken ct)
     {
-        ExportSupport.PrepareDirectory(store, args.Slide);
+        ExportSupport.PrepareDirectory(store, args.Slide, stderr);
 
         long total = 0;
         foreach (string _ in generator.EnumerateKeys())

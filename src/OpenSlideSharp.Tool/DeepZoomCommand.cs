@@ -112,23 +112,23 @@ internal static class DeepZoomCommand
 
         if (!args.Viewer)
         {
-            await ExportImageAsync(writer, CreateGenerator(slide, null, args, stderr), name, ViewerWriter.SlideName, args, ct)
+            await ExportImageAsync(writer, CreateGenerator(slide, null, args, stderr), name, ViewerWriter.SlideName, args, stderr, ct)
                 .ConfigureAwait(false);
             return;
         }
 
-        ExportSupport.PrepareDirectory(name, args.Slide);
+        ExportSupport.PrepareDirectory(name, args.Slide, stderr);
 
         var dziData = new Dictionary<string, string>(StringComparer.Ordinal);
         var slideImage = CreateGenerator(slide, null, args, stderr);
         dziData[ViewerWriter.SlideName + ".dzi"] = await ExportImageAsync(
-            writer, slideImage, Path.Combine(name, ViewerWriter.SlideName), ViewerWriter.SlideName, args, ct).ConfigureAwait(false);
+            writer, slideImage, Path.Combine(name, ViewerWriter.SlideName), ViewerWriter.SlideName, args, stderr, ct).ConfigureAwait(false);
 
         var associated = new List<KeyValuePair<string, string>>();
         foreach ((string imageName, string slug) in ViewerWriter.AssignSlugs(slide.AssociatedImages.Keys, ViewerWriter.SlideName))
         {
             var image = CreateGenerator(slide, imageName, args, stderr);
-            dziData[slug + ".dzi"] = await ExportImageAsync(writer, image, Path.Combine(name, slug), imageName, args, ct)
+            dziData[slug + ".dzi"] = await ExportImageAsync(writer, image, Path.Combine(name, slug), imageName, args, stderr, ct)
                 .ConfigureAwait(false);
             associated.Add(new KeyValuePair<string, string>(imageName, slug + ".dzi"));
         }
@@ -162,6 +162,7 @@ internal static class DeepZoomCommand
         string basePath,
         string displayName,
         DeepZoomArguments args,
+        TextWriter stderr,
         CancellationToken ct)
     {
         DeepZoomGenerator generator = image.Generator;
@@ -169,11 +170,14 @@ internal static class DeepZoomCommand
         string dziPath = basePath + ".dzi";
         string files = basePath + "_files";
 
-        // Check both before changing anything. The old DZI goes first: an export that stops early must not leave it
-        // pointing at a partial tree.
+        // Check both before changing anything. Then the old tiles move aside in one step (if that fails, nothing has
+        // changed), and the old DZI goes before anything new is written: an export that stops early must not leave
+        // it pointing at a partial tree.
         ExportSupport.EnsureReplaceableFile(dziPath, args.Slide);
-        ExportSupport.PrepareDirectory(files, args.Slide);
+        string? old = ExportSupport.MoveAside(files, args.Slide, stderr);
         File.Delete(dziPath);
+        ExportSupport.DeleteOldOutput(old, stderr);
+        ExportSupport.CreateOutputDirectory(files);
 
         var levels = new string[generator.LevelCount];
         for (int level = 0; level < levels.Length; level++)
