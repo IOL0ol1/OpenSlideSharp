@@ -7,7 +7,9 @@
     <ToolCommandName>openslide-sharp</ToolCommandName>
     <PackageId>OpenSlideSharp.Tool</PackageId>
     <PackageTags>openslide wsi pathology deepzoom ome-zarr dotnet-tool</PackageTags>
-    <Description>Command-line tool that exports OpenSlide slides as Deep Zoom (like deepzoom_tile.py) or OME-Zarr.</Description>
+    <Description>Command-line tool that exports OpenSlide slides as Deep Zoom (like deepzoom_tile.py) or OME-Zarr. Bundles native OpenSlide from openslide-bin (LGPL-2.1); source: the openslide-bin source tarball of the same version. Also bundles SkiaSharp (MIT) with Skia (BSD-3-Clause), and OpenSeadragon (BSD-3-Clause) with its public-domain scale bar plugin for the -r viewer. See licenses/.</Description>
+    <!-- The tool's own code is MIT; the package also redistributes the libraries above. -->
+    <PackageLicenseExpression>MIT AND LGPL-2.1-only AND BSD-3-Clause</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,9 +33,32 @@
     artifacts/native.
   -->
   <ItemGroup Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">
-    <PackageReference Include="OpenSlideSharp.runtime" VersionOverride="$(Version)" />
+    <PackageReference Include="OpenSlideSharp.runtime" VersionOverride="$(Version)" GeneratePathProperty="true" />
   </ItemGroup>
   <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
+
+  <!--
+    The licenses of what the package redistributes, under licenses/: openslide-bin's licenses/ and VERSIONS.md (the
+    LGPL-2.1 OpenSlide library and the libraries linked into it), SkiaSharp's license and third-party notices (Skia
+    and the libraries in libSkiaSharp), and those of the viewer files that -r writes. Direct references to the
+    SkiaSharp packages (the versions OpenSlideSharp.SkiaSharp uses) give their paths.
+  -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" GeneratePathProperty="true" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseOpenSlideRuntimePackage)' == 'true' and '$(PkgOpenSlideSharp_runtime)' != ''">
+    <!-- NuGet appends each file's RecursiveDir to a PackagePath that ends in '/'. -->
+    <None Include="$(PkgOpenSlideSharp_runtime)/licenses/**" Pack="true" PackagePath="licenses/openslide-bin/" Visible="false" />
+    <None Include="$(PkgOpenSlideSharp_runtime)/VERSIONS.md" Pack="true" PackagePath="licenses/openslide-bin/" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PkgSkiaSharp)' != '' and '$(PkgSkiaSharp_NativeAssets_Linux_NoDependencies)' != ''">
+    <None Include="$(PkgSkiaSharp)/LICENSE.txt" Pack="true" PackagePath="licenses/skiasharp/" Visible="false" />
+    <None Include="$(PkgSkiaSharp_NativeAssets_Linux_NoDependencies)/THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="licenses/skiasharp/" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\assets\viewer\licenses\*" Pack="true" PackagePath="licenses/viewer/" Visible="false" />
+  </ItemGroup>
 
   <!-- A package built without the runtime package would hold only this machine's native library: refuse to pack it. -->
   <PropertyGroup>
@@ -46,12 +71,16 @@
 
   <!--
     SkiaSharp's Windows native assets include libSkiaSharp.pdb (about 85 MB per RID), which would more than double the
-    tool package. Keep the libraries, drop their symbols.
+    tool package. Keep the libraries, drop their symbols. SkiaSharp also ships libraries for many RIDs that OpenSlide
+    has no build for (win-x86, win-arm64, linux-musl-*, linux-arm, ...), where the tool cannot run anyway: keep only
+    the native assets of OpenSlide's RIDs, plus "osx", the universal RID SkiaSharp uses for macOS.
   -->
   <Target Name="DropNativeSymbols" AfterTargets="ResolvePackageAssets">
     <ItemGroup>
       <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)" Condition="'%(Extension)' == '.pdb'" />
       <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Extension)' == '.pdb'" />
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)"
+                                    Condition="'%(AssetType)' == 'native' and '%(RuntimeIdentifier)' != 'win-x64' and '%(RuntimeIdentifier)' != 'linux-x64' and '%(RuntimeIdentifier)' != 'linux-arm64' and '%(RuntimeIdentifier)' != 'osx' and '%(RuntimeIdentifier)' != 'osx-x64' and '%(RuntimeIdentifier)' != 'osx-arm64'" />
     </ItemGroup>
   </Target>
 
