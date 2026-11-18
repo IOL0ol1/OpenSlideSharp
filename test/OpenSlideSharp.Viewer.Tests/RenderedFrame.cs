@@ -69,6 +69,8 @@ internal sealed class RenderedFrame
 
     public static bool IsBlue((byte R, byte G, byte B) c) => c.R <= 60 && c.G <= 60 && c.B >= 200;
 
+    public static bool IsGreen((byte R, byte G, byte B) c) => c.R <= 60 && c.G >= 200 && c.B <= 60;
+
     /// <summary>The selection outline colour, #FFD000.</summary>
     public static bool IsSelectionYellow((byte R, byte G, byte B) c) =>
         Math.Abs(c.R - 0xFF) <= 8 && Math.Abs(c.G - 0xD0) <= 8 && c.B <= 8;

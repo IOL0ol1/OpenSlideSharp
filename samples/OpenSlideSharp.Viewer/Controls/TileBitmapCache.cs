@@ -31,6 +31,15 @@ internal sealed class TileBitmapCache : IDisposable
 
     private readonly Dictionary<TileKey, Entry> _entries = new();
     private readonly List<TileKey> _dropped = new();
+    private readonly Func<int, int, byte[], Bitmap> _create;
+
+    /// <param name="create">
+    /// Builds a bitmap from a tile's width, height and pixels; by default <see cref="CreateBitmap"/>. A test hook.
+    /// </param>
+    public TileBitmapCache(Func<int, int, byte[], Bitmap>? create = null)
+    {
+        _create = create ?? CreateBitmap;
+    }
 
     /// <summary>Gets the number of bitmaps held.</summary>
     public int Count => _entries.Count;
@@ -54,7 +63,7 @@ internal sealed class TileBitmapCache : IDisposable
             _entries.Remove(key);
         }
 
-        Bitmap? bitmap = tile.ConsumePixels(pixels => Create(tile.Width, tile.Height, pixels));
+        Bitmap? bitmap = tile.ConsumePixels(pixels => _create(tile.Width, tile.Height, pixels));
         if (bitmap is not null)
         {
             _entries.Add(key, new Entry(tile, bitmap));
@@ -99,7 +108,8 @@ internal sealed class TileBitmapCache : IDisposable
 
     public void Dispose() => Clear();
 
-    private static Bitmap Create(int width, int height, byte[] pixels)
+    /// <summary>Copies the first <c>width * height * 4</c> bytes of <paramref name="pixels"/> into a new bitmap.</summary>
+    internal static Bitmap CreateBitmap(int width, int height, byte[] pixels)
     {
         // OpenSlide's premultiplied BGRA is Avalonia's Bgra8888 with premultiplied alpha; the bitmap copies it.
         GCHandle handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);

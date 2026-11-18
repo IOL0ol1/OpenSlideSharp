@@ -173,6 +173,7 @@ public class MainWindowTests
             host.Open("boxes.tiff");
             Navigator navigator = host.Window.Navigator;
             Assert.NotNull(navigator.Thumbnail);
+            Assert.Same(navigator.Thumbnail, host.Window.Viewer.Thumbnail); // the view's picture for huge levels
             Rect image = navigator.ImageRect;
             Assert.Equal(300.0 / 250, image.Width / image.Height, 2);
             Viewport viewport = host.Window.Viewer.Viewport!;
@@ -357,6 +358,7 @@ public class MainWindowTests
             Assert.Empty(host.Window.AssociatedImageRows);
             Assert.Empty(host.Window.SelectionRows);
             Assert.Null(host.Window.Navigator.Thumbnail);
+            Assert.Null(host.Window.Viewer.Thumbnail);
             Assert.Equal("", host.Window.ZoomText.Text ?? "");
             host.Capture(); // draws the empty window
         });

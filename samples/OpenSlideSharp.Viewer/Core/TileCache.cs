@@ -120,6 +120,28 @@ internal sealed class TileCache : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes and disposes the tile cached under <paramref name="key"/> if it is <paramref name="tile"/>; a tile that
+    /// has replaced it stays.
+    /// </summary>
+    /// <returns>Whether the tile was removed.</returns>
+    public bool Remove(TileKey key, TileImage tile)
+    {
+        ArgumentNullException.ThrowIfNull(tile);
+        lock (_lock)
+        {
+            if (!_entries.TryGetValue(key, out LinkedListNode<Entry>? node) || !ReferenceEquals(node.Value.Tile, tile))
+            {
+                return false;
+            }
+
+            Remove(node);
+        }
+
+        tile.Dispose();
+        return true;
+    }
+
     /// <summary>Removes and disposes every tile.</summary>
     public void Clear()
     {

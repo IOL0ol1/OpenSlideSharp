@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
 using Avalonia;
@@ -27,6 +28,13 @@ namespace OpenSlideSharp.Viewer.Controls;
 /// <see cref="TileLoader"/> reads on its own threads, and each tile it loads schedules one redraw at most.
 /// </para>
 /// <para>
+/// A frame draws from, and asks for, at most <see cref="TileLimit"/> tiles of its level, half the cache, so that
+/// loading always comes to an end instead of evicting tiles in view to make room for others. When the level that
+/// suits the zoom has more tiles in view (with their stand-ins), a coarser one is drawn, scaled up. When even the
+/// coarsest level has more (a slide with one large level, zoomed out), the frame draws the tiles nearest the centre
+/// of the view, over the <see cref="Thumbnail"/> stretched across the slide.
+/// </para>
+/// <para>
 /// Setting <see cref="Slide"/> builds a new viewport and loading pipeline (tile cache, bitmap cache and loader), and
 /// disposes the old ones without waiting for the old slide's reads in flight (see <see cref="OpenPipeline"/>). The
 /// view does not own the slide: dispose it after replacing it here. Leaving the visual tree (closing the window)
@@ -47,6 +55,9 @@ internal sealed class SlideView : Control
     // How many levels above the target level the quick stand-ins are read from (see DrawTiles).
     private const int CoarseLevelStep = 2;
 
+    // The size of a whole tile in the cache budget.
+    private const long TileBytes = (long)TileGrid.TileSize * TileGrid.TileSize * 4;
+
     private static readonly double ZoomStep = Math.Pow(2, 0.25);
     private static readonly ImmutableSolidColorBrush SelectionBrush = new(Color.FromRgb(0xFF, 0xD0, 0x00));
     private static readonly ImmutableDashStyle SelectionBeingDrawnDashes = new([4, 4], 0);
@@ -58,6 +69,7 @@ internal sealed class SlideView : Control
 
     private static readonly Action<byte[]> ReturnPixels = pixels => PixelPool.Return(pixels);
 
+    private readonly List<TileKey> _visible = new();
     private readonly List<TileKey> _missing = new();
     private readonly List<TileKey> _coarse = new();
     private readonly HashSet<TileKey> _coarseSeen = new();
@@ -68,6 +80,7 @@ internal sealed class SlideView : Control
     private Viewport? _viewport;
     private Pipeline? _pipeline;
     private IBrush _background = Brushes.White;
+    private Bitmap? _thumbnail;
     private bool _attached;
     private Point? _pointer;
     private DragMode _drag;
@@ -129,8 +142,45 @@ internal sealed class SlideView : Control
     /// </summary>
     internal Func<OpenSlide, TileGrid, TileKey, TileImage>? TileReader { get; set; }
 
+    /// <summary>
+    /// Gets or sets a picture of the whole slide, such as the navigator's thumbnail, drawn stretched under the tiles of
+    /// a slide whose coarsest level has more tiles than <see cref="TileLimit"/>. The view does not dispose it, and
+    /// setting <see cref="Slide"/> clears it.
+    /// </summary>
+    public Bitmap? Thumbnail
+    {
+        get => _thumbnail;
+        set
+        {
+            _thumbnail = value;
+            InvalidateVisual();
+        }
+    }
+
     /// <summary>Gets or sets the tile cache budget, taken when the loading pipeline is built.</summary>
     internal long CacheBudgetBytes { get; set; } = TileCache.DefaultBudgetBytes;
+
+    /// <summary>
+    /// Gets the most tiles a frame draws from, and asks for, at the level it draws: half the cache budget in
+    /// <see cref="TileGrid.TileSize"/> tiles (at least 1), so that they and their coarse stand-ins always fit in the
+    /// cache together.
+    /// </summary>
+    internal int TileLimit => (int)Math.Clamp(CacheBudgetBytes / (2L * TileBytes), 1, int.MaxValue);
+
+    /// <summary>
+    /// Gets or sets the level sizes and downsamples to use instead of the slide's, taken when <see cref="Slide"/> is
+    /// set; a test hook.
+    /// </summary>
+    internal (SlideSize[] Dimensions, double[] Downsamples)? LevelLayout { get; set; }
+
+    /// <summary>Gets or sets what builds a tile's bitmap, taken when the loading pipeline is built; a test hook.</summary>
+    internal Func<int, int, byte[], Bitmap>? BitmapFactory { get; set; }
+
+    /// <summary>
+    /// Gets or sets the most tiles a frame has asked the loader for since the slide was set, or since a test set it
+    /// to 0.
+    /// </summary>
+    internal int MostRequestedTiles { get; set; }
 
     /// <summary>Gets or sets the number of loader threads, taken when the loading pipeline is built.</summary>
     internal int LoaderThreads { get; set; } = Math.Min(4, Environment.ProcessorCount);
@@ -168,22 +218,89 @@ internal sealed class SlideView : Control
         }
     }
 
-    /// <summary>Orders tiles by the distance of their centres from the level-0 point (<paramref name="x0"/>, <paramref name="y0"/>).</summary>
-    internal static void SortCenterFirst(List<TileKey> keys, TileGrid grid, double x0, double y0)
-    {
-        keys.Sort((a, b) =>
-        {
-            int order = Distance(a).CompareTo(Distance(b));
-            return order != 0 ? order : a.Row != b.Row ? a.Row.CompareTo(b.Row) : a.Column.CompareTo(b.Column);
-        });
+    /// <summary>
+    /// Orders tiles by the distance of their centres from the level-0 point (<paramref name="x0"/>, <paramref name="y0"/>),
+    /// then by row and column.
+    /// </summary>
+    internal static void SortCenterFirst(List<TileKey> keys, TileGrid grid, double x0, double y0) =>
+        keys.Sort((a, b) => Order(grid, a, x0, y0).CompareTo(Order(grid, b, x0, y0)));
 
-        double Distance(TileKey key)
+    /// <summary>
+    /// Replaces the contents of <paramref name="nearest"/> with the tiles of <paramref name="level"/> that overlap the
+    /// level-0 rectangle and whose centres are nearest the level-0 point (<paramref name="x0"/>, <paramref name="y0"/>):
+    /// at most <paramref name="max"/>, in the order of <see cref="SortCenterFirst"/>. The work is in proportion to
+    /// <paramref name="max"/> and the number of rows, however many tiles overlap the rectangle.
+    /// </summary>
+    /// <returns>The number of tiles that overlap the rectangle.</returns>
+    internal static long NearestTiles(
+        TileGrid grid,
+        int level,
+        (double Left, double Top, double Right, double Bottom) area0,
+        double x0,
+        double y0,
+        int max,
+        List<TileKey> nearest)
+    {
+        nearest.Clear();
+        if (grid.VisibleRange(level, area0.Left, area0.Top, area0.Right, area0.Bottom) is not { } range)
         {
-            (double left, double top, double right, double bottom) = grid.Bounds(key);
-            double dx = ((left + right) / 2) - x0;
-            double dy = ((top + bottom) / 2) - y0;
-            return (dx * dx) + (dy * dy);
+            return 0;
         }
+
+        long count = (range.LastColumn - range.FirstColumn + 1) * (range.LastRow - range.FirstRow + 1);
+        if (count <= max)
+        {
+            for (long row = range.FirstRow; row <= range.LastRow; row++)
+            {
+                for (long column = range.FirstColumn; column <= range.LastColumn; column++)
+                {
+                    nearest.Add(new TileKey(level, column, row));
+                }
+            }
+
+            SortCenterFirst(nearest, grid, x0, y0);
+            return count;
+        }
+
+        // Too many to sort: merge the rows instead. Within a row the distance falls towards the column nearest x0 and
+        // rises past it, so each row is two runs in order, one going left from that column and one going right from
+        // the next; the queue holds the next tile of every run and hands out the nearest one.
+        long start = Math.Clamp(
+            (long)Math.Floor(x0 / grid.LevelDownsample(level) / TileGrid.TileSize), range.FirstColumn, range.LastColumn);
+        // Its neighbour may be nearer; on a tie, the left one goes first, as in SortCenterFirst.
+        long first = start;
+        for (long column = Math.Max(start - 1, range.FirstColumn); column <= Math.Min(start + 1, range.LastColumn); column++)
+        {
+            if (Order(grid, new TileKey(level, column, range.FirstRow), x0, y0).CompareTo(
+                Order(grid, new TileKey(level, first, range.FirstRow), x0, y0)) < 0)
+            {
+                first = column;
+            }
+        }
+
+        var runs = new PriorityQueue<(TileKey Key, int Step), (double, long, long)>((int)Math.Min(2 * (range.LastRow - range.FirstRow + 1), 1 << 16));
+        for (long row = range.FirstRow; row <= range.LastRow; row++)
+        {
+            Enqueue(new TileKey(level, first, row), -1);
+            if (first < range.LastColumn)
+            {
+                Enqueue(new TileKey(level, first + 1, row), 1);
+            }
+        }
+
+        while (nearest.Count < max && runs.TryDequeue(out (TileKey Key, int Step) run, out _))
+        {
+            nearest.Add(run.Key);
+            long next = run.Key.Column + run.Step;
+            if (next >= range.FirstColumn && next <= range.LastColumn)
+            {
+                Enqueue(run.Key with { Column = next }, run.Step);
+            }
+        }
+
+        return count;
+
+        void Enqueue(TileKey key, int step) => runs.Enqueue((key, step), Order(grid, key, x0, y0));
     }
 
     public override void Render(DrawingContext context)
@@ -397,6 +514,26 @@ internal sealed class SlideView : Control
             ? Color.FromUInt32(0xFF000000 | rgb)
             : Colors.White;
 
+    // Where a tile comes in centre-first order: the squared distance of its centre from the level-0 point, then its
+    // row and column.
+    private static (double Distance, long Row, long Column) Order(TileGrid grid, TileKey key, double x0, double y0)
+    {
+        (double left, double top, double right, double bottom) = grid.Bounds(key);
+        double dx = ((left + right) / 2) - x0;
+        double dy = ((top + bottom) / 2) - y0;
+        return ((dx * dx) + (dy * dy), key.Row, key.Column);
+    }
+
+    // The number of tiles a frame drawing level would ask for at most, with their coarse stand-ins (see DrawTiles).
+    private static long TilesNeeded(TileGrid grid, int level, (double Left, double Top, double Right, double Bottom) area0)
+    {
+        int coarseLevel = Math.Min(level + CoarseLevelStep, grid.LevelCount - 1);
+        long tiles = grid.VisibleCount(level, area0.Left, area0.Top, area0.Right, area0.Bottom);
+        return coarseLevel > level
+            ? tiles + grid.VisibleCount(coarseLevel, area0.Left, area0.Top, area0.Right, area0.Bottom)
+            : tiles;
+    }
+
     // The level-0 rectangle on the screen, its edges rounded to device pixels: tiles that share an edge in the
     // slide share it on the screen, with no seam or overlap. (Layout rounding puts the view itself on whole device
     // pixels, so rounding relative to it is enough.)
@@ -433,8 +570,15 @@ internal sealed class SlideView : Control
         IBrush background = Brushes.White;
         if (slide is not null)
         {
-            grid = new TileGrid(slide.LevelDimensions, slide.LevelDownsamples);
-            viewport = new Viewport(slide.Dimensions, slide.LevelDownsamples);
+            IReadOnlyList<SlideSize> dimensions = slide.LevelDimensions;
+            IReadOnlyList<double> downsamples = slide.LevelDownsamples;
+            if (LevelLayout is { } layout)
+            {
+                (dimensions, downsamples) = (layout.Dimensions, layout.Downsamples);
+            }
+
+            grid = new TileGrid(dimensions, downsamples);
+            viewport = new Viewport(dimensions.Count > 0 ? dimensions[0] : default, downsamples);
             background = new ImmutableSolidColorBrush(BackgroundColor(slide.Properties));
         }
 
@@ -449,6 +593,8 @@ internal sealed class SlideView : Control
         _grid = grid;
         _viewport = viewport;
         _background = background;
+        _thumbnail = null; // it pictured the old slide
+        MostRequestedTiles = 0;
         EndDrag();
         Selections.Clear();
         if (viewport is not null)
@@ -494,7 +640,7 @@ internal sealed class SlideView : Control
             //   reads in that SlideState, not in the next slide's.
             DisposeTimeout = TimeSpan.Zero,
         };
-        var pipeline = new Pipeline(grid, cache, new TileBitmapCache(), loader);
+        var pipeline = new Pipeline(grid, TileLimit, cache, new TileBitmapCache(BitmapFactory), loader);
         loader.Failed += error =>
         {
             // The failure belongs to the slide, not to this loader: a loader built after leaving the visual tree
@@ -543,42 +689,33 @@ internal sealed class SlideView : Control
     {
         pipeline.Bitmaps.Sweep();
         TileGrid grid = pipeline.Grid;
-        int level = grid.BestLevelForDownsample(viewport.Downsample / scaling);
-        TargetLevel = level;
+        if (grid.LevelCount == 0)
+        {
+            return;
+        }
+
         (double left0, double top0) = viewport.ScreenToSlide(0, 0);
         (double right0, double bottom0) = viewport.ScreenToSlide(viewport.ViewWidth, viewport.ViewHeight);
+        var view0 = (left0, top0, right0, bottom0);
 
-        // Missing tiles that nothing cached stands in for are first covered from a coarse level, two levels up
-        // (4 to 16 times coarser on the usual pyramids, so a few tiles cover a screenful), read before the
-        // target tiles: a slide just opened, or a part of it not seen yet, shows a low-resolution image quickly.
-        int coarseLevel = Math.Min(level + CoarseLevelStep, grid.LevelCount - 1);
-        _missing.Clear();
-        _coarse.Clear();
-        _coarseSeen.Clear();
+        // The level that suits the zoom, unless its tiles in view and their coarse stand-ins would take more than half
+        // the cache (a 4:1 pyramid on a high-DPI screen, say): they would then evict each other and be read again
+        // without end. A coarser level is drawn instead, scaled up.
+        int level = grid.BestLevelForDownsample(viewport.Downsample / scaling);
+        while (level < grid.LevelCount - 1 && TilesNeeded(grid, level, view0) > pipeline.TileLimit)
+        {
+            level++;
+        }
+
+        TargetLevel = level;
         using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.HighQuality }))
         {
-            foreach (TileKey key in grid.VisibleTiles(level, left0, top0, right0, bottom0))
+            if (pipeline.DrawsThumbnail)
             {
-                if (BitmapOf(pipeline, key) is { } bitmap)
-                {
-                    (double left, double top, double right, double bottom) = grid.Bounds(key);
-                    context.DrawImage(bitmap, new Rect(bitmap.Size), OnScreen(viewport, scaling, left, top, right, bottom));
-                    continue;
-                }
-
-                _missing.Add(key);
-                if (!DrawCoarser(context, pipeline, viewport, scaling, key) && coarseLevel > level)
-                {
-                    (double left, double top, double right, double bottom) = grid.Bounds(key);
-                    foreach (TileKey coarse in grid.VisibleTiles(coarseLevel, left, top, right, bottom))
-                    {
-                        if (_coarseSeen.Add(coarse))
-                        {
-                            _coarse.Add(coarse);
-                        }
-                    }
-                }
+                DrawThumbnail(context, grid, viewport, scaling, view0);
             }
+
+            DrawTiles(context, pipeline, viewport, scaling, level, view0);
         }
 
         if (_slideState is { Failed: true })
@@ -587,9 +724,80 @@ internal sealed class SlideView : Control
         }
 
         SortCenterFirst(_coarse, grid, viewport.CenterX, viewport.CenterY);
-        SortCenterFirst(_missing, grid, viewport.CenterX, viewport.CenterY);
-        _coarse.AddRange(_missing);
+        _coarse.AddRange(_missing); // already centre first
+        MostRequestedTiles = Math.Max(MostRequestedTiles, _coarse.Count);
         pipeline.Loader.Request(_coarse); // also drops what earlier frames queued and this one no longer needs
+    }
+
+    // Draws the tiles of level in view, or of a slide whose coarsest level has more tiles than the pipeline's limit
+    // (a single large level, say), as many as the limit allows, those nearest the centre; the thumbnail stands in
+    // for the rest. Lists the missing tiles, centre first, in _missing, and the coarse tiles to read before them in
+    // _coarse.
+    private void DrawTiles(
+        DrawingContext context,
+        Pipeline pipeline,
+        Viewport viewport,
+        double scaling,
+        int level,
+        (double Left, double Top, double Right, double Bottom) view0)
+    {
+        TileGrid grid = pipeline.Grid;
+        NearestTiles(grid, level, view0, viewport.CenterX, viewport.CenterY, pipeline.TileLimit, _visible);
+
+        // Missing tiles that nothing cached stands in for are first covered from a coarse level, two levels up
+        // (4 to 16 times coarser on the usual pyramids, so a few tiles cover a screenful), read before the
+        // target tiles: a slide just opened, or a part of it not seen yet, shows a low-resolution image quickly.
+        int coarseLevel = Math.Min(level + CoarseLevelStep, grid.LevelCount - 1);
+        _missing.Clear();
+        _coarse.Clear();
+        _coarseSeen.Clear();
+        foreach (TileKey key in _visible)
+        {
+            if (BitmapOf(pipeline, key) is { } bitmap)
+            {
+                (double left, double top, double right, double bottom) = grid.Bounds(key);
+                context.DrawImage(bitmap, new Rect(bitmap.Size), OnScreen(viewport, scaling, left, top, right, bottom));
+                continue;
+            }
+
+            _missing.Add(key);
+            if (!DrawCoarser(context, pipeline, viewport, scaling, key) && coarseLevel > level)
+            {
+                (double left, double top, double right, double bottom) = grid.Bounds(key);
+                foreach (TileKey coarse in grid.VisibleTiles(coarseLevel, left, top, right, bottom))
+                {
+                    if (_coarseSeen.Add(coarse))
+                    {
+                        _coarse.Add(coarse);
+                    }
+                }
+            }
+        }
+    }
+
+    // Draws the part of the thumbnail under the view, stretched over the slide.
+    private void DrawThumbnail(
+        DrawingContext context, TileGrid grid, Viewport viewport, double scaling, (double Left, double Top, double Right, double Bottom) view0)
+    {
+        SlideSize size = grid.LevelSize(0);
+        if (_thumbnail is not { } thumbnail || size.Width <= 0 || size.Height <= 0)
+        {
+            return;
+        }
+
+        double left = Math.Max(view0.Left, 0);
+        double top = Math.Max(view0.Top, 0);
+        double right = Math.Min(view0.Right, size.Width);
+        double bottom = Math.Min(view0.Bottom, size.Height);
+        if (!(right > left && bottom > top))
+        {
+            return;
+        }
+
+        double scaleX = thumbnail.Size.Width / size.Width;
+        double scaleY = thumbnail.Size.Height / size.Height;
+        var source = new Rect(left * scaleX, top * scaleY, (right - left) * scaleX, (bottom - top) * scaleY);
+        context.DrawImage(thumbnail, source, OnScreen(viewport, scaling, left, top, right, bottom));
     }
 
     /// <summary>
@@ -637,8 +845,26 @@ internal sealed class SlideView : Control
         return covered;
     }
 
-    private Bitmap? BitmapOf(Pipeline pipeline, TileKey key) =>
-        pipeline.Cache.TryGet(key, out TileImage? tile) && tile is not null ? pipeline.Bitmaps.Get(key, tile) : null;
+    private static Bitmap? BitmapOf(Pipeline pipeline, TileKey key)
+    {
+        if (!pipeline.Cache.TryGet(key, out TileImage? tile) || tile is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return pipeline.Bitmaps.Get(key, tile);
+        }
+        catch (Exception e)
+        {
+            // No memory for the bitmap, say. The attempt used up the tile's pixels: drop the tile, so that it is
+            // missing, and read again, rather than blank for as long as it stays cached.
+            Trace.TraceWarning($"SlideView: cannot make a bitmap of tile {key}: {e.Message}");
+            pipeline.Cache.Remove(key, tile);
+            return null;
+        }
+    }
 
     private void DrawSelections(DrawingContext context, Viewport viewport, double scaling)
     {
@@ -706,9 +932,19 @@ internal sealed class SlideView : Control
     }
 
     /// <summary>The loading machinery of one slide: built when a slide is set, disposed together.</summary>
-    private sealed class Pipeline(TileGrid grid, TileCache cache, TileBitmapCache bitmaps, TileLoader loader) : IDisposable
+    private sealed class Pipeline(TileGrid grid, int tileLimit, TileCache cache, TileBitmapCache bitmaps, TileLoader loader)
+        : IDisposable
     {
         public TileGrid Grid { get; } = grid;
+
+        /// <summary>Gets the most tiles a frame draws from, and asks for, at its level (see <see cref="SlideView.TileLimit"/>).</summary>
+        public int TileLimit { get; } = tileLimit;
+
+        /// <summary>
+        /// Gets whether the slide's coarsest level has more tiles than <see cref="TileLimit"/>, so that a frame may draw
+        /// only some of the tiles in view, and the thumbnail goes under them.
+        /// </summary>
+        public bool DrawsThumbnail { get; } = grid.LevelCount > 0 && grid.TileCount(grid.LevelCount - 1) > tileLimit;
 
         public TileCache Cache { get; } = cache;
 

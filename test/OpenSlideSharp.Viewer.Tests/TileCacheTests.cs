@@ -50,6 +50,26 @@ public class TileCacheTests
     }
 
     [Fact]
+    public void Cache_Remove_DropsOnlyThatTile()
+    {
+        using var cache = new TileCache(4 * TileBytes);
+        TileImage a = Tile(), b = Tile(), replaced = Tile();
+        cache.Add(Key(0), a);
+        cache.Add(Key(1), b);
+
+        Assert.False(cache.Remove(Key(1), replaced)); // another tile under that key: left alone
+        Assert.False(replaced.IsDisposed);
+        Assert.True(cache.Remove(Key(0), a));
+
+        Assert.True(a.IsDisposed);
+        Assert.False(cache.Contains(Key(0)));
+        Assert.False(cache.Remove(Key(0), a));
+        Assert.Equal(1, cache.Count);
+        Assert.Equal(TileBytes, cache.SizeBytes);
+        Assert.False(b.IsDisposed);
+    }
+
+    [Fact]
     public void Cache_LruOrder()
     {
         using var cache = new TileCache(3 * TileBytes);

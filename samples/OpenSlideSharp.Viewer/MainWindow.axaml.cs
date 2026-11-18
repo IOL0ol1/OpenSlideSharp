@@ -250,6 +250,7 @@ internal sealed partial class MainWindow : Window
         Bitmap? oldThumbnail = _thumbnail;
         _thumbnail = loaded.Thumbnail?.ToBitmap();
         Navigator.Show(loaded.Size, _thumbnail, Viewer.Viewport);
+        Viewer.Thumbnail = _thumbnail; // drawn under the tiles of a slide too large to draw from tiles when zoomed out
         oldThumbnail?.Dispose(); // a frame drawn with it keeps its own reference
         _propertyRows = loaded.Properties;
         PropertyList.ItemsSource = _propertyRows;

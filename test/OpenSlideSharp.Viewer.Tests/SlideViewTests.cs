@@ -654,6 +654,169 @@ public class SlideViewTests
     }
 
     [Fact]
+    public void SlideView_CacheSmallerThanTheVisibleTiles_LoadingSettles()
+    {
+        using OpenSlide slide = Boxes();
+        const long Budget = 260_000; // the two level-0 tiles of the fitted view take 300,000 bytes
+
+        HeadlessSession.Run(() =>
+        {
+            using var host = new ViewHost(configure: view => view.CacheBudgetBytes = Budget);
+            host.View.Slide = slide;
+
+            int requested = DrawUntilSettled(host);
+
+            Assert.InRange(requested, 1, host.View.TileLimit);
+            Assert.InRange(host.View.Cache!.SizeBytes, 1, Budget);
+            RenderedFrame frame = host.Capture();
+            Assert.True(frame.Count(RenderedFrame.IsRed) > 100 && frame.Count(RenderedFrame.IsBlue) > 100, "the boxes are not drawn");
+        });
+    }
+
+    [Fact]
+    public void SlideView_TargetLevelOverHalfTheCache_DrawsACoarserLevel()
+    {
+        using OpenSlide slide = Boxes();
+        // A 4:1 pyramid, viewed at 3.9 level-0 pixels per device pixel on a 200% screen: level 0 would need about 140
+        // tiles, level 1 about 16.
+        (SlideSize[], double[]) pyramid = (
+            [new SlideSize(65536, 65536), new SlideSize(16384, 16384), new SlideSize(4096, 4096), new SlideSize(1024, 1024)],
+            [1, 4, 16, 64]);
+
+        HeadlessSession.Run(() =>
+        {
+            foreach ((long budget, int level) in new[] { (16L * 1024 * 1024, 1), (TileCache.DefaultBudgetBytes, 0) })
+            {
+                using var host = new ViewHost(scaling: 2, configure: view =>
+                {
+                    view.CacheBudgetBytes = budget;
+                    view.LevelLayout = pyramid;
+                    view.TileReader = (_, grid, key) => SolidTile(grid, key, green: 255);
+                });
+                host.View.Slide = slide;
+                Viewport viewport = host.View.Viewport!;
+                viewport.ZoomAt(200, 150, viewport.Downsample / 7.8);
+
+                int requested = DrawUntilSettled(host);
+
+                Assert.Equal(level, host.View.TargetLevel);
+                Assert.InRange(requested, 1, host.View.TileLimit);
+                RenderedFrame frame = host.Capture();
+                Assert.True(frame.Count(RenderedFrame.IsGreen) > frame.Width * frame.Height * 9 / 10, "the view is not covered");
+            }
+        });
+    }
+
+    [Fact]
+    public void SlideView_SingleLevelSlide_DrawsTheThumbnailAndTheTilesNearestTheCenter()
+    {
+        using OpenSlide slide = Boxes();
+        const long Budget = 8L * 1024 * 1024; // 16 tiles to draw from at once
+
+        HeadlessSession.Run(() =>
+        {
+            // One 100,000 x 80,000 level: about 122,000 tiles in the fitted view.
+            using var host = new ViewHost(configure: view =>
+            {
+                view.CacheBudgetBytes = Budget;
+                view.LevelLayout = ([new SlideSize(100_000, 80_000)], [1]);
+                view.TileReader = (_, grid, key) => SolidTile(grid, key, green: 255);
+            });
+            using Bitmap thumbnail = new PixelImage(4, 4, OpenSlideSharp.PixelFormat.Bgra32Premultiplied, Solid(4, 4, blue: 255)).ToBitmap()!;
+            host.View.Slide = slide;
+            host.View.Thumbnail = thumbnail;
+            Assert.Equal(16, host.View.TileLimit);
+
+            int requested = DrawUntilSettled(host);
+
+            Assert.InRange(requested, 1, 16);
+            Assert.InRange(host.View.TileReads, 1, 16);
+            Viewport viewport = host.View.Viewport!;
+            (double left, double top) = viewport.SlideToScreen(0, 0);
+            (double right, double bottom) = viewport.SlideToScreen(100_000, 80_000);
+            int area = (int)((right - left) * (bottom - top));
+            int blue = host.Capture().Count(RenderedFrame.IsBlue);
+            Assert.True(blue > area * 9 / 10, $"{blue} blue pixels in a slide of {area}");
+
+            // At 1:1, away from the centre read so far, the few tiles in view are all read and cover the thumbnail.
+            long reads = host.View.TileReads;
+            viewport.OneToOne();
+            viewport.CenterOn(25_000, 20_000);
+            requested = DrawUntilSettled(host);
+            Assert.InRange(requested, 1, 16);
+            Assert.InRange(host.View.TileReads - reads, 1, 16);
+            RenderedFrame frame = host.Capture();
+            Assert.True(frame.Count(RenderedFrame.IsGreen) > frame.Width * frame.Height * 9 / 10, "the view is not covered");
+        });
+    }
+
+    [Fact]
+    public void SlideView_NearestTiles_AreTheFirstInCenterFirstOrder()
+    {
+        var grid = new TileGrid([new SlideSize(10_000, 6000), new SlideSize(5000, 3000)], [1, 2]); // 40 x 24 and 20 x 12 tiles
+        (double, double, double, double)[] areas = [(0, 0, 10_000, 6000), (1000.5, 700.25, 9000, 5900), (-500, -500, 3000, 20_000)];
+        (double, double)[] centers = [(5123.4, 3000.7), (2560, 2560), (0, 0), (-3000, 2000), (12_000, 7000), (9999, 5999)];
+        var nearest = new List<TileKey>();
+
+        foreach (int level in new[] { 0, 1 })
+        {
+            foreach ((double Left, double Top, double Right, double Bottom) area in areas)
+            {
+                foreach ((double x, double y) in centers)
+                {
+                    List<TileKey> all = grid.VisibleTiles(level, area.Left, area.Top, area.Right, area.Bottom).ToList();
+                    SlideView.SortCenterFirst(all, grid, x, y);
+                    foreach (int max in new[] { 1, 4, 7, 50, 2000 })
+                    {
+                        long count = SlideView.NearestTiles(grid, level, area, x, y, max, nearest);
+
+                        Assert.Equal(all.Count, count);
+                        Assert.Equal(all.Take(max), nearest);
+                    }
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void SlideView_BitmapFailure_ReadsTheTileAgain()
+    {
+        using OpenSlide slide = Boxes();
+        var right = new TileKey(0, 1, 0); // the 44 x 250 tile at the right of level 0
+        int rightReads = 0;
+        int failures = 0;
+
+        HeadlessSession.Run(() =>
+        {
+            using var host = new ViewHost(configure: view =>
+            {
+                view.TileReader = (s, grid, key) =>
+                {
+                    if (key == right)
+                    {
+                        Interlocked.Increment(ref rightReads);
+                    }
+
+                    return SlideView.ReadTile(s, grid, key);
+                };
+                view.BitmapFactory = (width, height, pixels) =>
+                    width == 44 && failures++ == 0
+                        ? throw new InvalidOperationException("No memory for a bitmap.")
+                        : TileBitmapCache.CreateBitmap(width, height, pixels);
+            });
+            host.View.Slide = slide;
+
+            DrawUntilSettled(host);
+
+            Assert.Equal(2, failures); // the second bitmap was built
+            Assert.Equal(2, Volatile.Read(ref rightReads));
+            Assert.True(host.View.Cache!.TryGet(right, out TileImage? tile));
+            Assert.False(tile!.HasPixels);
+            Assert.NotNull(host.View.Bitmaps!.Get(right, tile));
+        });
+    }
+
+    [Fact]
     public void SlideView_ReadFailure_RaisesLoadFailedOnceOnTheUiThread()
     {
         using OpenSlide slide = Boxes();
@@ -741,6 +904,54 @@ public class SlideViewTests
         }
 
         static Dictionary<string, string> Properties(string color) => new() { [OpenSlideProperties.BackgroundColor] = color };
+    }
+
+    /// <summary>
+    /// Draws frames, as a window being redrawn does, until the view has nothing left to read and has read nothing for
+    /// a while; fails if that does not happen within 10 seconds.
+    /// </summary>
+    /// <returns>The most tiles a frame asked for.</returns>
+    private static int DrawUntilSettled(ViewHost host)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        host.View.MostRequestedTiles = 0;
+        int quiet = 0;
+        long reads = -1;
+        while (quiet < 20)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException($"The view still reads tiles: {host.View.TileReads} so far.");
+            }
+
+            host.View.InvalidateVisual();
+            HeadlessSession.Pump();
+            long now = host.View.TileReads;
+            quiet = now == reads && host.View.PendingTiles == 0 ? quiet + 1 : 0;
+            reads = now;
+            Thread.Sleep(2);
+        }
+
+        return host.View.MostRequestedTiles;
+    }
+
+    /// <summary>Premultiplied BGRA pixels of one opaque colour.</summary>
+    private static byte[] Solid(int width, int height, byte red = 0, byte green = 0, byte blue = 0)
+    {
+        var pixels = new byte[width * height * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = (blue, green, red, 255);
+        }
+
+        return pixels;
+    }
+
+    /// <summary>A tile of one colour, as a read of a slide that the test only pretends to have.</summary>
+    private static TileImage SolidTile(TileGrid grid, TileKey key, byte red = 0, byte green = 0, byte blue = 0)
+    {
+        (long _, long _, int width, int height) = grid.Region(key);
+        return new TileImage(width, height, Solid(width, height, red, green, blue));
     }
 
     private static void Drag(Window window, Point from, Point to, RawInputModifiers modifiers = RawInputModifiers.None)

@@ -67,9 +67,30 @@ internal sealed class TileGrid
     /// </summary>
     public IEnumerable<TileKey> VisibleTiles(int level, double left0, double top0, double right0, double bottom0)
     {
-        if (level < 0 || level >= _dimensions.Length)
+        if (VisibleRange(level, left0, top0, right0, bottom0) is not { } range)
         {
             yield break;
+        }
+
+        for (long row = range.FirstRow; row <= range.LastRow; row++)
+        {
+            for (long column = range.FirstColumn; column <= range.LastColumn; column++)
+            {
+                yield return new TileKey(level, column, row);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the first and last column and row (inclusive) of the tiles <see cref="VisibleTiles"/> returns, or null
+    /// if it returns none.
+    /// </summary>
+    public (long FirstColumn, long FirstRow, long LastColumn, long LastRow)? VisibleRange(
+        int level, double left0, double top0, double right0, double bottom0)
+    {
+        if (level < 0 || level >= _dimensions.Length)
+        {
+            return null;
         }
 
         double downsample = _downsamples[level];
@@ -81,21 +102,31 @@ internal sealed class TileGrid
         // Also false for NaN.
         if (!(right > left && bottom > top))
         {
-            yield break;
+            return null;
         }
 
-        long firstColumn = (long)Math.Floor(left / TileSize);
-        long lastColumn = (long)Math.Ceiling(right / TileSize) - 1;
-        long firstRow = (long)Math.Floor(top / TileSize);
-        long lastRow = (long)Math.Ceiling(bottom / TileSize) - 1;
-        for (long row = firstRow; row <= lastRow; row++)
-        {
-            for (long column = firstColumn; column <= lastColumn; column++)
-            {
-                yield return new TileKey(level, column, row);
-            }
-        }
+        return (
+            (long)Math.Floor(left / TileSize),
+            (long)Math.Floor(top / TileSize),
+            (long)Math.Ceiling(right / TileSize) - 1,
+            (long)Math.Ceiling(bottom / TileSize) - 1);
     }
+
+    /// <summary>Returns the number of tiles <see cref="VisibleTiles"/> returns, without listing them.</summary>
+    public long VisibleCount(int level, double left0, double top0, double right0, double bottom0) =>
+        VisibleRange(level, left0, top0, right0, bottom0) is { } range
+            ? (range.LastColumn - range.FirstColumn + 1) * (range.LastRow - range.FirstRow + 1)
+            : 0;
+
+    /// <summary>Returns the number of tiles of the whole of <paramref name="level"/>.</summary>
+    public long TileCount(int level)
+    {
+        SlideSize size = _dimensions[level];
+        return ((size.Width + TileSize - 1) / TileSize) * ((size.Height + TileSize - 1) / TileSize);
+    }
+
+    /// <summary>Returns the size of <paramref name="level"/> in its own pixels.</summary>
+    public SlideSize LevelSize(int level) => _dimensions[level];
 
     /// <summary>
     /// Returns the arguments of <see cref="OpenSlide.ReadRegion(long, long, int, int, int, Span{byte})"/> for the
