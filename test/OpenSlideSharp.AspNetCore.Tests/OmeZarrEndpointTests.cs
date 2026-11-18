@@ -214,6 +214,20 @@ public class OmeZarrEndpointTests
     }
 
     [Fact]
+    public async Task OmeZarr_SlideInsideZarrNamedDirectory_Works()
+    {
+        // The store marker is the last ".zarr/": keys never contain one, but slide paths may.
+        using var directory = new TempDirectory();
+        directory.CopyFixture("boxes.tiff", "x.zarr/boxes.tiff");
+        await using TestApp app = await TestApp.CreateAsync(new DirectorySlideResolver(directory.Path));
+
+        using HttpResponseMessage response = await app.Client.GetAsync("/zarr/x.zarr/boxes.tiff.zarr/zarr.json", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task Post_IsNotAllowed()
     {
         await using TestApp app = await BoxesApp();
