@@ -38,7 +38,8 @@
     <None Include="$(OpenSlideNativeRoot)/include/openslide/*.h" Pack="true" PackagePath="build/native/include/openslide/" Visible="false" />
     <None Include="$(OpenSlideNativeRoot)/msvc/x64/libopenslide.lib" Pack="true" PackagePath="build/native/lib/x64/" Visible="false" />
 
-    <None Include="$(OpenSlideNativeRoot)/licenses/**" Pack="true" PackagePath="licenses/%(RecursiveDir)" Visible="false" />
+    <!-- NuGet appends each file's RecursiveDir to a PackagePath that ends in '/': licenses/<project>/<file>. -->
+    <None Include="$(OpenSlideNativeRoot)/licenses/**" Pack="true" PackagePath="licenses/" Visible="false" />
     <None Include="$(OpenSlideNativeRoot)/VERSIONS.md" Pack="true" PackagePath="/" Visible="false" />
     <None Include="$(OpenSlideNativeRoot)/versions.json" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>

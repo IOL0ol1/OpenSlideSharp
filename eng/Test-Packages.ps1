@@ -87,6 +87,9 @@ foreach ($r in $required) {
     if ($entries -notcontains $r) { throw "runtime nupkg is missing '$r'" }
 }
 if (-not ($entries | Where-Object { $_ -like 'licenses/*' })) { throw "runtime nupkg has no licenses/**" }
+# openslide-bin's layout, licenses/<project>/<file>, without the project directory doubled.
+if ($entries -notcontains 'licenses/OpenSlide/COPYING.LESSER') { throw "runtime nupkg is missing 'licenses/OpenSlide/COPYING.LESSER'" }
+if ($entries | Where-Object { $_ -match '^licenses/([^/]+)/\1/' }) { throw 'runtime nupkg has doubled directories under licenses/' }
 if ($entries | Where-Object { $_ -match '\.debug$' }) { throw "runtime nupkg contains .debug files" }
 if ($entries | Where-Object { $_ -match '\.dSYM(/|$)' }) { throw "runtime nupkg contains .dSYM entries" }
 if ($entries | Where-Object { $_ -match '(^|/)slidetool' }) { throw "runtime nupkg contains slidetool" }
@@ -168,6 +171,35 @@ foreach ($r in $toolRequired) {
     if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
 }
 if ($toolEntries | Where-Object { $_ -like "$toolNative/*.pdb" }) { throw 'tool nupkg contains native .pdb files' }
+
+# Only the RIDs OpenSlide ships (plus SkiaSharp's universal "osx"): SkiaSharp's other RIDs could never run.
+$toolRids = @($toolEntries | Where-Object { $_ -like "$toolNative/*" } | ForEach-Object { ($_.Substring($toolNative.Length + 1) -split '/')[0] } | Sort-Object -Unique)
+$extraRids = @($toolRids | Where-Object { $_ -notin 'win-x64', 'linux-x64', 'linux-arm64', 'osx', 'osx-x64', 'osx-arm64' })
+if ($extraRids.Count -gt 0) { throw "tool nupkg has native assets for unsupported RIDs: $($extraRids -join ', ')" }
+
+# The tool redistributes LGPL-2.1 OpenSlide (with openslide-bin's statically linked libraries), SkiaSharp and Skia,
+# and the OpenSeadragon viewer files: their licenses must travel with it, and the license expression must name them.
+$toolEntries | Where-Object { $_ -like 'licenses/*' } | ForEach-Object { "  tool: $_" }
+if ($toolEntries -notcontains 'licenses/openslide-bin/VERSIONS.md') { throw "tool nupkg is missing 'licenses/openslide-bin/VERSIONS.md'" }
+if ($toolEntries -notcontains 'licenses/openslide-bin/OpenSlide/COPYING.LESSER') { throw "tool nupkg is missing OpenSlide's license, 'licenses/openslide-bin/OpenSlide/COPYING.LESSER'" }
+if ($toolEntries | Where-Object { $_ -match '^licenses/openslide-bin/([^/]+)/\1/' }) { throw 'tool nupkg has doubled directories under licenses/openslide-bin/' }
+$openslideBinLicenses = @($toolEntries | Where-Object { $_ -match '^licenses/openslide-bin/[^/]+/.' })
+$runtimeLicenses = @($entries | Where-Object { $_ -match '^licenses/[^/]+/.' })
+if ($openslideBinLicenses.Count -ne $runtimeLicenses.Count) {
+    throw "tool nupkg has $($openslideBinLicenses.Count) files under licenses/openslide-bin/, the runtime nupkg $($runtimeLicenses.Count) under licenses/"
+}
+if (-not ($openslideBinLicenses | Where-Object { $_ -match '/(COPYING|LICENSE)[^/]*$' })) { throw 'tool nupkg has no COPYING or LICENSE file under licenses/openslide-bin/' }
+foreach ($r in 'licenses/viewer/LICENSE.openseadragon', 'licenses/viewer/LICENSE.openseadragon-scalebar', 'licenses/skiasharp/LICENSE.txt', 'licenses/skiasharp/THIRD-PARTY-NOTICES.txt') {
+    if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
+}
+$toolMeta = (Get-NuspecXml $toolNupkg).package.metadata
+$toolLicense = 'MIT AND LGPL-2.1-only AND BSD-3-Clause'
+if ($toolMeta.license.type -ne 'expression' -or $toolMeta.license.InnerText -ne $toolLicense) {
+    throw "tool nuspec license is '$($toolMeta.license.InnerText)' ($($toolMeta.license.type)), expected the expression '$toolLicense'"
+}
+if ($toolMeta.description -notmatch 'openslide-bin source tarball') { throw "tool nuspec description does not name the OpenSlide source: $($toolMeta.description)" }
+$toolSize = (Get-Item $toolNupkg).Length
+Write-Host ("tool nupkg size: {0:N1} MB ({1} bytes)" -f ($toolSize / 1MB), $toolSize)
 
 # 3. Consume the packages from an isolated global cache.
 $env:NUGET_PACKAGES = $packages
