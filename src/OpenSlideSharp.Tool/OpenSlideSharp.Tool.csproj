@@ -35,6 +35,15 @@
   </ItemGroup>
   <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
 
+  <!-- A package built without the runtime package would hold only this machine's native library: refuse to pack it. -->
+  <PropertyGroup>
+    <BeforePack>RequireOpenSlideRuntimePackage;$(BeforePack)</BeforePack>
+  </PropertyGroup>
+  <Target Name="RequireOpenSlideRuntimePackage">
+    <Error Condition="'$(UseOpenSlideRuntimePackage)' != 'true'"
+           Text="OpenSlideSharp.Tool must be packed with -p:UseOpenSlideRuntimePackage=true, so that the package carries the native OpenSlide library of every platform from OpenSlideSharp.runtime $(Version) (restored from a feed that has it, see eng/Test-Packages.ps1). Without it the package would only hold this machine's library." />
+  </Target>
+
   <!--
     SkiaSharp's Windows native assets include libSkiaSharp.pdb (about 85 MB per RID), which would more than double the
     tool package. Keep the libraries, drop their symbols.
