@@ -14,6 +14,9 @@
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.6" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.6" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.6" />
+    <!-- Test-only: the viewer's rendering tests. Not Avalonia.Headless.XUnit, which needs xunit.v3 3.x. -->
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.6" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.6" />
     <!-- Test-only. Keep at 8.0.5, the last MIT release: 9.x and later are under the OSMF EULA. -->
     <PackageVersion Include="JsonSchema.Net" Version="8.0.5" />
     <PackageVersion Include="xunit.v3" Version="4.0.3" />

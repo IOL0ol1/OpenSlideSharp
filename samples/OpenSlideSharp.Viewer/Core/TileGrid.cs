@@ -33,6 +33,34 @@ internal sealed class TileGrid
         }
     }
 
+    public int LevelCount => _dimensions.Length;
+
+    /// <summary>Gets the downsample of <paramref name="level"/>: level-0 pixels per pixel of that level.</summary>
+    public double LevelDownsample(int level) => _downsamples[level];
+
+    /// <summary>
+    /// Returns the level to draw at <paramref name="downsample"/> level-0 pixels per screen pixel, by the rule of
+    /// <c>openslide_get_best_level_for_downsample</c>: the last level whose downsample is not above it, else level
+    /// 0. Computed from the level downsamples, so the UI thread can call it without touching the native slide.
+    /// </summary>
+    public int BestLevelForDownsample(double downsample)
+    {
+        if (_downsamples.Length == 0 || downsample < _downsamples[0])
+        {
+            return 0;
+        }
+
+        for (int level = 1; level < _downsamples.Length; level++)
+        {
+            if (downsample < _downsamples[level])
+            {
+                return level - 1;
+            }
+        }
+
+        return _downsamples.Length - 1;
+    }
+
     /// <summary>
     /// Returns the tiles of <paramref name="level"/> that overlap the level-0 rectangle, row by row. The right and
     /// bottom edges are exclusive. A level that does not exist, or a rectangle that misses the slide, has none.

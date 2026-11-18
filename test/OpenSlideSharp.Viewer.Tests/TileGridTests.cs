@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using OpenSlideSharp.Viewer.Core;
 using Xunit;
@@ -73,5 +75,44 @@ public class TileGridTests
         // A view partly outside the slide is clipped to it.
         Assert.Equal([new TileKey(0, 0, 0)], grid.VisibleTiles(0, -100, -100, 50, 50));
         Assert.Equal([new TileKey(0, 1, 0)], grid.VisibleTiles(0, 290, 200, 5000, 5000));
+    }
+
+    [Theory]
+    [InlineData("boxes.tiff")]
+    [InlineData("small.svs")]
+    public void TileGrid_BestLevel_MatchesOpenSlide(string fixture)
+    {
+        // The view picks its level on the UI thread without a native call; it must pick the one OpenSlide would.
+        using var slide = OpenSlide.Open(TestFiles.Get(fixture));
+        var grid = new TileGrid(slide.LevelDimensions, slide.LevelDownsamples);
+        var downsamples = new List<double> { -1, 0, 0.1, 0.25, double.MaxValue, double.PositiveInfinity, double.NaN };
+        for (double downsample = 0.25; downsample <= 64; downsample *= 1.05)
+        {
+            downsamples.Add(downsample);
+        }
+
+        foreach (double level in slide.LevelDownsamples)
+        {
+            downsamples.AddRange([Math.BitDecrement(level), level, Math.BitIncrement(level)]);
+        }
+
+        Assert.Equal(slide.LevelCount, grid.LevelCount);
+        for (int level = 0; level < grid.LevelCount; level++)
+        {
+            Assert.Equal(slide.LevelDownsamples[level], grid.LevelDownsample(level));
+        }
+
+        foreach (double downsample in downsamples)
+        {
+            Assert.True(
+                slide.GetBestLevelForDownsample(downsample) == grid.BestLevelForDownsample(downsample),
+                $"downsample {downsample}: OpenSlide {slide.GetBestLevelForDownsample(downsample)}, grid {grid.BestLevelForDownsample(downsample)}");
+        }
+
+        // A slide without levels has nothing to draw at level 0 either.
+        var empty = new TileGrid([], []);
+        Assert.Equal(0, empty.LevelCount);
+        Assert.Equal(0, empty.BestLevelForDownsample(4));
+        Assert.Empty(empty.VisibleTiles(0, 0, 0, 100, 100));
     }
 }
