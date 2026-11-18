@@ -117,7 +117,7 @@ public static class OmeZarrEndpointRouteBuilderExtensions
         }
         catch (OpenSlideException e)
         {
-            return EndpointSupport.SlideError(logger, cache, filePath, path, e);
+            return EndpointSupport.SlideError(logger, cache, lease, path, e);
         }
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -188,6 +189,113 @@ public class SlideCacheTests
         Assert.Equal(16, slide.ReadRegion(0, 0, 0, 2, 2).Data.Length);
         second.Dispose();
         Assert.Throws<ObjectDisposedException>(() => slide.ReadRegion(0, 0, 0, 2, 2));
+    }
+
+    [Fact]
+    public void SlideCache_FailedOpens_DoNotEvictCachedSlides()
+    {
+        // In directory mode anyone can ask for files that are not slides (MRXS Data*.dat, notes.txt, ...); those
+        // requests must not push healthy slides out of the cache.
+        using var directory = new TempDirectory();
+        string notes = Path.Combine(directory.Path, "notes.txt");
+        File.WriteAllText(notes, "not a slide");
+        using SlideCache cache = CreateCache(o => o.SlideCacheSize = 1);
+        string path = TestFiles.Get("boxes.tiff");
+
+        SlideEntry before;
+        using (SlideLease lease = cache.TryAcquire(path)!)
+        {
+            before = lease.Entry;
+        }
+
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.Null(cache.TryAcquire(notes));
+            Assert.Null(cache.TryAcquire(TestFiles.Get("unopenable.tiff")));
+            Assert.Null(cache.TryAcquire(TestFiles.Get("does-not-exist.tiff")));
+        }
+
+        Assert.Equal(1, cache.Count);
+        using SlideLease after = cache.TryAcquire(path)!;
+        Assert.Same(before, after.Entry);
+        Assert.Equal(16, after.Entry.Slide.ReadRegion(0, 0, 0, 2, 2).Data.Length);
+
+        // boxes.tiff was opened once; every failed open was tried.
+        Assert.Equal(1 + 15, cache.OpenCount);
+    }
+
+    [Fact]
+    public async Task SlideCache_ConcurrentChurn_EveryLeaseReads()
+    {
+        // Capacity 1, two slides, 32 threads: slides are evicted all the time while leases still read them.
+        using SlideCache cache = CreateCache(o => o.SlideCacheSize = 1);
+        string[] paths = [TestFiles.Get("boxes.tiff"), TestFiles.Get("boxes_0.dcm")];
+        const int Threads = 32;
+        using var start = new Barrier(Threads);
+        var failures = new ConcurrentQueue<string>();
+
+        Task[] tasks = Enumerable.Range(0, Threads).Select(t => Task.Factory.StartNew(
+            () =>
+            {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                for (int i = 0; i < 40; i++)
+                {
+                    string path = paths[(t + i) % 2];
+                    try
+                    {
+                        using SlideLease? lease = cache.TryAcquire(path);
+                        if (lease is null)
+                        {
+                            failures.Enqueue($"{path}: no lease");
+                        }
+                        else if (lease.Entry.Slide.ReadRegion(0, 0, 0, 2, 2).Data.Length != 16)
+                        {
+                            failures.Enqueue($"{path}: wrong region size");
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        failures.Enqueue($"{path}: {e.GetType().Name}: {e.Message}");
+                    }
+                }
+            },
+            TestContext.Current.CancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default)).ToArray();
+        await Task.WhenAll(tasks);
+
+        Assert.Empty(failures);
+        Assert.Equal(1, cache.Count);
+    }
+
+    [Fact]
+    public void SlideCache_EvictByStaleLease_KeepsNewerInstance()
+    {
+        using SlideCache cache = CreateCache();
+        string path = TestFiles.Get("boxes.tiff");
+
+        // A request holds the slide when another one evicts it (say, after an OpenSlide error); a third reopens it.
+        SlideLease stale = cache.TryAcquire(path)!;
+        cache.Evict(path);
+        using SlideLease fresh = cache.TryAcquire(path)!;
+        Assert.NotSame(stale.Entry, fresh.Entry);
+
+        // The first request now evicts what it used: only that instance, not the newer one.
+        cache.Evict(stale);
+        stale.Dispose();
+        cache.Evict(stale); // a disposed lease evicts nothing
+        Assert.Equal(1, cache.Count);
+        using (SlideLease again = cache.TryAcquire(path)!)
+        {
+            Assert.Same(fresh.Entry, again.Entry);
+        }
+
+        Assert.Equal(2, cache.OpenCount);
+
+        // The lease of the cached instance does evict it.
+        cache.Evict(fresh);
+        Assert.Equal(0, cache.Count);
+        Assert.Equal(16, fresh.Entry.Slide.ReadRegion(0, 0, 0, 2, 2).Data.Length);
     }
 
     [Fact]

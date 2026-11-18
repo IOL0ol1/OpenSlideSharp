@@ -36,13 +36,14 @@ internal static class EndpointSupport
     }
 
     /// <summary>
-    /// Answers a request during which OpenSlide reported an error: the slide is in the sticky error state, so it
-    /// is evicted (the next request opens it again) and the response is a 500.
+    /// Answers a request during which OpenSlide reported an error: the slide is in the sticky error state, so the
+    /// instance the request used is evicted (the next request opens it again, and a newer instance another request
+    /// opened meanwhile stays) and the response is a 500.
     /// </summary>
-    public static IResult SlideError(ILogger logger, SlideCache cache, string filePath, string request, OpenSlideException exception)
+    public static IResult SlideError(ILogger logger, SlideCache cache, SlideLease lease, string request, OpenSlideException exception)
     {
-        Log.SlideError(logger, filePath, request, exception);
-        cache.Evict(filePath);
+        Log.SlideError(logger, lease.Entry.FilePath, request, exception);
+        cache.Evict(lease);
         return Results.StatusCode(StatusCodes.Status500InternalServerError);
     }
 
