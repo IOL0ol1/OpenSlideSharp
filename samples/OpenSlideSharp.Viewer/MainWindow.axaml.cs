@@ -64,6 +64,11 @@ internal sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // O and W with the platform's command key: Ctrl on Windows and Linux, Cmd on macOS.
+        KeyModifiers command = (this.GetPlatformSettings() ?? Avalonia.Application.Current?.PlatformSettings)
+            ?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        OpenMenuItem.InputGesture = OpenMenuItem.HotKey = new KeyGesture(Key.O, command);
+        CloseMenuItem.InputGesture = CloseMenuItem.HotKey = new KeyGesture(Key.W, command);
         SetClipboardText = text => Clipboard is { } clipboard ? clipboard.SetTextAsync(text) : Task.CompletedTask;
         Viewer.ViewChanged += UpdateStatus;
         Viewer.LoadFailed += OnLoadFailed;

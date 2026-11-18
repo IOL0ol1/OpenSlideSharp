@@ -26,9 +26,9 @@
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="_File">
-        <MenuItem Header="_Open…" InputGesture="Ctrl+O" HotKey="Ctrl+O" Click="OnOpenClick" />
-        <MenuItem x:Name="CloseMenuItem" Header="_Close" InputGesture="Ctrl+W" HotKey="Ctrl+W" IsEnabled="False"
-                  Click="OnCloseClick" />
+        <!-- Their shortcuts use the platform's command key (Ctrl, or Cmd on macOS): see MainWindow(). -->
+        <MenuItem x:Name="OpenMenuItem" Header="_Open…" Click="OnOpenClick" />
+        <MenuItem x:Name="CloseMenuItem" Header="_Close" IsEnabled="False" Click="OnCloseClick" />
         <Separator />
         <MenuItem Header="E_xit" Click="OnExitClick" />
       </MenuItem>

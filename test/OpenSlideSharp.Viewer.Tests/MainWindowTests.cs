@@ -489,6 +489,33 @@ public class MainWindowTests
     }
 
     [Fact]
+    public void Shortcuts_UseThePlatformCommandKey()
+    {
+        HeadlessSession.Run(() =>
+        {
+            using var host = new WindowHost();
+            KeyModifiers command = host.Window.GetPlatformSettings()!.HotkeyConfiguration.CommandModifiers;
+            Assert.Equal(new KeyGesture(Key.O, command), host.Window.OpenMenuItem.HotKey);
+            Assert.Equal(new KeyGesture(Key.O, command), host.Window.OpenMenuItem.InputGesture);
+            Assert.Equal(new KeyGesture(Key.W, command), host.Window.CloseMenuItem.HotKey);
+            Assert.Equal(new KeyGesture(Key.W, command), host.Window.CloseMenuItem.InputGesture);
+
+            host.Open("small.svs");
+            RawInputModifiers modifiers = command switch
+            {
+                KeyModifiers.Meta => RawInputModifiers.Meta,
+                _ => RawInputModifiers.Control,
+            };
+            host.Window.KeyPressQwerty(PhysicalKey.W, modifiers);
+            host.Window.KeyReleaseQwerty(PhysicalKey.W, modifiers);
+            HeadlessSession.Pump();
+
+            Assert.Null(host.Window.Viewer.Slide);
+            Assert.Equal(AppTitle, host.Window.Title);
+        });
+    }
+
+    [Fact]
     public void CloseSlide_ClearsTheWindow()
     {
         HeadlessSession.Run(() =>
