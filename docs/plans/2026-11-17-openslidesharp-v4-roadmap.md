@@ -10,6 +10,6 @@
 | 2 | `2026-11-17-plan2-rendering.md`（已完成） | `PixelImage` 合成与缩放、共享渲染流程、`OpenSlide.GetThumbnail`、`DeepZoomGenerator`、`IColorTransform`、`OmeZarrGenerator`、`OpenSlideSharp.SkiaSharp`（§6.1 其余、§6.3、§8 中 DeepZoom / Skia / OME-Zarr） | 1 |
 | 3 | `2026-11-18-plan3-web-tool.md`（已完成） | `OpenSlideSharp.AspNetCore`、`samples/OpenSlideSharp.Web`、`OpenSlideSharp.Tool`（§6.4–§6.6） | 2 |
 | 4 | `2026-11-18-plan4-viewer.md`（已完成） | `samples/OpenSlideSharp.Viewer`（Avalonia）（§6.7） | 2 |
-| 5 | plan5-release（待写） | 上游同步、版本号计算、发布、GitHub Release、README 重写、旧包弃用清单（§7.2、§7.3、§9） | 1–4 |
+| 5 | `2026-11-18-plan5-release.md`（已完成） | 上游同步、版本号计算、发布、GitHub Release、README 重写、旧包弃用清单（§7.2、§7.3、§9） | 1–4 |
 
 计划 3 与计划 4 互不依赖，可以并行。
