@@ -12,14 +12,24 @@ binaries and notices eng/openslide.json pins.
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
 assertions, still runs. net48 and the C++ stage only run on Windows.
+
+-PackOnly packs and checks the nupkg contents, as the release does, and runs no
+smoke test: the five nupkgs are left in artifacts/smoke-feed.
+
+-OpenSlideUpstreamVersion is passed to every pack (see Directory.Build.props),
+and every OpenSlideSharp assembly in the nupkgs must then have the
+InformationalVersion <Version>+openslide.<OpenSlideUpstreamVersion>.
 #>
 [CmdletBinding()]
 param(
     [string]$Version = "0.0.0-smoke.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))",
-    [switch]$SkipPack
+    [switch]$SkipPack,
+    [switch]$PackOnly,
+    [string]$OpenSlideUpstreamVersion
 )
 
 $ErrorActionPreference = 'Stop'
+if ($SkipPack -and $PackOnly) { throw '-SkipPack and -PackOnly cannot be used together.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -52,17 +62,19 @@ else {
     # Pack only what eng/openslide.json pins: every platform's binaries, licenses and openslide-bin.json.
     & (Join-Path $PSScriptRoot 'Get-OpenSlide.ps1') -Platform all -Verify
 
+    $versionProps = @("-p:Version=$Version")
+    if ($OpenSlideUpstreamVersion) { $versionProps += "-p:OpenSlideUpstreamVersion=$OpenSlideUpstreamVersion" }
     foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj', 'src/OpenSlideSharp.AspNetCore/OpenSlideSharp.AspNetCore.csproj') {
-        Invoke-Native dotnet @('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed, "-p:Version=$Version")
+        Invoke-Native dotnet (@('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed) + $versionProps)
     }
 
     # The tool carries the native library of every RID through OpenSlideSharp.runtime, restored from the feed just
     # packed. It restores into the isolated cache, so smoke versions never reach the user's NuGet cache, and builds
     # into its own artifacts folder, so the regular build output keeps its own restore.
     $env:NUGET_PACKAGES = $packages
-    Invoke-Native dotnet @('pack', (Join-Path $root 'src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj'), '-c', 'Release', '-o', $feed,
-        "-p:Version=$Version", '-p:UseOpenSlideRuntimePackage=true', "-p:RestoreAdditionalProjectSources=$feed",
-        '--artifacts-path', (Join-Path $artifacts 'smoke/pack-tool'))
+    Invoke-Native dotnet (@('pack', (Join-Path $root 'src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj'), '-c', 'Release', '-o', $feed) +
+        $versionProps + @('-p:UseOpenSlideRuntimePackage=true', "-p:RestoreAdditionalProjectSources=$feed",
+            '--artifacts-path', (Join-Path $artifacts 'smoke/pack-tool')))
 }
 
 # 2. Assert nupkg contents.
@@ -266,6 +278,34 @@ foreach ($phrase in 'LGPL-2.1-only', 'licenses/openslide-bin/<platform>/OpenSlid
 }
 $toolSize = (Get-Item $toolNupkg).Length
 Write-Host ("tool nupkg size: {0:N1} MB ({1} bytes)" -f ($toolSize / 1MB), $toolSize)
+
+# With -OpenSlideUpstreamVersion every OpenSlideSharp assembly in the packages names the OpenSlide it was released with.
+if ($OpenSlideUpstreamVersion) {
+    $wantInfo = "$Version+openslide.$OpenSlideUpstreamVersion"
+    $infoDir = Join-Path $artifacts 'smoke/informational-version'
+    New-Item -ItemType Directory -Force $infoDir | Out-Null
+    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.AspNetCore', 'OpenSlideSharp.Tool') {
+        $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $feed "$id.$Version.nupkg"))
+        try {
+            $dlls = @($zip.Entries | Where-Object { $_.FullName -match '(^|/)OpenSlideSharp[^/]*\.dll$' })
+            if ($dlls.Count -eq 0) { throw "$id nupkg has no OpenSlideSharp assembly" }
+            foreach ($dll in $dlls) {
+                $file = Join-Path $infoDir "$([Guid]::NewGuid().ToString('N')).dll"
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($dll, $file)
+                # ProductVersion is the InformationalVersion (from the version resource on Windows, the metadata elsewhere).
+                $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($file).ProductVersion
+                if ($info -cne $wantInfo) { throw "$id nupkg: $($dll.FullName) has InformationalVersion '$info', expected '$wantInfo'" }
+            }
+            Write-Host "$id nupkg: $($dlls.Count) assemblies with InformationalVersion $wantInfo"
+        }
+        finally { $zip.Dispose() }
+    }
+}
+
+if ($PackOnly) {
+    Write-Host "Packed and checked the packages in $feed (-PackOnly: no smoke tests)."
+    exit 0
+}
 
 # 3. Consume the packages from an isolated global cache.
 $env:NUGET_PACKAGES = $packages
