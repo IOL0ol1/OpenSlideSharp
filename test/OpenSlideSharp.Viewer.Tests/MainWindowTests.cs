@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -120,7 +121,7 @@ public class MainWindowTests
             host.Window.MouseUp(at, MouseButton.Left);
             host.Window.MouseDown(at, MouseButton.Left);
             host.Window.MouseUp(at, MouseButton.Left);
-            HeadlessSession.Pump();
+            HeadlessSession.PumpUntil(() => host.Window.ImageWindows.Count > 0, "the image window opens");
 
             AssociatedImageWindow window = Assert.Single(host.Window.ImageWindows);
             Assert.Equal("thumbnail", window.Title);
@@ -132,6 +133,38 @@ public class MainWindowTests
             host.Open("boxes.tiff");
             Assert.Empty(host.Window.ImageWindows);
             Assert.False(window.IsVisible);
+        });
+    }
+
+    [Fact]
+    public void AssociatedImage_IsReadOffTheUiThread_AndOpenedOnce()
+    {
+        HeadlessSession.Run(() =>
+        {
+            using var host = new WindowHost();
+            host.Open("small.svs");
+            var readThreads = new ConcurrentQueue<int>();
+            host.Window.ReadAssociatedImage = image =>
+            {
+                readThreads.Enqueue(Environment.CurrentManagedThreadId);
+                return image.Read();
+            };
+
+            // Asked twice before the first read is done (a double click, then Enter), then once more.
+            Task<AssociatedImageWindow?> first = host.Window.ShowAssociatedImageAsync("thumbnail");
+            Task<AssociatedImageWindow?> second = host.Window.ShowAssociatedImageAsync("thumbnail");
+            HeadlessSession.PumpUntil(() => first.IsCompleted && second.IsCompleted, "the image is shown");
+            Task<AssociatedImageWindow?> third = host.Window.ShowAssociatedImageAsync("thumbnail");
+            HeadlessSession.PumpUntil(() => third.IsCompleted, "the image is shown again");
+
+            AssociatedImageWindow window = Assert.Single(host.Window.ImageWindows);
+            Assert.Same(window, first.Result);
+            Assert.Same(window, second.Result);
+            Assert.Same(window, third.Result);
+            Assert.True(window.IsVisible);
+            Assert.NotEmpty(readThreads);
+            Assert.DoesNotContain(Environment.CurrentManagedThreadId, readThreads);
+            Assert.True(readThreads.Count <= 2, $"read {readThreads.Count} times"); // not again once it is shown
         });
     }
 

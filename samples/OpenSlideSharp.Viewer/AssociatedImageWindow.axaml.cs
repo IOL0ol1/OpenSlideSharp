@@ -29,12 +29,16 @@ internal sealed partial class AssociatedImageWindow : Window
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(image);
+        ImageName = name;
         Title = name;
         Image = image.ToBitmap();
         Picture.Source = Image;
         Width = Math.Clamp(image.Width, MinStartWidth, MaxStartWidth);
         Height = Math.Clamp(image.Height, MinStartHeight, MaxStartHeight);
     }
+
+    /// <summary>Gets the name of the associated image shown; empty in the designer.</summary>
+    internal string ImageName { get; } = "";
 
     /// <summary>Gets the image shown; null for an image without pixels.</summary>
     internal WriteableBitmap? Image { get; }

@@ -85,6 +85,9 @@ internal sealed partial class MainWindow : Window
     /// <summary>Gets or sets what opens a slide file, on a background thread; a test hook.</summary>
     internal Func<string, OpenSlide> OpenSlideFile { get; set; } = OpenSlide.Open;
 
+    /// <summary>Gets or sets what reads an associated image, on a background thread; a test hook.</summary>
+    internal Func<AssociatedImage, PixelImage> ReadAssociatedImage { get; set; } = image => image.Read();
+
     /// <summary>Gets or sets what puts text on the clipboard; a test hook.</summary>
     internal Func<string, Task> SetClipboardText { get; set; }
 
@@ -159,25 +162,47 @@ internal sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens a window showing the associated image <paramref name="name"/> of the slide; null if there is no such
-    /// image or it cannot be read (the status bar then says why).
+    /// Shows the associated image <paramref name="name"/> of the slide in a window of its own, reading it on a
+    /// background thread; a window that already shows it is brought to the front instead. Returns the window, or
+    /// null if there is no such image, it cannot be read (the status bar then says why), or the slide was closed
+    /// meanwhile.
     /// </summary>
-    internal AssociatedImageWindow? ShowAssociatedImage(string name)
+    internal async Task<AssociatedImageWindow?> ShowAssociatedImageAsync(string name)
     {
         if (_slide is not { } slide || !slide.AssociatedImages.TryGetValue(name, out AssociatedImage? image))
         {
             return null;
         }
 
+        if (ActivateImageWindow(name) is { } shown)
+        {
+            return shown;
+        }
+
         PixelImage pixels;
         try
         {
-            pixels = image.Read();
+            Func<AssociatedImage, PixelImage> read = ReadAssociatedImage;
+            pixels = await Task.Run(() => read(image));
         }
-        catch (Exception e) when (e is OpenSlideException or ArgumentOutOfRangeException)
+        catch (Exception e)
         {
-            ShowError($"Cannot read the {name} image: {e.Message}");
+            if (ReferenceEquals(slide, _slide))
+            {
+                ShowError($"Cannot read the {name} image: {e.Message}");
+            }
+
             return null;
+        }
+
+        if (!ReferenceEquals(slide, _slide) || _closed)
+        {
+            return null; // another slide, or none, by now
+        }
+
+        if (ActivateImageWindow(name) is { } opened)
+        {
+            return opened; // asked twice (a double click, then Enter): the first read opened it
         }
 
         var window = new AssociatedImageWindow(name, pixels);
@@ -285,6 +310,14 @@ internal sealed partial class MainWindow : Window
         ClearError();
         OnSelectionsChanged(); // the view cleared them; the rows show the new slide's sizes
         Viewer.Focus();
+    }
+
+    // Brings the window showing the associated image name to the front; null if there is none.
+    private AssociatedImageWindow? ActivateImageWindow(string name)
+    {
+        AssociatedImageWindow? window = _imageWindows.Find(window => window.ImageName == name);
+        window?.Activate();
+        return window;
     }
 
     private void CloseImageWindows()
@@ -468,13 +501,7 @@ internal sealed partial class MainWindow : Window
         if ((e.Source as Control)?.DataContext is AssociatedImageRow row)
         {
             e.Handled = true;
-            RunHandler(
-                () =>
-                {
-                    ShowAssociatedImage(row.Name);
-                    return Task.CompletedTask;
-                },
-                $"Cannot show the {row.Name} image");
+            ShowAssociatedImage(row.Name);
         }
     }
 
@@ -483,15 +510,12 @@ internal sealed partial class MainWindow : Window
         if (e.Key == Key.Enter && ImageList.SelectedItem is AssociatedImageRow row)
         {
             e.Handled = true;
-            RunHandler(
-                () =>
-                {
-                    ShowAssociatedImage(row.Name);
-                    return Task.CompletedTask;
-                },
-                $"Cannot show the {row.Name} image");
+            ShowAssociatedImage(row.Name);
         }
     }
+
+    private void ShowAssociatedImage(string name) =>
+        RunHandler(() => ShowAssociatedImageAsync(name), $"Cannot show the {name} image");
 
     private void OnSelectionsListChanged(object? sender, SelectionChangedEventArgs e) => UpdateStatus();
 
