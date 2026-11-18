@@ -6,18 +6,30 @@
 .DESCRIPTION
   Archives are cached in artifacts/downloads. Output layout (default artifacts/native):
     win-x64/libopenslide-1.dll, linux-x64|linux-arm64/libopenslide-1.so,
-    osx-arm64|osx-x64/libopenslide-1.dylib, msvc/x64/libopenslide.lib,
-    include/, licenses/, VERSIONS.md, versions.json, CHANGELOG.md, .stamp
+    osx-arm64|osx-x64/libopenslide-1.dylib, msvc/x64/libopenslide.lib, include/openslide/*.h,
+    licenses/<archive key>/  the archive's licenses/ (one folder per component) and its VERSIONS.md,
+    openslide-bin.json       channel, versions, date and source tarball (url, sha256) from the manifest,
+    .stamp                   the sha256 of each extracted archive
+  Each archive links its own set of components, so each keeps its own licenses/<archive key>/ folder: the output
+  for one platform is the same whichever other platforms were extracted before.
 .PARAMETER Platform
   current (default), all, or one or more manifest asset keys
   (windows-x64, linux-x86_64, linux-aarch64, macos-arm64-x86_64).
+.PARAMETER Force
+  Download (if not cached) and extract the chosen archives again even if .stamp says they are up to date.
+.PARAMETER Verify
+  Check that the output holds what the manifest pins for the chosen platforms, and fail if it does not: .stamp has
+  each archive's manifest sha256, every expected file exists, licenses/ has only archive folders, and
+  openslide-bin.json matches the manifest. Without -Force nothing is downloaded or extracted; with -Force the chosen
+  archives are extracted again first. Packing runs this (-Platform all -Verify) first.
 #>
 [CmdletBinding()]
 param(
     [string[]]$Platform = @('current'),
     [string]$Manifest,
     [string]$Destination,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Verify
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -29,6 +41,9 @@ $downloads = Join-Path $repoRoot 'artifacts/downloads'
 
 $m = Get-Content $Manifest -Raw | ConvertFrom-Json
 $allKeys = @($m.assets.PSObject.Properties.Name)
+if (-not $m.source -or -not $m.source.url -or -not $m.source.sha256) {
+    throw "$Manifest has no source tarball (source.url and source.sha256). Run eng/Update-OpenSlideManifest.ps1 to regenerate it."
+}
 
 # --- choose archives -------------------------------------------------------
 $keys = foreach ($p in $Platform) {
@@ -50,15 +65,33 @@ $keys = foreach ($p in $Platform) {
 }
 $keys = @($keys | Select-Object -Unique)
 
+# openslide-bin.json: which openslide-bin build the binaries are, and its source tarball.
+$binInfo = [ordered]@{
+    channel          = "$($m.channel)"
+    binVersion       = "$($m.binVersion)"
+    openslideVersion = "$($m.openslideVersion)"
+    openslideCommit  = "$($m.openslideCommit)"
+    date             = if ($m.date -is [datetime]) { $m.date.ToString('yyyy-MM-dd') } else { "$($m.date)" }
+    source           = [ordered]@{ url = "$($m.source.url)"; sha256 = "$($m.source.sha256)".ToLowerInvariant() }
+}
+$binInfoJson = (($binInfo | ConvertTo-Json -Depth 5) -replace "`r`n", "`n") + "`n"
+$binInfoPath = Join-Path $Destination 'openslide-bin.json'
+
 # --- stamp -----------------------------------------------------------------
-New-Item -ItemType Directory -Force $Destination | Out-Null
 $stampPath = Join-Path $Destination '.stamp'
-$stamp = [ordered]@{}
-if (Test-Path $stampPath) {
-    foreach ($line in Get-Content $stampPath) {
-        $parts = $line -split '\s+', 2
-        if ($parts.Count -eq 2) { $stamp[$parts[0]] = $parts[1] }
+function Read-Stamp {
+    $s = [ordered]@{}
+    if (Test-Path $stampPath) {
+        foreach ($line in Get-Content $stampPath) {
+            $parts = $line -split '\s+', 2
+            if ($parts.Count -eq 2) { $s[$parts[0]] = $parts[1] }
+        }
     }
+    $s
+}
+function Save-Stamp($Stamp) {
+    [string[]]$lines = @($Stamp.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" })
+    Set-Content -Path $stampPath -Value $lines -Encoding utf8NoBOM
 }
 
 # --- helpers ---------------------------------------------------------------
@@ -116,14 +149,16 @@ function Expand-OpenSlideArchive([string]$Archive, [string]$To) {
     } finally { Pop-Location }
 }
 
-# Files that must exist for a key to count as extracted (guards against a stale .stamp).
+# Files that must exist for a key to count as extracted (guards against a stale .stamp or an older layout).
 function Get-ExpectedOutputs([string]$Key) {
     switch ($Key) {
-        'windows-x64' { 'win-x64/libopenslide-1.dll', 'msvc/x64/libopenslide.lib', 'include/openslide/openslide.h' }
+        'windows-x64' { 'win-x64/libopenslide-1.dll', 'msvc/x64/libopenslide.lib', 'include/openslide/openslide.h', 'include/openslide/openslide-features.h' }
         'linux-x86_64' { 'linux-x64/libopenslide-1.so' }
         'linux-aarch64' { 'linux-arm64/libopenslide-1.so' }
         'macos-arm64-x86_64' { 'osx-arm64/libopenslide-1.dylib', 'osx-x64/libopenslide-1.dylib' }
     }
+    "licenses/$Key/VERSIONS.md"
+    "licenses/$Key/OpenSlide/COPYING.LESSER"
 }
 
 function Copy-Native([string]$From, [string]$ToRelative) {
@@ -138,7 +173,43 @@ function Find-Single([string]$Dir, [scriptblock]$Filter, [string]$What) {
     $hits[0].FullName
 }
 
+function Test-Staged {
+    $stamp = Read-Stamp
+    $problems = [Collections.Generic.List[string]]::new()
+    foreach ($key in $keys) {
+        $sha = $m.assets.$key.sha256.ToLowerInvariant()
+        if ($stamp[$key] -ne $sha) { $problems.Add("${key}: .stamp has '$($stamp[$key])', the manifest pins $sha") }
+        foreach ($rel in Get-ExpectedOutputs $key) {
+            if (-not (Test-Path -PathType Leaf (Join-Path $Destination $rel))) { $problems.Add("${key}: $rel is missing") }
+        }
+    }
+    foreach ($entry in @(Get-ChildItem (Join-Path $Destination 'licenses') -Force -ErrorAction SilentlyContinue)) {
+        if (-not $entry.PSIsContainer -or $entry.Name -notin $allKeys) { $problems.Add("licenses/$($entry.Name) is not the licenses folder of an archive in the manifest") }
+    }
+    if (-not (Test-Path -PathType Leaf $binInfoPath)) { $problems.Add('openslide-bin.json is missing') }
+    elseif (((Get-Content $binInfoPath -Raw) -replace "`r`n", "`n") -cne $binInfoJson) { $problems.Add('openslide-bin.json does not match the manifest') }
+    if ($problems.Count -gt 0) {
+        throw "$Destination does not hold what $Manifest pins:`n  - $($problems -join "`n  - ")`nRun eng/Get-OpenSlide.ps1 -Platform $($Platform -join ',') -Force."
+    }
+    Write-Host "Verified $Destination against $Manifest ($($keys -join ', '))."
+}
+
+# --- verify only -------------------------------------------------------------
+if ($Verify -and -not $Force) {
+    Test-Staged
+    return
+}
+
 # --- process ---------------------------------------------------------------
+New-Item -ItemType Directory -Force $Destination | Out-Null
+# Earlier versions put the licenses/, VERSIONS.md, versions.json and CHANGELOG.md of whichever archive came last at
+# the root; remove them so that only the per-archive folders remain.
+foreach ($file in 'VERSIONS.md', 'versions.json', 'CHANGELOG.md') { Remove-Item (Join-Path $Destination $file) -Force -ErrorAction SilentlyContinue }
+Get-ChildItem (Join-Path $Destination 'licenses') -Force -ErrorAction SilentlyContinue |
+    Where-Object { -not $_.PSIsContainer -or $_.Name -notin $allKeys } |
+    Remove-Item -Recurse -Force
+
+$stamp = Read-Stamp
 foreach ($key in $keys) {
     $sha = $m.assets.$key.sha256.ToLowerInvariant()
     $missing = @(Get-ExpectedOutputs $key | Where-Object { -not (Test-Path (Join-Path $Destination $_)) })
@@ -147,6 +218,10 @@ foreach ($key in $keys) {
         continue
     }
     $archive = Get-Archive $key
+
+    # Until this archive is fully extracted, .stamp must not claim it.
+    $stamp.Remove($key)
+    Save-Stamp $stamp
 
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ('osl-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory $tmp | Out-Null
@@ -173,23 +248,35 @@ foreach ($key in $keys) {
             }
         }
 
-        # Shared, platform-independent files (identical across archives; last one wins).
-        foreach ($dir in 'include', 'licenses') {
-            $src = Join-Path $root $dir
-            if (Test-Path $src) {
-                New-Item -ItemType Directory -Force (Join-Path $Destination $dir) | Out-Null
-                Copy-Item (Join-Path $src '*') (Join-Path $Destination $dir) -Recurse -Force
-            }
+        # The public headers are the same in every archive.
+        $include = Join-Path $root 'include'
+        if (Test-Path $include) {
+            New-Item -ItemType Directory -Force (Join-Path $Destination 'include') | Out-Null
+            Copy-Item (Join-Path $include '*') (Join-Path $Destination 'include') -Recurse -Force
         }
-        foreach ($file in 'VERSIONS.md', 'versions.json', 'CHANGELOG.md') {
-            $src = Join-Path $root $file
-            if (Test-Path $src) { Copy-Item $src (Join-Path $Destination $file) -Force }
-        }
+
+        # This archive's licenses and component versions, replacing any earlier copy.
+        $licenses = Join-Path $root 'licenses'
+        $versionsMd = Join-Path $root 'VERSIONS.md'
+        if (-not (Test-Path -PathType Container $licenses)) { throw "$archive has no licenses/ folder." }
+        if (-not (Test-Path -PathType Leaf $versionsMd)) { throw "$archive has no VERSIONS.md." }
+        $licenseDir = Join-Path $Destination "licenses/$key"
+        if (Test-Path $licenseDir) { Remove-Item $licenseDir -Recurse -Force }
+        New-Item -ItemType Directory -Force $licenseDir | Out-Null
+        Copy-Item (Join-Path $licenses '*') $licenseDir -Recurse -Force
+        Copy-Item $versionsMd $licenseDir -Force
     } finally {
         Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     $stamp[$key] = $sha
-    $stamp.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" } | Set-Content $stampPath -Encoding utf8NoBOM
+    Save-Stamp $stamp
     Write-Host "Extracted $key"
 }
+
+if (-not (Test-Path -PathType Leaf $binInfoPath) -or (Get-Content $binInfoPath -Raw) -cne $binInfoJson) {
+    Set-Content -Path $binInfoPath -Value $binInfoJson -NoNewline -Encoding utf8NoBOM
+    Write-Host "Wrote $binInfoPath"
+}
+
+if ($Verify) { Test-Staged }

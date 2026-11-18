@@ -6,7 +6,8 @@
 .DESCRIPTION
   nightly: latest prerelease with assets in openslide/builds.
   stable : latest non-prerelease in openslide/openslide-bin.
-  Downloads the four archives into artifacts/downloads and records their sha256.
+  Downloads the four binary archives and the openslide-bin source tarball into artifacts/downloads and records their
+  sha256. Every file must hash to the sha256 digest GitHub publishes for that release asset, or nothing is written.
   Honours $env:GITHUB_TOKEN for authenticated GitHub API calls.
 #>
 [CmdletBinding()]
@@ -35,6 +36,8 @@ function Invoke-GitHubApi([string]$Path) {
     Invoke-RestMethod -Uri "https://api.github.com/$Path" -Headers $headers
 }
 
+function Get-Sha256([string]$Path) { (Get-FileHash $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+
 $repo = if ($Channel -eq 'nightly') { 'openslide/builds' } else { 'openslide/openslide-bin' }
 
 $release = $null
@@ -53,29 +56,52 @@ $tagName = $release.tag_name
 $binVersion = $tagName -replace '^v', ''
 Write-Host "Release: $repo $tagName"
 
+# Downloads a release asset into artifacts/downloads (reusing a cached copy only if it hashes right) and checks it
+# against the sha256 digest the GitHub release API reports for it. Returns the manifest entry: url and sha256.
+function Get-VerifiedAsset($Asset) {
+    if ("$($Asset.digest)" -notmatch '^sha256:([0-9a-fA-F]{64})$') {
+        throw "Release $tagName reports no sha256 digest for $($Asset.name) (digest: '$($Asset.digest)'), so it cannot be verified."
+    }
+    $expected = $Matches[1].ToLowerInvariant()
+    $url = $Asset.browser_download_url
+    if (-not "$url".StartsWith("https://github.com/$repo/releases/download/", [StringComparison]::Ordinal)) {
+        throw "Asset $($Asset.name) has an unexpected download URL: $url"
+    }
+    $path = Join-Path $downloads $Asset.name
+    if ((Test-Path $path) -and (Get-Sha256 $path) -ne $expected) {
+        Write-Host "Cached $($Asset.name) does not match the release digest; downloading again."
+        Remove-Item $path -Force
+    }
+    if (-not (Test-Path $path)) {
+        Write-Host "Downloading $($Asset.name)"
+        # Download to .part and rename only after the hash checks out, so a failed download is never cached.
+        $part = "$path.part"
+        Remove-Item $part -Force -ErrorAction SilentlyContinue
+        try { Invoke-WebRequest -Uri $url -OutFile $part }
+        catch { Remove-Item $part -Force -ErrorAction SilentlyContinue; throw }
+        $actual = Get-Sha256 $part
+        if ($actual -ne $expected) {
+            Remove-Item $part -Force
+            throw "SHA256 mismatch for $($Asset.name): the release digest is $expected, the download hashes to $actual. The downloaded file was deleted."
+        }
+        Move-Item $part $path
+    }
+    [ordered]@{ url = $url; sha256 = $expected }
+}
+
 New-Item -ItemType Directory -Force $downloads | Out-Null
 $assets = [ordered]@{}
 foreach ($key in $assetSuffixes.Keys) {
     $asset = $release.assets | Where-Object { $_.name -like "openslide-bin-*$($assetSuffixes[$key])" } | Select-Object -First 1
     if (-not $asset) { throw "Release $tagName has no asset matching *$($assetSuffixes[$key])." }
-    $path = Join-Path $downloads $asset.name
-    # A cached file of the wrong size is a leftover from an interrupted download.
-    if ((Test-Path $path) -and (Get-Item $path).Length -ne $asset.size) { Remove-Item $path -Force }
-    if (-not (Test-Path $path)) {
-        Write-Host "Downloading $($asset.name)"
-        # Download to .part and rename only on success, so a failed download is never cached or hashed.
-        $part = "$path.part"
-        Remove-Item $part -Force -ErrorAction SilentlyContinue
-        try { Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $part }
-        catch { Remove-Item $part -Force -ErrorAction SilentlyContinue; throw }
-        if ((Get-Item $part).Length -ne $asset.size) { Remove-Item $part -Force; throw "Downloaded $($asset.name) has the wrong size." }
-        Move-Item $part $path
-    }
-    $assets[$key] = [ordered]@{
-        url    = $asset.browser_download_url
-        sha256 = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
+    $assets[$key] = Get-VerifiedAsset $asset
 }
+
+# The corresponding source of every binary archive: openslide-bin's source tarball of the same version.
+$sourceName = "openslide-bin-$binVersion.tar.gz"
+$sourceAsset = $release.assets | Where-Object { $_.name -eq $sourceName } | Select-Object -First 1
+if (-not $sourceAsset) { throw "Release $tagName has no source tarball $sourceName." }
+$source = Get-VerifiedAsset $sourceAsset
 
 # Read versions.json straight out of the windows zip.
 $zipName = ($release.assets | Where-Object { $_.name -like "openslide-bin-*$($assetSuffixes['windows-x64'])" } | Select-Object -First 1).name
@@ -115,6 +141,7 @@ $manifest = [ordered]@{
     openslideCommit  = $commit
     date             = $date
     releaseUrl       = "https://github.com/$repo/releases/tag/$([uri]::EscapeDataString($tagName))"
+    source           = $source
     assets           = $assets
 }
 New-Item -ItemType Directory -Force (Split-Path -Parent $OutFile) | Out-Null

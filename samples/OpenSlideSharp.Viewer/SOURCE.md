@@ -4,7 +4,8 @@ The viewer contains a build of [OpenSlide](https://openslide.org/) from
 [openslide-bin](https://github.com/openslide/openslide-bin): `libopenslide-1.dll` on Windows, `libopenslide-1.so` on
 Linux and `libopenslide-1.dylib` on macOS, which the executable extracts when it first starts. OpenSlide is licensed
 under the GNU Lesser General Public License 2.1, and the libraries linked into it under their own licenses: see
-`openslide-bin/`, and `openslide-bin/VERSIONS.md` for their versions.
+`openslide-bin/<platform>/`, and `openslide-bin/<platform>/VERSIONS.md` for their versions.
+`openslide-bin/openslide-bin.json` names the openslide-bin build and its source tarball.
 
 ## Source code
 

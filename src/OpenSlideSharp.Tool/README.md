@@ -65,7 +65,7 @@ Each worker holds one tile or chunk at a time, and OpenSlide keeps a tile cache 
 
 The tool's own code is under the MIT license. The package also contains, each under its own license, which are in the package's `licenses/` folder:
 
-- OpenSlide 4.x from [openslide-bin](https://github.com/openslide/openslide-bin), LGPL-2.1, with the libraries built into it (`licenses/openslide-bin/`, and `VERSIONS.md` listing their versions). The source is the openslide-bin source tarball of the same version.
+- OpenSlide 4.x from [openslide-bin](https://github.com/openslide/openslide-bin), LGPL-2.1, with the libraries built into it (`licenses/openslide-bin/<platform>/`, each with a `VERSIONS.md` listing their versions). The source is the openslide-bin source tarball named in `licenses/openslide-bin/openslide-bin.json`.
 - [SkiaSharp](https://github.com/mono/SkiaSharp), MIT, with Skia (BSD-3-Clause) and the libraries in its native build (`licenses/skiasharp/`).
 - [OpenSeadragon](https://openseadragon.github.io/), BSD-3-Clause, and its [scale bar plugin](https://github.com/usnistgov/OpenSeadragonScalebar), in the public domain (NIST), written with `-r` (`licenses/viewer/`).
 

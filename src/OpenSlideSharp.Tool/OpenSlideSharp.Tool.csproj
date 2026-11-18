@@ -38,9 +38,10 @@
   <Import Project="..\..\eng\OpenSlideNative.targets" Condition="'$(UseOpenSlideRuntimePackage)' != 'true'" />
 
   <!--
-    The licenses of what the package redistributes, under licenses/: openslide-bin's licenses/ and VERSIONS.md (the
-    LGPL-2.1 OpenSlide library and the libraries linked into it), SkiaSharp's license and third-party notices (Skia
-    and the libraries in libSkiaSharp), and those of the viewer files that -r writes. Direct references to the
+    The licenses of what the package redistributes, under licenses/: the runtime package's licenses/<platform>/ (the
+    LGPL-2.1 OpenSlide library and the libraries linked into each platform's build, with VERSIONS.md) and
+    openslide-bin.json (the openslide-bin build and its source tarball), SkiaSharp's license and third-party notices
+    (Skia and the libraries in libSkiaSharp), and those of the viewer files that -r writes. Direct references to the
     SkiaSharp packages (the versions OpenSlideSharp.SkiaSharp uses) give their paths.
   -->
   <ItemGroup>
@@ -48,9 +49,9 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" GeneratePathProperty="true" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseOpenSlideRuntimePackage)' == 'true' and '$(PkgOpenSlideSharp_runtime)' != ''">
-    <!-- NuGet appends each file's RecursiveDir to a PackagePath that ends in '/'. -->
+    <!-- NuGet appends each file's RecursiveDir to a PackagePath that ends in '/': licenses/openslide-bin/<platform>/... -->
     <None Include="$(PkgOpenSlideSharp_runtime)/licenses/**" Pack="true" PackagePath="licenses/openslide-bin/" Visible="false" />
-    <None Include="$(PkgOpenSlideSharp_runtime)/VERSIONS.md" Pack="true" PackagePath="licenses/openslide-bin/" Visible="false" />
+    <None Include="$(PkgOpenSlideSharp_runtime)/openslide-bin.json" Pack="true" PackagePath="licenses/openslide-bin/" Visible="false" />
   </ItemGroup>
   <ItemGroup Condition="'$(PkgSkiaSharp)' != '' and '$(PkgSkiaSharp_NativeAssets_Linux_NoDependencies)' != ''">
     <None Include="$(PkgSkiaSharp)/LICENSE.txt" Pack="true" PackagePath="licenses/skiasharp/" Visible="false" />

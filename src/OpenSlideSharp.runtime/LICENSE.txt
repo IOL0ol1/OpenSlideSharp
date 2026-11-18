@@ -1,0 +1,21 @@
+OpenSlideSharp.runtime: license information
+
+The native libraries in this package are builds of OpenSlide from openslide-bin
+(https://github.com/openslide/openslide-bin). OpenSlide is licensed under the GNU Lesser General Public License,
+version 2.1 (LGPL-2.1-only). The library of each platform statically links further components, each under its own
+license. The full license texts of OpenSlide and of these components, and VERSIONS.md with their versions, are in
+the licenses folder of that platform:
+
+  licenses/windows-x64/          runtimes/win-x64/native/ and build/native/ (headers and import library)
+  licenses/linux-x86_64/         runtimes/linux-x64/native/
+  licenses/linux-aarch64/        runtimes/linux-arm64/native/
+  licenses/macos-arm64-x86_64/   runtimes/osx-arm64/native/ and runtimes/osx-x64/native/
+
+OpenSlide's license text is licenses/<platform>/OpenSlide/COPYING.LESSER.
+
+Source code: openslide-bin.json in this package names the openslide-bin build (binVersion) and its source tarball
+(source.url, with its sha256 in source.sha256). The tarball holds the source code of OpenSlide and of every
+component listed above, and the scripts that build these libraries from it.
+
+The MSBuild files under build/ and buildTransitive/ are part of OpenSlideSharp
+(https://github.com/IOL0ol1/OpenSlideSharp) and are licensed under the MIT license.

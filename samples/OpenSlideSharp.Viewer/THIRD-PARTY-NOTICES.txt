@@ -13,11 +13,12 @@ file.
 1. OpenSlide and the libraries linked into it (openslide-bin)
    License:  OpenSlide: LGPL-2.1-only. The libraries statically linked into it (cairo, glib, libdicom, libffi,
              libjpeg-turbo, libpng, libtiff, libxml2, OpenJPEG, pixman, proxy-libintl, SQLite, uthash, zlib-ng,
-             Zstandard, as listed in VERSIONS.md) are each under their own license.
+             Zstandard, as listed in each platform's VERSIONS.md) are each under their own license.
    Upstream: https://openslide.org/
              https://github.com/openslide/openslide-bin
-   Files:    openslide-bin/VERSIONS.md (the components and their versions)
-             openslide-bin/<component>/ (their license texts)
+   Files:    openslide-bin/<platform>/VERSIONS.md (the components and their versions)
+             openslide-bin/<platform>/<component>/ (their license texts)
+             openslide-bin/openslide-bin.json (the openslide-bin build and its source tarball)
    Source code, and how to use another OpenSlide build instead: SOURCE.md.
 
 2. SkiaSharp and Skia

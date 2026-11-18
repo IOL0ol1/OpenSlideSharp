@@ -5,6 +5,10 @@
   "openslideCommit": "174630bf",
   "date": "2026-11-02",
   "releaseUrl": "https://github.com/openslide/builds/releases/tag/v4.0.1.2%2B20261102.nightly",
+  "source": {
+    "url": "https://github.com/openslide/builds/releases/download/v4.0.1.2%2B20261102.nightly/openslide-bin-4.0.1.2%2B20261102.nightly.tar.gz",
+    "sha256": "6d3e485ae85566edaad8b69c0dd606bccd7b7b16aa6354c1258e66f4337708c1"
+  },
   "assets": {
     "windows-x64": {
       "url": "https://github.com/openslide/builds/releases/download/v4.0.1.2%2B20261102.nightly/openslide-bin-4.0.1.2%2B20261102.nightly-windows-x64.zip",

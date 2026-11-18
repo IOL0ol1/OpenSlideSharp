@@ -52,8 +52,9 @@
 
   <!--
     Every publish has licenses/ next to the executable, with the notices of what it contains:
-    - openslide-bin/: OpenSlide's and its libraries' licenses and VERSIONS.md, from OpenSlideSharp.runtime (or, without
-      it, from artifacts/native);
+    - openslide-bin/: for each openslide-bin platform build, <platform>/ with OpenSlide's and its libraries' licenses
+      and VERSIONS.md, and openslide-bin.json (the build and its source tarball), from OpenSlideSharp.runtime (or,
+      without it, from artifacts/native);
     - <package id>/: the LICENSE* and THIRD-PARTY-NOTICES* files of each NuGet package (the .NET runtime pack of a
       self-contained publish among them) with a file in the publish;
     - OpenSlideSharp/LICENSE, THIRD-PARTY-NOTICES.txt (a list of the components and their licenses) and SOURCE.md
@@ -65,8 +66,8 @@
       <_OpenSlideBinDir Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">$(PkgOpenSlideSharp_runtime)</_OpenSlideBinDir>
       <_OpenSlideBinDir Condition="'$(UseOpenSlideRuntimePackage)' != 'true'">$(MSBuildThisFileDirectory)..\..\artifacts\native</_OpenSlideBinDir>
     </PropertyGroup>
-    <Error Condition="!Exists('$(_OpenSlideBinDir)/VERSIONS.md') or !Exists('$(_OpenSlideBinDir)/licenses')"
-           Text="OpenSlide's licenses/ and VERSIONS.md are not in '$(_OpenSlideBinDir)'." />
+    <Error Condition="!Exists('$(_OpenSlideBinDir)/openslide-bin.json') or !Exists('$(_OpenSlideBinDir)/licenses')"
+           Text="OpenSlide's licenses/ and openslide-bin.json are not in '$(_OpenSlideBinDir)'." />
     <ItemGroup>
       <!-- The folder of each package with a file in the publish: the part of the file's path up to <id>/<version>/. -->
       <_ViewerPackageFile Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.NuGetPackageId)' != ''"
@@ -79,7 +80,7 @@
 
       <_ViewerLicense Include="@(_OpenSlideBinLicense)"
                       RelativePath="licenses/openslide-bin/%(_OpenSlideBinLicense.RecursiveDir)%(_OpenSlideBinLicense.Filename)%(_OpenSlideBinLicense.Extension)" />
-      <_ViewerLicense Include="$(_OpenSlideBinDir)/VERSIONS.md" RelativePath="licenses/openslide-bin/VERSIONS.md" />
+      <_ViewerLicense Include="$(_OpenSlideBinDir)/openslide-bin.json" RelativePath="licenses/openslide-bin/openslide-bin.json" />
       <_ViewerLicense Include="@(_ViewerPackageLicense)"
                       RelativePath="licenses/%(_ViewerPackageLicense.PackageId)/%(_ViewerPackageLicense.Filename)%(_ViewerPackageLicense.Extension)" />
       <_ViewerLicense Include="$(MSBuildThisFileDirectory)..\..\LICENSE" RelativePath="licenses/OpenSlideSharp/LICENSE" />
