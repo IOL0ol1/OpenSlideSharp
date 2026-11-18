@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -10,6 +11,10 @@ namespace OpenSlideSharp.AspNetCore;
 /// <summary>Registers the OpenSlide server services.</summary>
 public static class OpenSlideServiceCollectionExtensions
 {
+    private const string BindingMessage =
+        "Binding OpenSlideServerOptions from configuration uses reflection, which trimming and native AOT can break. " +
+        "In trimmed or AOT apps, use AddOpenSlide(services, configure) and set the options in code.";
+
     /// <summary>
     /// Registers <see cref="OpenSlideServerOptions"/>, their validation and a singleton <see cref="SlideCache"/>,
     /// which the Deep Zoom and OME-Zarr endpoints share.
@@ -19,7 +24,7 @@ public static class OpenSlideServiceCollectionExtensions
     /// <returns><paramref name="services"/>.</returns>
     /// <remarks>
     /// Invalid options throw <see cref="OptionsValidationException"/> when they are first resolved, and when the
-    /// host starts.
+    /// host starts. This overload does not use reflection, so it suits trimmed and native AOT apps.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     public static IServiceCollection AddOpenSlide(this IServiceCollection services, Action<OpenSlideServerOptions>? configure = null)
@@ -42,7 +47,13 @@ public static class OpenSlideServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">The configuration section holding the options.</param>
     /// <returns><paramref name="services"/>.</returns>
+    /// <remarks>
+    /// Binding uses reflection. Trimmed and native AOT apps should use
+    /// <see cref="AddOpenSlide(IServiceCollection, Action{OpenSlideServerOptions}?)"/> instead.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configuration"/> is <see langword="null"/>.</exception>
+    [RequiresUnreferencedCode(BindingMessage)]
+    [RequiresDynamicCode(BindingMessage)]
     public static IServiceCollection AddOpenSlide(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);

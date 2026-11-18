@@ -152,6 +152,38 @@ public class OmeZarrEndpointTests
     }
 
     [Fact]
+    public async Task OmeZarr_Preflight_EchoesRequestedHeaders()
+    {
+        await using TestApp app = await BoxesApp();
+
+        using (var request = new HttpRequestMessage(HttpMethod.Options, "/zarr/boxes.zarr/zarr.json"))
+        {
+            request.Headers.TryAddWithoutValidation("Origin", "https://viewer.example");
+            request.Headers.TryAddWithoutValidation("Access-Control-Request-Method", "GET");
+            request.Headers.TryAddWithoutValidation("Access-Control-Request-Headers", "range, x-requested-with");
+            using HttpResponseMessage response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.Equal("range, x-requested-with", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Headers")));
+        }
+
+        // No requested headers, no Access-Control-Allow-Headers; and none at all with AllowCrossOrigin off.
+        using (HttpResponseMessage plain = await SendAsync(app, HttpMethod.Options, "/zarr/boxes.zarr/zarr.json"))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, plain.StatusCode);
+            Assert.False(plain.Headers.Contains("Access-Control-Allow-Headers"));
+        }
+
+        await using TestApp closed = await BoxesApp(o => o.OmeZarr.AllowCrossOrigin = false);
+        using (var request = new HttpRequestMessage(HttpMethod.Options, "/zarr/boxes.zarr/zarr.json"))
+        {
+            request.Headers.TryAddWithoutValidation("Access-Control-Request-Headers", "range");
+            using HttpResponseMessage response = await closed.Client.SendAsync(request, TestContext.Current.CancellationToken);
+            Assert.False(response.Headers.Contains("Access-Control-Allow-Headers"));
+        }
+    }
+
+    [Fact]
     public async Task OmeZarr_Head_AnswersFromTheKey()
     {
         // HEAD of a chunk that exists answers 200 from the key alone; one outside the grid is 404.
