@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -133,6 +134,64 @@ public sealed class WebSampleTests
 
         Assert.Equal("http://127.0.0.1:9000", Program.BuildConfiguration(["-p", "9000"])["urls"]);
         Assert.Null(Program.BuildConfiguration([])["urls"]);
+    }
+
+    [Fact]
+    public void AppSettings_LeaveTheUrlsToTheEnvironment()
+    {
+        // A "Urls" in appsettings.json would override ASPNETCORE_URLS and ASPNETCORE_HTTP_PORTS. (The sample's own
+        // default, http://127.0.0.1:5000, applies only when nothing sets one: see DefaultUrls.)
+        IConfiguration settings = new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(AppContext.BaseDirectory, "appsettings.json"), optional: false)
+            .Build();
+
+        Assert.Equal("10", settings["OpenSlide:SlideCacheSize"]);
+        Assert.Null(settings["Urls"]);
+    }
+
+    [Theory]
+    [InlineData(null, null, "http://127.0.0.1:5000")]
+    [InlineData("urls", "http://0.0.0.0:8080", null)]          // ASPNETCORE_URLS, --urls, -l/-p
+    [InlineData("http_ports", "8080", null)]                    // ASPNETCORE_HTTP_PORTS
+    [InlineData("https_ports", "8443", null)]                   // ASPNETCORE_HTTPS_PORTS
+    [InlineData("Kestrel:Endpoints:Http:Url", "http://*:80", null)]
+    public void DefaultUrls_OnlyWhenNothingElseSetsThem(string? key, string? value, string? expected)
+    {
+        var settings = new Dictionary<string, string?>();
+        if (key is not null)
+        {
+            settings[key] = value;
+        }
+
+        IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+
+        Assert.Equal(expected, Program.DefaultUrls(configuration));
+    }
+
+    [Fact]
+    public void Run_InvalidOptions_PrintMessageAndUsage_Return2()
+    {
+        var stderr = new StringWriter();
+
+        int code = Program.Run(["--OpenSlide:SlideCacheSize=0", "-s", "0", Fixture("boxes.tiff")], stderr);
+
+        Assert.Equal(2, code);
+        Assert.Contains("SlideCacheSize must be at least 1", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains("DeepZoom.TileSize must be at least 1", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Usage: OpenSlideSharp.Web", stderr.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Run_BadArguments_Return2()
+    {
+        var missing = new StringWriter();
+        Assert.Equal(2, Program.Run([], missing));
+        Assert.Contains("SlidePath", missing.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Usage: OpenSlideSharp.Web", missing.ToString(), StringComparison.Ordinal);
+
+        var unknown = new StringWriter();
+        Assert.Equal(2, Program.Run(["--no-such-option", "x"], unknown));
+        Assert.Contains("Unknown option '--no-such-option'", unknown.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
