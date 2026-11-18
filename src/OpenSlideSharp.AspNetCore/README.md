@@ -27,8 +27,8 @@ The native library is not included. Add the [OpenSlideSharp.runtime](https://www
 | `SlideCacheSize` | 10 | slides kept open, at least 1 |
 | `TileCacheSize` | 128 | MiB of OpenSlide tile cache shared by all open slides, at least 0; 0 keeps OpenSlide's own cache of each slide (32 MiB each) |
 | `ColorMode` | `Default` | see [Color](#color) |
-| `DeepZoom:TileSize` | 254 | at least 1 |
-| `DeepZoom:Overlap` | 1 | at least 0 |
+| `DeepZoom:TileSize` | 254 | at least 1; `TileSize + 2 × Overlap` at most 536870911 (`int.MaxValue / 4`) |
+| `DeepZoom:Overlap` | 1 | at least 0; see `TileSize` |
 | `DeepZoom:Format` | `Jpeg` | the format named in the DZI |
 | `DeepZoom:Quality` | 75 | JPEG quality, 0 to 100 |
 | `DeepZoom:LimitBounds` | `true` | only the non-empty slide region |
