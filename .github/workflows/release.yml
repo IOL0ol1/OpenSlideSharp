@@ -161,7 +161,8 @@ jobs:
   viewer:
     name: viewer (${{ matrix.rid }})
     needs: [version, pack]
-    # Cross-published: the SDK signs the macOS executable ad hoc on any host.
+    # Cross-published: on any host the SDK signs the macOS executable ad hoc and, since .NET 8, writes the Windows
+    # executable's resources itself (no NETSDK1074). viewer-check runs each archive on its own platform.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -194,8 +195,44 @@ jobs:
           path: artifacts/release/OpenSlideSharp.Viewer-*
           if-no-files-found: error
 
+  viewer-check:
+    name: viewer check (${{ matrix.rid }})
+    needs: [version, viewer]
+    # Each archive, published on Linux above, is extracted and run with --check on its own platform before anything
+    # is released. On Windows this also checks the version resource, application manifest and GUI subsystem that the
+    # SDK copies into the executable (an SDK that cannot do that on a Linux host warns NETSDK1074 and leaves them out).
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: osx-arm64
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: viewer-${{ matrix.rid }}
+          path: artifacts/release
+      - name: Run the viewer from its archive
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.version.outputs.version }}
+          INFORMATIONAL_VERSION: ${{ needs.version.outputs.informational-version }}
+        run: >-
+          ./eng/Test-ViewerArchive.ps1 -Path artifacts/release -Rid $env:RID -Version $env:VERSION
+          -InformationalVersion $env:INFORMATIONAL_VERSION
+
   publish:
-    needs: [version, pack, viewer]
+    needs: [version, pack, viewer, viewer-check]
     if: needs.version.outputs.dry-run == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -296,7 +333,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   dry-run-summary:
-    needs: [version, pack, viewer]
+    needs: [version, pack, viewer, viewer-check]
     if: needs.version.outputs.dry-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
