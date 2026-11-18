@@ -9,6 +9,8 @@ dotnet run -c Release --project samples/OpenSlideSharp.Web -- /data/slides/ -p 8
 
 Under `dotnet run` the working directory is the project directory, so give the path as an absolute one. Then open http://127.0.0.1:5000/ (or the port given with `-p`).
 
+The app listens on `http://127.0.0.1:5000` only when nothing else sets an address: `-l`/`-p`, `--urls`, `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS` (which the official container images set) and Kestrel endpoints in the configuration all take its place. Invalid arguments or options (for example `-s 0`) print the problem and the usage, and the app exits with code 2.
+
 ## Pages and endpoints
 
 | URL | What |

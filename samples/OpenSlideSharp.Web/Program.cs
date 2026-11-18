@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenSlideSharp.AspNetCore;
 
 namespace OpenSlideSharp.Web;
@@ -43,8 +45,16 @@ public partial class Program
         ["--color-mode"] = "OpenSlide:ColorMode",
     };
 
+    private const string DefaultUrl = "http://127.0.0.1:5000";
+
     /// <summary>Starts the web viewer.</summary>
-    public static void Main(string[] args)
+    public static void Main(string[] args) => Environment.ExitCode = Run(args, Console.Error);
+
+    /// <summary>
+    /// Runs the web viewer until it is stopped, and returns the exit code: 0, or 2 after writing the problem and the
+    /// usage to <paramref name="stderr"/> when the arguments, <c>SlidePath</c> or the options are not valid.
+    /// </summary>
+    internal static int Run(string[] args, TextWriter stderr)
     {
         string[] mapped;
         try
@@ -53,14 +63,15 @@ public partial class Program
         }
         catch (ArgumentException e)
         {
-            Console.Error.WriteLine(e.Message);
-            Console.Error.WriteLine();
-            Console.Error.WriteLine(Usage);
-            Environment.ExitCode = 2;
-            return;
+            return Fail(stderr, e.Message);
         }
 
         WebApplicationBuilder builder = WebApplication.CreateBuilder(mapped);
+        if (DefaultUrls(builder.Configuration) is { } urls)
+        {
+            builder.WebHost.UseUrls(urls);
+        }
+
         builder.Services.AddOpenSlide(builder.Configuration.GetSection("OpenSlide"));
         builder.Services.AddSingleton<SlideSite>();
         builder.Services.AddRazorPages();
@@ -69,15 +80,12 @@ public partial class Program
         SlideSite site;
         try
         {
+            // Opens nothing yet, but checks SlidePath and, through the slide cache, the OpenSlide options.
             site = app.Services.GetRequiredService<SlideSite>();
         }
-        catch (Exception e) when (e is InvalidOperationException or IOException)
+        catch (Exception e) when (e is InvalidOperationException or IOException or OptionsValidationException)
         {
-            Console.Error.WriteLine(e.Message);
-            Console.Error.WriteLine();
-            Console.Error.WriteLine(Usage);
-            Environment.ExitCode = 2;
-            return;
+            return Fail(stderr, e.Message);
         }
 
         app.UseStaticFiles();
@@ -85,6 +93,15 @@ public partial class Program
         app.MapOmeZarr("/zarr", site.Resolver);
         app.MapRazorPages();
         app.Run();
+        return 0;
+    }
+
+    private static int Fail(TextWriter stderr, string message)
+    {
+        stderr.WriteLine(message);
+        stderr.WriteLine();
+        stderr.WriteLine(Usage);
+        return 2;
     }
 
     /// <summary>
@@ -151,6 +168,20 @@ public partial class Program
 
         return [.. values.Select(v => $"--{v.Key}={v.Value}")];
     }
+
+    /// <summary>
+    /// The address to listen on when nothing else sets one: <c>http://127.0.0.1:5000</c>, like the Python scripts.
+    /// Returns null when <c>urls</c> (<c>ASPNETCORE_URLS</c>, <c>--urls</c>, <c>-l</c>/<c>-p</c>),
+    /// <c>http_ports</c> or <c>https_ports</c> (<c>ASPNETCORE_HTTP_PORTS</c>, <c>ASPNETCORE_HTTPS_PORTS</c>), or
+    /// Kestrel endpoints are configured.
+    /// </summary>
+    internal static string? DefaultUrls(IConfiguration configuration) =>
+        string.IsNullOrEmpty(configuration["urls"])
+        && string.IsNullOrEmpty(configuration["http_ports"])
+        && string.IsNullOrEmpty(configuration["https_ports"])
+        && !configuration.GetSection("Kestrel:Endpoints").Exists()
+            ? DefaultUrl
+            : null;
 
     private static string NextValue(string[] args, ref int i)
     {
