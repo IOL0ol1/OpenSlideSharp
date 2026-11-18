@@ -175,6 +175,10 @@ jobs:
           name: packages
           path: artifacts/smoke-feed/*.nupkg
           if-no-files-found: error
+          # A called ci.yml uploads into the caller's run, and the upstream sync calls it twice in one run (for the sync
+          # branch, then through release.yml). The two calls run one after the other, so the second replaces the first's
+          # packages before its package-unix jobs download them.
+          overwrite: true
 
   package-unix:
     name: package-unix (${{ matrix.os }})
