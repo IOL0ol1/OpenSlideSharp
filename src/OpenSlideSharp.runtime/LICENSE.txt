@@ -13,9 +13,12 @@ the licenses folder of that platform:
 
 OpenSlide's license text is licenses/<platform>/OpenSlide/COPYING.LESSER.
 
-Source code: openslide-bin.json in this package names the openslide-bin build (binVersion) and its source tarball
-(source.url, with its sha256 in source.sha256). The tarball holds the source code of OpenSlide and of every
-component listed above, and the scripts that build these libraries from it.
+Source code: openslide-bin.json in this package names the openslide-bin build (binVersion) and its source tarball,
+openslide-bin-<binVersion>.tar.gz (source.url, with its sha256 in source.sha256). The tarball holds the source code
+of OpenSlide and of every component listed above, and the scripts that build these libraries from it. The same
+tarball is also attached to the OpenSlideSharp GitHub release of this package's version, tag v<package version> on
+https://github.com/IOL0ol1/OpenSlideSharp/releases, which keeps it after openslide-bin's nightly builds
+(https://github.com/openslide/builds) are removed. Check either copy by its file name and against source.sha256.
 
 The MSBuild files under build/ and buildTransitive/ are part of OpenSlideSharp
 (https://github.com/IOL0ol1/OpenSlideSharp) and are licensed under the MIT license.

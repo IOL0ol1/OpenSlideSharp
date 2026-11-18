@@ -234,9 +234,10 @@ $extraRids = @($toolRids | Where-Object { $_ -notin 'win-x64', 'linux-x64', 'lin
 if ($extraRids.Count -gt 0) { throw "tool nupkg has native assets for unsupported RIDs: $($extraRids -join ', ')" }
 
 # The tool redistributes LGPL-2.1 OpenSlide (with openslide-bin's statically linked libraries), SkiaSharp and Skia,
-# and the OpenSeadragon viewer files: their licenses must travel with it, and the license expression must name them.
+# System.CommandLine and the OpenSeadragon viewer files: their licenses must travel with it, and its LICENSE.txt must
+# state them.
 $toolEntries | Where-Object { $_ -like 'licenses/*' } | ForEach-Object { "  tool: $_" }
-foreach ($r in @('licenses/openslide-bin/openslide-bin.json') + @($binKeys | ForEach-Object { "licenses/openslide-bin/$_/VERSIONS.md", "licenses/openslide-bin/$_/OpenSlide/COPYING.LESSER" })) {
+foreach ($r in @('LICENSE.txt', 'licenses/openslide-bin/openslide-bin.json') + @($binKeys | ForEach-Object { "licenses/openslide-bin/$_/VERSIONS.md", "licenses/openslide-bin/$_/OpenSlide/COPYING.LESSER" })) {
     if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
 }
 # Exactly the runtime package's licenses/<platform>/ trees, under licenses/openslide-bin/.
@@ -249,11 +250,20 @@ foreach ($r in 'licenses/viewer/LICENSE.openseadragon', 'licenses/viewer/LICENSE
     if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
 }
 $toolMeta = (Get-NuspecXml $toolNupkg).package.metadata
-$toolLicense = 'MIT AND LGPL-2.1-only AND BSD-3-Clause'
-if ($toolMeta.license.type -ne 'expression' -or $toolMeta.license.InnerText -ne $toolLicense) {
-    throw "tool nuspec license is '$($toolMeta.license.InnerText)' ($($toolMeta.license.type)), expected the expression '$toolLicense'"
+if ($toolMeta.license.type -ne 'file' -or $toolMeta.license.InnerText -ne 'LICENSE.txt') {
+    throw "tool nuspec license is '$($toolMeta.license.InnerText)' ($($toolMeta.license.type)), expected <license type=`"file`">LICENSE.txt</license>"
 }
 if ($toolMeta.description -notmatch 'openslide-bin source tarball') { throw "tool nuspec description does not name the OpenSlide source: $($toolMeta.description)" }
+# Both license files point to the OpenSlide source: the tarball openslide-bin.json names, and its copy on the
+# OpenSlideSharp GitHub release (nightly openslide-bin builds are removed after a while).
+foreach ($license in @(@{ Name = 'runtime'; Text = Get-NupkgText $runtimeNupkg 'LICENSE.txt' }, @{ Name = 'tool'; Text = Get-NupkgText $toolNupkg 'LICENSE.txt' })) {
+    foreach ($phrase in 'source.sha256', 'openslide-bin-<binVersion>.tar.gz', 'https://github.com/IOL0ol1/OpenSlideSharp/releases') {
+        if (-not $license.Text.Contains($phrase)) { throw "$($license.Name) LICENSE.txt does not mention '$phrase'" }
+    }
+}
+foreach ($phrase in 'LGPL-2.1-only', 'licenses/openslide-bin/<platform>/OpenSlide/COPYING.LESSER', 'licenses/skiasharp/', 'licenses/viewer/', 'System.CommandLine') {
+    if (-not (Get-NupkgText $toolNupkg 'LICENSE.txt').Contains($phrase)) { throw "tool LICENSE.txt does not mention '$phrase'" }
+}
 $toolSize = (Get-Item $toolNupkg).Length
 Write-Host ("tool nupkg size: {0:N1} MB ({1} bytes)" -f ($toolSize / 1MB), $toolSize)
 

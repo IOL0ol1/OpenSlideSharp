@@ -156,4 +156,4 @@ dotnet test OpenSlideSharp.slnx
 
 ## License
 
-The managed code is MIT licensed; see [LICENSE](LICENSE). `OpenSlideSharp.runtime` redistributes OpenSlide (LGPL-2.1) built by openslide-bin, with the components linked into each platform's library under their own licenses; its `LICENSE.txt` explains the terms, and `licenses/<platform>/` holds the license texts.
+The managed code is MIT licensed; see [LICENSE](LICENSE). `OpenSlideSharp.runtime` redistributes OpenSlide (LGPL-2.1) built by openslide-bin, with the components linked into each platform's library under their own licenses; its `LICENSE.txt` explains the terms, and `licenses/<platform>/` holds the license texts. The corresponding source is the openslide-bin source tarball named in the package's `openslide-bin.json`; each [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) attaches a copy for its version. `OpenSlideSharp.Tool` states its terms in its own `LICENSE.txt`, and the viewer in `licenses/` next to its executable.

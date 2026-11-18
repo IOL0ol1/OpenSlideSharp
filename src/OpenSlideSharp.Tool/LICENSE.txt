@@ -1,0 +1,107 @@
+OpenSlideSharp.Tool: license information
+
+The tool (openslide-sharp) is part of OpenSlideSharp (https://github.com/IOL0ol1/OpenSlideSharp). Its own code is
+licensed under the MIT license below. The package also redistributes the components listed after it, each under its
+own license; their license texts are in the package's licenses/ folder, or at the end of this file.
+
+-------------------------------------------------------------------------------
+OpenSlideSharp license
+-------------------------------------------------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2026 IOL0ol1
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+-------------------------------------------------------------------------------
+Redistributed components
+-------------------------------------------------------------------------------
+
+1. OpenSlide and the libraries linked into it (openslide-bin)
+
+   The native libraries tools/net10.0/any/runtimes/<rid>/native/libopenslide-1.* are builds of OpenSlide
+   (https://openslide.org/) from openslide-bin (https://github.com/openslide/openslide-bin). OpenSlide is licensed
+   under the GNU Lesser General Public License, version 2.1 (LGPL-2.1-only). The library of each platform statically
+   links further components, each under its own license. The full license texts of OpenSlide and of these
+   components, and VERSIONS.md with their versions, are in the licenses folder of that platform:
+
+     licenses/openslide-bin/windows-x64/          runtimes/win-x64/native/
+     licenses/openslide-bin/linux-x86_64/         runtimes/linux-x64/native/
+     licenses/openslide-bin/linux-aarch64/        runtimes/linux-arm64/native/
+     licenses/openslide-bin/macos-arm64-x86_64/   runtimes/osx-arm64/native/ and runtimes/osx-x64/native/
+
+   OpenSlide's license text is licenses/openslide-bin/<platform>/OpenSlide/COPYING.LESSER.
+
+   Source code: licenses/openslide-bin/openslide-bin.json names the openslide-bin build (binVersion) and its source
+   tarball, openslide-bin-<binVersion>.tar.gz (source.url, with its sha256 in source.sha256). The tarball holds the
+   source code of OpenSlide and of every component listed above, and the scripts that build these libraries from it.
+   The same tarball is also attached to the OpenSlideSharp GitHub release of this package's version, tag
+   v<package version> on https://github.com/IOL0ol1/OpenSlideSharp/releases, which keeps it after openslide-bin's
+   nightly builds (https://github.com/openslide/builds) are removed. Check either copy by its file name and against
+   source.sha256.
+
+   The tool loads the library at run time. To use another build of OpenSlide 4.x, for example one built from that
+   source, set the OPENSLIDE_LIBRARY_PATH environment variable to its full path.
+
+2. SkiaSharp and Skia
+
+   SkiaSharp (https://github.com/mono/SkiaSharp) is licensed under the MIT license, and the native libraries
+   tools/net10.0/any/runtimes/<rid>/native/libSkiaSharp.* contain Skia (https://skia.org/), BSD-3-Clause, and further
+   third-party code. See licenses/skiasharp/LICENSE.txt (SkiaSharp's license) and
+   licenses/skiasharp/THIRD-PARTY-NOTICES.txt (the notices of the code in SkiaSharp's and HarfBuzzSharp's native
+   builds).
+
+3. OpenSeadragon and its scale bar plugin
+
+   Written by openslide-sharp deepzoom -r for its HTML viewer. OpenSeadragon (https://openseadragon.github.io/) is
+   licensed under BSD-3-Clause: licenses/viewer/LICENSE.openseadragon. The scale bar plugin
+   (https://github.com/usnistgov/OpenSeadragonScalebar) is in the public domain (NIST):
+   licenses/viewer/LICENSE.openseadragon-scalebar.
+
+4. System.CommandLine
+
+   System.CommandLine (https://github.com/dotnet/command-line-api) is licensed under the MIT license below.
+
+-------------------------------------------------------------------------------
+System.CommandLine license
+-------------------------------------------------------------------------------
+
+The MIT License (MIT)
+
+Copyright © .NET Foundation and Contributors
+
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

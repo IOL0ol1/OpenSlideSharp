@@ -63,13 +63,14 @@ Each worker holds one tile or chunk at a time, and OpenSlide keeps a tile cache 
 
 ## Licenses
 
-The tool's own code is under the MIT license. The package also contains, each under its own license, which are in the package's `licenses/` folder:
+The tool's own code is under the MIT license. The package also contains, each under its own license, which are in the package's `licenses/` folder or in `LICENSE.txt`:
 
-- OpenSlide 4.x from [openslide-bin](https://github.com/openslide/openslide-bin), LGPL-2.1, with the libraries built into it (`licenses/openslide-bin/<platform>/`, each with a `VERSIONS.md` listing their versions). The source is the openslide-bin source tarball named in `licenses/openslide-bin/openslide-bin.json`.
+- OpenSlide 4.x from [openslide-bin](https://github.com/openslide/openslide-bin), LGPL-2.1, with the libraries built into it (`licenses/openslide-bin/<platform>/`, each with a `VERSIONS.md` listing their versions). The source is the openslide-bin source tarball named in `licenses/openslide-bin/openslide-bin.json` (URL and sha256). The same file, `openslide-bin-<binVersion>.tar.gz`, is attached to the [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) of the package's version (tag `v<version>`), which keeps it after a nightly openslide-bin build is removed; check it against that sha256.
 - [SkiaSharp](https://github.com/mono/SkiaSharp), MIT, with Skia (BSD-3-Clause) and the libraries in its native build (`licenses/skiasharp/`).
 - [OpenSeadragon](https://openseadragon.github.io/), BSD-3-Clause, and its [scale bar plugin](https://github.com/usnistgov/OpenSeadragonScalebar), in the public domain (NIST), written with `-r` (`licenses/viewer/`).
+- [System.CommandLine](https://github.com/dotnet/command-line-api), MIT.
 
-The package license expression is `MIT AND LGPL-2.1-only AND BSD-3-Clause`.
+The package license is `LICENSE.txt`, which states these terms and where each license text is.
 
 ## Color
 

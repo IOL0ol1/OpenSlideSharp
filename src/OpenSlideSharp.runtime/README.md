@@ -12,7 +12,7 @@ OpenSlide ships Windows binaries for x64 only, so a .NET Framework app must run 
 
 ## Licensing
 
-The native libraries are builds of OpenSlide (LGPL-2.1) from openslide-bin. Each platform's library statically links further components, each under its own license. `LICENSE.txt` in the package states the terms. `licenses/<platform>/` (`windows-x64`, `linux-x86_64`, `linux-aarch64`, `macos-arm64-x86_64`) holds the full license texts of that platform's components and `VERSIONS.md` with their versions. `openslide-bin.json` names the openslide-bin build and its source tarball (URL and sha256), which is the corresponding source.
+The native libraries are builds of OpenSlide (LGPL-2.1) from openslide-bin. Each platform's library statically links further components, each under its own license. `LICENSE.txt` in the package states the terms. `licenses/<platform>/` (`windows-x64`, `linux-x86_64`, `linux-aarch64`, `macos-arm64-x86_64`) holds the full license texts of that platform's components and `VERSIONS.md` with their versions. `openslide-bin.json` names the openslide-bin build and its source tarball (URL and sha256), which is the corresponding source. The same file, `openslide-bin-<binVersion>.tar.gz`, is attached to the [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) of the package's version (tag `v<version>`), which keeps it after a nightly openslide-bin build is removed; check it against that sha256.
 
 ## Known issues
 
