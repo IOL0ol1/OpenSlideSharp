@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
@@ -105,7 +106,8 @@ internal static class ExportSupport
     }
 
     /// <summary>
-    /// Makes <paramref name="path"/> a new, empty output directory holding only the marker file, written first.
+    /// Makes <paramref name="path"/> a new, empty output directory holding only the marker file, written first:
+    /// <see cref="MoveAside"/>, <see cref="DeleteOldOutput"/>, then <see cref="CreateOutputDirectory"/>.
     /// </summary>
     /// <remarks>
     /// An existing directory is replaced only if it holds the marker (an earlier output, complete or not) or is empty.
@@ -114,16 +116,79 @@ internal static class ExportSupport
     /// </remarks>
     /// <param name="path">The output directory.</param>
     /// <param name="slide">The slide being exported.</param>
+    /// <param name="stderr">Where a warning goes if the old output cannot be deleted.</param>
     /// <exception cref="IOException">The directory may not be replaced.</exception>
-    public static void PrepareDirectory(string path, string slide)
+    /// <exception cref="UnauthorizedAccessException">The old output cannot be moved aside.</exception>
+    public static void PrepareDirectory(string path, string slide, TextWriter stderr)
+    {
+        string? old = MoveAside(path, slide, stderr);
+        DeleteOldOutput(old, stderr);
+        CreateOutputDirectory(path);
+    }
+
+    /// <summary>
+    /// Checks that the output directory <paramref name="path"/> may be replaced (<see cref="EnsureReplaceableDirectory"/>),
+    /// deletes what earlier replacements of it left behind, and, if it holds the marker, renames it to a hidden sibling
+    /// (<c>.&lt;name&gt;.openslide-sharp-old-&lt;id&gt;</c>) so that the name is free.
+    /// </summary>
+    /// <remarks>
+    /// The rename is one step: if it fails (on Windows, while a file in the directory is open), nothing has changed.
+    /// A recursive delete in place could instead stop half way, without the marker that lets the next run go on.
+    /// </remarks>
+    /// <returns>The directory's new path, to pass to <see cref="DeleteOldOutput"/>; or null if there was nothing to move.</returns>
+    /// <exception cref="IOException">The directory may not be replaced, or cannot be moved.</exception>
+    /// <exception cref="UnauthorizedAccessException">The directory cannot be moved.</exception>
+    public static string? MoveAside(string path, string slide, TextWriter stderr)
     {
         EnsureReplaceableDirectory(path, slide);
         string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (File.Exists(Path.Combine(full, MarkerFileName)))
+        DeleteLeftovers(full, slide, stderr);
+        if (!File.Exists(Path.Combine(full, MarkerFileName)))
         {
-            Directory.Delete(full, recursive: true);
+            return null; // missing or empty
         }
 
+        string old = Path.Combine(Path.GetDirectoryName(full)!, LeftoverPrefix(full) + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.Move(full, old);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot replace '{full}', so nothing was changed: {ex.Message} Close any program using files in it and try again.", ex);
+        }
+
+        return old;
+    }
+
+    /// <summary>
+    /// Deletes an old output moved aside by <see cref="MoveAside"/>, its marker last. If that fails, a warning names
+    /// what is left, which the next export to the same output deletes; the export goes on, since the name is free.
+    /// </summary>
+    public static void DeleteOldOutput(string? old, TextWriter stderr)
+    {
+        if (old is null)
+        {
+            return;
+        }
+
+        try
+        {
+            DeleteMarkedDirectory(old);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            stderr.WriteLine(
+                $"openslide-sharp: warning: cannot delete the previous output, moved to '{old}': {ex.Message} " +
+                "The next export to the same output deletes it; or delete it yourself.");
+        }
+    }
+
+    /// <summary>Creates the output directory <paramref name="path"/> and writes the marker into it.</summary>
+    public static void CreateOutputDirectory(string path)
+    {
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         Directory.CreateDirectory(full);
         File.WriteAllBytes(Path.Combine(full, MarkerFileName), []);
     }
@@ -134,6 +199,69 @@ internal static class ExportSupport
             Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
             Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
             OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static string LeftoverPrefix(string full) => "." + Path.GetFileName(full) + ".openslide-sharp-old-";
+
+    // Deletes the old outputs that MoveAside left next to the output when they could not be deleted: only real
+    // directories with the marker, so never one the tool did not write.
+    private static void DeleteLeftovers(string full, string slide, TextWriter stderr)
+    {
+        string? parent = Path.GetDirectoryName(full);
+        if (parent is null || !Directory.Exists(parent))
+        {
+            return;
+        }
+
+        string prefix = LeftoverPrefix(full);
+        StringComparison comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        List<DirectoryInfo> leftovers;
+        try
+        {
+            leftovers = new DirectoryInfo(parent).EnumerateDirectories()
+                .Where(d => d.Name.StartsWith(prefix, comparison))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        string slideFull = Path.GetFullPath(slide);
+        foreach (DirectoryInfo leftover in leftovers)
+        {
+            string path = Path.TrimEndingDirectorySeparator(leftover.FullName);
+            if (leftover.LinkTarget is null
+                && File.Exists(Path.Combine(path, MarkerFileName))
+                && !IsSameOrInside(Environment.CurrentDirectory, path)
+                && !IsSameOrInside(slideFull, path))
+            {
+                DeleteOldOutput(path, stderr);
+            }
+        }
+    }
+
+    // Deletes a directory the tool wrote, keeping its marker to the end, so that a delete that stops half way leaves
+    // a directory a later run still recognizes. Links inside are removed, never followed.
+    private static void DeleteMarkedDirectory(string directory)
+    {
+        var root = new DirectoryInfo(directory);
+        foreach (FileSystemInfo entry in root.EnumerateFileSystemInfos().ToList())
+        {
+            if (entry is DirectoryInfo subdirectory)
+            {
+                subdirectory.Delete(recursive: subdirectory.LinkTarget is null);
+            }
+            else if (!string.Equals(entry.Name, MarkerFileName, StringComparison.Ordinal))
+            {
+                entry.Delete();
+            }
+        }
+
+        File.Delete(Path.Combine(directory, MarkerFileName));
+        root.Delete();
+    }
 
     /// <summary>
     /// The Deep Zoom color rule for one image (the slide or an associated image, each with its own profile): the
