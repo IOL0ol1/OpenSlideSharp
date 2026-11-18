@@ -9,6 +9,8 @@ openslide-sharp deepzoom slide.svs -r         # slide/ with an HTML viewer
 openslide-sharp omezarr slide.svs             # slide.zarr/
 ```
 
+The package is about 100 MB, as it holds the OpenSlide and SkiaSharp libraries of every platform. On Windows, a native library cannot be loaded from a path longer than 260 characters (MAX_PATH), and the libraries sit up to about 180 characters below the tool path. Keep a `--tool-path` short; the `-g` location (`%USERPROFILE%\.dotnet\tools`) is fine.
+
 ## deepzoom
 
 | Option | Default | |
@@ -46,7 +48,7 @@ Every key of the store is written as a file, with `/` in the key as directories.
 - Outputs are relative to the current directory unless a path is given.
 - Every output directory (`<name>_files/`, the `-r` directory `<name>/`, each `.zarr` store, the `_associated` directory) gets an empty `.openslide-sharp-output` marker file before anything else. Existing output is replaced: `<name>.dzi` is overwritten, and an existing output directory is deleted first, but only if it holds that marker or is empty. Any other existing directory, or a file where an output directory would go (such as an extensionless slide with `-r`), stops the export with exit code 1 and nothing is deleted. Root directories, the current directory and its ancestors, directories holding the slide, and a MIRAX slide's data directory (`name/` next to `name.mrxs`) are never deleted.
 - Every file is written to `.<file>.tmp` next to it and then moved into place, so no file is ever partially written. The `.dzi` is written after the tiles, and the OME-Zarr root metadata (`zarr.json`, or `.zgroup` and `.zattrs`) after every chunk and level, so an interrupted export is not mistaken for a complete one.
-- Progress goes to stderr, at most once a second: `Tiling <image>: <done>/<total> tiles`.
+- Progress goes to stderr, at most once a second: `Tiling <image>: <done>/<total> tiles`. Warnings (see [Color](#color)) and errors go to stderr too, prefixed with `openslide-sharp:`.
 - Ctrl+C stops the export once the files being written are complete.
 - Exit codes: 0 on success, 1 if the slide cannot be opened or the export fails, 2 for invalid arguments, 130 when canceled.
 
