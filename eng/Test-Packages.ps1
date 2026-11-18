@@ -407,76 +407,12 @@ finally {
     Remove-Item $toolTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 6. The desktop viewer, published the way its releases will be: self-contained, one executable and its licenses, for
-# this machine's RID, with the native OpenSlide library from the runtime package in the feed. --check reads the slide
-# without a window.
+# 6. The desktop viewer, published the way its releases are (eng/Publish-Viewer.ps1): self-contained, one executable
+# and its licenses, for this machine's RID, with the native OpenSlide library from the runtime package in the feed,
+# and run with --check, which reads the slide without a window.
 Write-Host '== smoke: viewer (self-contained single file)'
-$hostArch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-# Picked the way eng/Get-OpenSlide.ps1 picks this machine's binaries.
-$viewerRid = if ($IsWindows -and $hostArch -eq 'X64') { 'win-x64' }
-elseif ($IsLinux -and $hostArch -eq 'X64') { 'linux-x64' }
-elseif ($IsLinux -and $hostArch -eq 'Arm64') { 'linux-arm64' }
-elseif ($IsMacOS -and $hostArch -eq 'Arm64') { 'osx-arm64' }
-elseif ($IsMacOS -and $hostArch -eq 'X64') { 'osx-x64' }
-else { throw "[viewer] OpenSlide publishes no binaries for this platform ($hostArch)" }
-$viewerOut = Join-Path $artifacts 'smoke/viewer'
-Invoke-Native dotnet @('publish', (Join-Path $root 'samples/OpenSlideSharp.Viewer'), '-c', 'Release', '-r', $viewerRid, '--self-contained',
-    '-p:PublishSingleFile=true', '-p:UseOpenSlideRuntimePackage=true', "-p:OpenSlideSharpVersion=$Version",
-    "-p:RestoreAdditionalProjectSources=$feed", '--artifacts-path', $viewerOut)
-$viewerPublish = Join-Path $viewerOut "publish/OpenSlideSharp.Viewer/release_$viewerRid"
-$viewerName = $IsWindows ? 'OpenSlideSharp.Viewer.exe' : 'OpenSlideSharp.Viewer'
-# The publish folder is exactly what a release archives: the executable, with the native libraries inside it, and
-# licenses/ with the notices of what it contains.
-$published = @(Get-ChildItem $viewerPublish -Recurse -File | ForEach-Object {
-        [pscustomobject]@{ Path = [IO.Path]::GetRelativePath($viewerPublish, $_.FullName) -replace '\\', '/'; Length = $_.Length }
-    })
-$published | ForEach-Object { Write-Host ("published: {0} ({1:N1} KB)" -f $_.Path, ($_.Length / 1KB)) }
-$paths = @($published | ForEach-Object Path)
-$unexpected = @($paths | Where-Object { $_ -ne $viewerName -and -not $_.StartsWith('licenses/') })
-if ($paths -notcontains $viewerName -or $unexpected.Count -gt 0) {
-    throw "[viewer] expected $viewerName and licenses/ in $viewerPublish, found: $($paths -join ', ')"
-}
-# The license texts of OpenSlide and of the libraries linked into it, from the runtime package: exactly those of the
-# openslide-bin archive this RID's library comes from, and no other platform's.
-$viewerBinKey = @{ 'win-x64' = 'windows-x64'; 'linux-x64' = 'linux-x86_64'; 'linux-arm64' = 'linux-aarch64'; 'osx-arm64' = 'macos-arm64-x86_64'; 'osx-x64' = 'macos-arm64-x86_64' }[$viewerRid]
-foreach ($required in 'licenses/THIRD-PARTY-NOTICES.txt', 'licenses/SOURCE.md', 'licenses/openslide-bin/openslide-bin.json',
-    "licenses/openslide-bin/$viewerBinKey/VERSIONS.md", "licenses/openslide-bin/$viewerBinKey/OpenSlide/COPYING.LESSER") {
-    if ($paths -notcontains $required) { throw "[viewer] $required is not in $viewerPublish" }
-}
-$binLicenses = @($paths | Where-Object { $_ -like 'licenses/openslide-bin/*/*' } | ForEach-Object { $_.Substring('licenses/openslide-bin/'.Length) } | Sort-Object)
-$wantBinLicenses = @($runtimeLicenses | Where-Object { $_ -like "$viewerBinKey/*" })
-if (($binLicenses -join "`n") -cne ($wantBinLicenses -join "`n")) {
-    throw "[viewer] licenses/openslide-bin/ has $($binLicenses.Count) files ($((@($binLicenses | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique)) -join ', ')), expected the runtime nupkg's $($wantBinLicenses.Count) under licenses/$viewerBinKey/ only"
-}
-Write-Host "licenses/openslide-bin/$viewerBinKey`: $($binLicenses.Count) license files"
-# SOURCE.md is written at publish from openslide-bin.json: the exact build, its source tarball and the release copy.
-$sourceMd = Get-Content (Join-Path $viewerPublish 'licenses/SOURCE.md') -Raw
-foreach ($phrase in $manifest.binVersion, "openslide-bin-$($manifest.binVersion).tar.gz", $manifest.source.sha256, $manifest.source.url,
-    $manifest.openslideVersion, "https://github.com/IOL0ol1/OpenSlideSharp/releases/tag/v$Version", "openslide-bin/$viewerBinKey/", 'OPENSLIDE_LIBRARY_PATH') {
-    if (-not $sourceMd.Contains("$phrase")) { throw "[viewer] licenses/SOURCE.md does not contain '$phrase'" }
-}
-# The bundle extracts its native libraries when it starts; a fresh extraction directory shows they came from it.
-$viewerExtract = Join-Path $viewerOut 'extract'
-$env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = $viewerExtract
-try {
-    # Piped, so that PowerShell waits for the viewer, a GUI program on Windows, and captures what it prints.
-    $output = & (Join-Path $viewerPublish $viewerName) --check $fixture 2>&1 | Out-String
-    $code = $LASTEXITCODE
-}
-finally {
-    Remove-Item Env:DOTNET_BUNDLE_EXTRACT_BASE_DIR -ErrorAction SilentlyContinue
-}
-Write-Host $output
-if ($code -ne 0) { throw "[viewer] --check exited with code $code, expected 0" }
-foreach ($line in 'openslide=4.', 'slide=16x16') {
-    if ($output -notmatch [regex]::Escape($line)) { throw "[viewer] --check output does not contain '$line'" }
-}
-$extracted = @(Get-ChildItem $viewerExtract -Recurse -File | ForEach-Object { $_.Name })
-$extracted | ForEach-Object { Write-Host "extracted: $_" }
-foreach ($lib in 'libopenslide-1', 'libSkiaSharp', 'libHarfBuzzSharp') {
-    if (-not ($extracted | Where-Object { [IO.Path]::GetFileNameWithoutExtension($_) -eq $lib })) { throw "[viewer] $lib is not in the bundle" }
-}
-Write-Host "PASS: viewer ($viewerRid)"
+& (Join-Path $PSScriptRoot 'Publish-Viewer.ps1') -Version $Version -Feed $feed -OpenSlideUpstreamVersion $OpenSlideUpstreamVersion `
+    -ArtifactsPath (Join-Path $artifacts 'smoke/viewer')
 
 # 7. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
 if ($IsWindows) {
