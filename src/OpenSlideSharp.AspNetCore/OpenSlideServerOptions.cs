@@ -97,5 +97,12 @@ public sealed class OmeZarrServerOptions
     /// (<c>Access-Control-Allow-Origin: *</c>), as web viewers such as vizarr need. The default is
     /// <see langword="true"/>.
     /// </summary>
+    /// <remarks>
+    /// When set, the OME-Zarr endpoint writes its own CORS headers and answers every preflight, which overrides any
+    /// CORS policy of the app on these URLs; set it to <see langword="false"/> to use ASP.NET Core's CORS middleware
+    /// instead (for example to allow only some origins, or credentials). <c>*</c> lets any website read every store
+    /// the visitor's browser can reach without credentials, including associated images such as the label, which
+    /// may carry patient information.
+    /// </remarks>
     public bool AllowCrossOrigin { get; set; } = true;
 }

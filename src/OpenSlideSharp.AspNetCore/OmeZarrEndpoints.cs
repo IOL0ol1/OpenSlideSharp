@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using OpenSlideSharp.AspNetCore.Internal;
 
 namespace OpenSlideSharp.AspNetCore;
@@ -27,9 +28,13 @@ public static class OmeZarrEndpointRouteBuilderExtensions
     /// </list>
     /// <para>
     /// GET renders a chunk when asked for one. HEAD answers 200 with the Content-Type and no body for a key that
-    /// exists, without rendering. OPTIONS answers 204 with the CORS preflight headers. When
-    /// <see cref="OmeZarrServerOptions.AllowCrossOrigin"/> is set (the default), every response of this endpoint,
-    /// including 404 and 500, carries <c>Access-Control-Allow-Origin: *</c>.
+    /// exists, without rendering. OPTIONS answers 204. When <see cref="OmeZarrServerOptions.AllowCrossOrigin"/> is
+    /// set (the default), every response of this endpoint, including 404 and 500, carries
+    /// <c>Access-Control-Allow-Origin: *</c>, and the 204 to OPTIONS adds the preflight headers
+    /// (<c>Access-Control-Allow-Methods</c>, <c>Access-Control-Max-Age</c>, and <c>Access-Control-Allow-Headers</c>
+    /// echoing <c>Access-Control-Request-Headers</c> when the request has it). These headers take the place of any
+    /// CORS policy of the app on these URLs. When it is not set, the endpoint writes no CORS headers and OPTIONS
+    /// answers a bare 204, leaving CORS to the app's own middleware.
     /// </para>
     /// <para>
     /// Everything else, including probes such as <c>.zmetadata</c>, a key longer than
@@ -64,6 +69,13 @@ public static class OmeZarrEndpointRouteBuilderExtensions
             {
                 context.Response.Headers.AccessControlAllowMethods = "GET, HEAD, OPTIONS";
                 context.Response.Headers.AccessControlMaxAge = "86400";
+
+                // Viewers may send headers such as Range; allow whatever the preflight asks for, as '*' would.
+                StringValues requested = context.Request.Headers.AccessControlRequestHeaders;
+                if (!StringValues.IsNullOrEmpty(requested))
+                {
+                    context.Response.Headers.AccessControlAllowHeaders = requested;
+                }
             }
         }
 
