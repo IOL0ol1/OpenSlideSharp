@@ -116,10 +116,11 @@ try {
         # Copied from the managed assembly into the apphost; an SDK that cannot do that on the publishing host leaves
         # the apphost's own resources (NETSDK1074).
         $info = (Get-Item $exe).VersionInfo
-        Write-Host "ProductVersion: $($info.ProductVersion), FileVersion: $($info.FileVersion)"
-        $versionOk = $InformationalVersion ? $info.ProductVersion -ceq $InformationalVersion : ($info.ProductVersion -ceq $Version -or $info.ProductVersion.StartsWith("$Version+", [StringComparison]::Ordinal))
+        $productVersion = "$($info.ProductVersion)"
+        Write-Host "ProductVersion: $productVersion, FileVersion: $($info.FileVersion)"
+        $versionOk = $InformationalVersion ? $productVersion -ceq $InformationalVersion : ($productVersion -ceq $Version -or $productVersion.StartsWith("$Version+", [StringComparison]::Ordinal))
         if (-not $versionOk) {
-            throw "$exeName has ProductVersion '$($info.ProductVersion)', expected '$($InformationalVersion ? $InformationalVersion : $Version)'."
+            throw "$exeName has ProductVersion '$productVersion', expected '$($InformationalVersion ? $InformationalVersion : $Version)'."
         }
         $pe = Get-PeResourceInfo $exe
         Write-Host "Subsystem: $($pe.Subsystem), manifests: $($pe.Manifests.Count)"
