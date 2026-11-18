@@ -26,7 +26,15 @@ Package versions map to the openslide-bin builds listed on <https://openslide.or
 | Release `4.0.1.2` | `4.0.1.2` |
 | Nightly `4.0.1.2+20261102.nightly` (OpenSlide `g174630bf`) | `4.0.1.3-nightly.20261102.g174630bf` |
 
-A nightly version increments the fourth number, then carries the build date and the OpenSlide commit hash.
+A nightly version increments the fourth number, then carries the build date and the OpenSlide commit hash. It is a prerelease (`dotnet add package OpenSlideSharp --prerelease`) that sorts above the openslide-bin release it builds on. A release that changes only OpenSlideSharp, on the same openslide-bin build, appends `.1`, `.2`, … to the version, such as `4.0.1.3-nightly.20261102.g174630bf.1`. When that build is an openslide-bin release, such a version takes the nightly form, with the release's date and OpenSlide commit.
+
+Releases are made by GitHub Actions:
+
+- Every day, the Upstream sync workflow looks for a newer openslide-bin release or nightly build. It pins the next one in `eng/openslide.json`, regenerates the bindings, runs CI, fast-forwards `master` and releases that commit. It takes one build per run, a release before a nightly. A build that fails changes nothing, and gets one issue titled `Upstream sync failed: openslide-bin <tag>`. If `master` moved during the run, the update comes as a pull request instead.
+- A push to `master` that changes `src/**`, `eng/openslide.json` or `Directory.*.props` releases that commit.
+- Other changes, such as to the viewer sample or the `eng/` scripts, are released by running the Release workflow by hand.
+
+A release tests the commit on all platforms, pushes the five packages to nuget.org, tags the commit `v<version>` and creates a GitHub release with the packages, the viewer archives and the openslide-bin source tarball. Without the `NUGET_API_KEY` secret it is a dry run: it builds and checks everything, publishes nothing and lists what it would release in the run summary.
 
 ## Install
 
@@ -153,6 +161,21 @@ Requires the .NET 10 SDK and PowerShell 7.
 pwsh eng/Get-OpenSlide.ps1    # download the native OpenSlide pinned in eng/openslide.json
 dotnet test OpenSlideSharp.slnx
 ```
+
+## Old packages
+
+These 1.x packages end at the version shown and are not updated anymore. Use the replacement instead.
+
+| Package | Last version | Replacement |
+|---|---|---|
+| `OpenSlideSharp.Interop` | 1.0.445.17 | `OpenSlideSharp`; the generated bindings are in its `OpenSlideSharp.Native` namespace |
+| `OpenSlideSharp.Windows` | 1.1.2 | `OpenSlideSharp` and `OpenSlideSharp.runtime` |
+| `OpenSlideSharp.runtime.win` | 1.1.2 | `OpenSlideSharp.runtime` |
+| `OpenSlideSharp.BitmapExtensions` | 1.1.2 | `OpenSlideSharp.SkiaSharp` |
+| `OpenSlideSharp.OpenCVExtensions` | 1.1.2 | None; `PixelImage.Data` holds the BGRA pixels |
+| `OpenSlideSharp.BruTile` | 1.1.2 | None |
+
+`OpenSlideSharp` itself goes on from 1.1.2 to 4.x, with a new API.
 
 ## License
 
