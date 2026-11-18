@@ -218,6 +218,25 @@ public class EncodeTests
         Assert.Equal(img.Encode(ImageFormat.Jpeg, 90, ColorMode.Ignore), jpeg);
     }
 
+    private sealed class ThrowingTransform : IColorTransform
+    {
+        public void Apply(Span<byte> pixels, int width, int height) => throw new InvalidOperationException("cannot convert");
+    }
+
+    [Fact]
+    public void Encode_DefaultWhenTransformThrows_FallsBackToEmbed()
+    {
+        byte[] profile = Icc("swap-rb-matrix.icc");
+        var img = Opaque(2, 2, new byte[2 * 2 * 4], profile);
+
+        byte[] png = PixelImageExtensions.Encode(img, ImageFormat.Png, 75, ColorMode.Default, _ => new ThrowingTransform());
+        byte[] jpeg = PixelImageExtensions.Encode(img, ImageFormat.Jpeg, 75, ColorMode.Default, _ => new ThrowingTransform());
+
+        Assert.Equal(profile, PngIccProfile(png));
+        Assert.Equal(profile, JpegIccProfile(jpeg));
+        Assert.Equal(img.Encode(ImageFormat.Png, colorMode: ColorMode.Embed), png);
+    }
+
     [Fact]
     public void Encode_DefaultWithUnusableProfileTooLargeForJpeg_DropsIt()
     {

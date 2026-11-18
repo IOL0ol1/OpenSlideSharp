@@ -56,7 +56,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Install zarr-python and ome-zarr
+      - name: Install zarr-python, ome-zarr and fsspec
         run: pip install -r eng/requirements-interop.txt
       - name: Export OME-Zarr stores
         env:
@@ -64,6 +64,47 @@ jobs:
         run: dotnet test OpenSlideSharp.slnx -c Release
       - name: Read the stores with zarr-python and ome-zarr
         run: python eng/verify-omezarr.py ${{ runner.temp }}/omezarr
+      - name: Export OME-Zarr stores with the tool
+        run: |
+          for ngff in 0.4 0.5; do
+            dotnet run --project src/OpenSlideSharp.Tool -c Release -- omezarr test/OpenSlideSharp.Tests/Fixtures/boxes.tiff --chunk 64 --ngff "$ngff" -o "$RUNNER_TEMP/tool/boxes-$ngff.zarr"
+          done
+      - name: Read the tool's stores
+        # Same chunk size as the interop export, so every level must match its expected pixels.
+        run: python eng/verify-omezarr.py --stores "$RUNNER_TEMP/tool/boxes-0.4.zarr" "$RUNNER_TEMP/tool/boxes-0.5.zarr" --manifest "$RUNNER_TEMP/omezarr"
+      - name: Start the web sample
+        run: |
+          # Built by the test step, so the wait below is startup only. setsid gives dotnet run and the app their own
+          # process group, which the last step stops.
+          setsid dotnet run -c Release --no-build --project samples/OpenSlideSharp.Web -- "$GITHUB_WORKSPACE/test/OpenSlideSharp.Tests/Fixtures/boxes.tiff" -p 5055 > "$RUNNER_TEMP/web.log" 2>&1 < /dev/null &
+          echo $! > "$RUNNER_TEMP/web.pid"
+          for i in $(seq 60); do
+            if curl -fs -o /dev/null http://127.0.0.1:5055/zarr/slide.zarr/zarr.json; then
+              echo "The web sample answered after $i s"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/web.pid")" 2>/dev/null; then
+              echo "::error::The web sample exited before serving /zarr/slide.zarr/zarr.json"
+              cat "$RUNNER_TEMP/web.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "::error::The web sample did not serve /zarr/slide.zarr/zarr.json within 60 s"
+          cat "$RUNNER_TEMP/web.log"
+          exit 1
+      - name: Read the served store with zarr-python, fsspec and ome-zarr
+        # boxes.tiff fits in one 512-pixel chunk, so the served store has one level, read straight from the slide.
+        run: python eng/verify-omezarr.py --url http://127.0.0.1:5055/zarr/slide.zarr --manifest "$RUNNER_TEMP/omezarr"
+      - name: Stop the web sample
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/web.pid" ]; then
+            kill -- "-$(cat "$RUNNER_TEMP/web.pid")" 2>/dev/null || true
+            echo "::group::Web sample log"
+            cat "$RUNNER_TEMP/web.log"
+            echo "::endgroup::"
+          fi
 
   bindings:
     runs-on: windows-latest

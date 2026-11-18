@@ -1,0 +1,97 @@
+/* Layout after openslide-python's slide-multipane.html and files.html. */
+body {
+    margin: 5px;
+    font-family: system-ui, sans-serif;
+}
+
+h1 {
+    font-size: 1.2em;
+}
+
+.notice {
+    font-style: italic;
+}
+
+.slide-list ul {
+    padding-left: 1.5em;
+}
+
+.slide-list li {
+    list-style-type: none;
+    margin: 0.4em 0;
+}
+
+body.viewer {
+    overflow: hidden;
+}
+
+.viewer-page {
+    display: grid;
+    grid-template-columns: 15% minmax(0, 58%) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    column-gap: 1%;
+    height: calc(100vh - 10px);
+}
+
+#images h2 {
+    font-size: 1em;
+    margin: 0;
+}
+
+#images {
+    overflow: auto;
+}
+
+#images ul {
+    margin: 0;
+    padding-left: 0;
+}
+
+#images li {
+    list-style-type: none;
+}
+
+.associated-images {
+    margin-left: 1.5em;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.current-slide {
+    background-color: #ccf;
+}
+
+#view {
+    background-color: black;
+    border: 1px solid #000;
+    color: white;
+}
+
+#properties {
+    overflow: auto;
+}
+
+#properties-inner {
+    display: inline-block;
+}
+
+#properties dl {
+    font-size: small;
+    margin: 0;
+}
+
+#properties dt {
+    font-weight: bold;
+    border-top: 1px solid #000;
+    background-color: #eee;
+}
+
+#properties dd {
+    margin-left: 0;
+}
+
+#zarr {
+    grid-column: 1 / -1;
+    font-size: small;
+    padding: 4px 0;
+}

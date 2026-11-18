@@ -1,8 +1,9 @@
 #requires -Version 7
 <#
-Packs OpenSlideSharp, OpenSlideSharp.SkiaSharp and OpenSlideSharp.runtime into artifacts/smoke-feed and
-proves the nupkgs work for real consumers (net10.0, net48 x64 and AnyCPU,
-no-runtime, and a Visual Studio C++ project), plus the 32-bit build warning.
+Packs OpenSlideSharp, OpenSlideSharp.SkiaSharp, OpenSlideSharp.runtime, OpenSlideSharp.AspNetCore and the
+OpenSlideSharp.Tool .NET tool into artifacts/smoke-feed and proves the nupkgs work for real consumers (net10.0,
+an ASP.NET Core app, net48 x64 and AnyCPU, no-runtime, the installed tool and a Visual Studio C++ project), plus the
+32-bit build warning.
 
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
@@ -21,6 +22,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $artifacts = Join-Path $root 'artifacts'
 $feed = Join-Path $artifacts 'smoke-feed'
 $smokeProj = Join-Path $root 'test/PackageSmoke'
+$packages = Join-Path $artifacts 'smoke-packages'
 $fixture = Join-Path $root 'test/OpenSlideSharp.Tests/Fixtures/small.svs'
 
 function Invoke-Native {
@@ -37,15 +39,23 @@ New-Item -ItemType Directory -Force $feed | Out-Null
 
 # 1. Pack all packages (or, with -SkipPack, require them to be in the feed already).
 if ($SkipPack) {
-    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.runtime') {
+    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.runtime', 'OpenSlideSharp.AspNetCore', 'OpenSlideSharp.Tool') {
         $nupkg = Join-Path $feed "$id.$Version.nupkg"
         if (-not (Test-Path $nupkg)) { throw "-SkipPack: '$nupkg' not found; put the nupkgs for version $Version into $feed first" }
     }
 }
 else {
-    foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj') {
+    foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj', 'src/OpenSlideSharp.AspNetCore/OpenSlideSharp.AspNetCore.csproj') {
         Invoke-Native dotnet @('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed, "-p:Version=$Version")
     }
+
+    # The tool carries the native library of every RID through OpenSlideSharp.runtime, restored from the feed just
+    # packed. It restores into the isolated cache, so smoke versions never reach the user's NuGet cache, and builds
+    # into its own artifacts folder, so the regular build output keeps its own restore.
+    $env:NUGET_PACKAGES = $packages
+    Invoke-Native dotnet @('pack', (Join-Path $root 'src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj'), '-c', 'Release', '-o', $feed,
+        "-p:Version=$Version", '-p:UseOpenSlideRuntimePackage=true', "-p:RestoreAdditionalProjectSources=$feed",
+        '--artifacts-path', (Join-Path $artifacts 'smoke/pack-tool'))
 }
 
 # 2. Assert nupkg contents.
@@ -77,6 +87,9 @@ foreach ($r in $required) {
     if ($entries -notcontains $r) { throw "runtime nupkg is missing '$r'" }
 }
 if (-not ($entries | Where-Object { $_ -like 'licenses/*' })) { throw "runtime nupkg has no licenses/**" }
+# openslide-bin's layout, licenses/<project>/<file>, without the project directory doubled.
+if ($entries -notcontains 'licenses/OpenSlide/COPYING.LESSER') { throw "runtime nupkg is missing 'licenses/OpenSlide/COPYING.LESSER'" }
+if ($entries | Where-Object { $_ -match '^licenses/([^/]+)/\1/' }) { throw 'runtime nupkg has doubled directories under licenses/' }
 if ($entries | Where-Object { $_ -match '\.debug$' }) { throw "runtime nupkg contains .debug files" }
 if ($entries | Where-Object { $_ -match '\.dSYM(/|$)' }) { throw "runtime nupkg contains .dSYM entries" }
 if ($entries | Where-Object { $_ -match '(^|/)slidetool' }) { throw "runtime nupkg contains slidetool" }
@@ -117,8 +130,79 @@ foreach ($g in $skiaGroups) {
     }
 }
 
+# OpenSlideSharp.AspNetCore: net10.0 only, on the core and Skia packages of the same version and the ASP.NET Core
+# shared framework. The native library is the app's choice, so no runtime package.
+$aspMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.AspNetCore.$Version.nupkg")).package.metadata
+$aspGroups = @($aspMeta.dependencies.group)
+if ($aspGroups.Count -ne 1 -or $aspGroups[0].targetFramework -ne 'net10.0') {
+    throw "AspNetCore nuspec dependency groups are '$(($aspGroups | ForEach-Object { $_.targetFramework }) -join ', ')', expected only net10.0"
+}
+$aspDeps = @{}
+foreach ($d in @($aspGroups[0].dependency)) { $aspDeps[$d.id] = $d.version }
+$aspIds = ($aspDeps.Keys | Sort-Object) -join ', '
+if ($aspIds -ne 'OpenSlideSharp, OpenSlideSharp.SkiaSharp') { throw "AspNetCore nuspec depends on '$aspIds', expected exactly OpenSlideSharp and OpenSlideSharp.SkiaSharp" }
+foreach ($id in $aspDeps.Keys) {
+    if ($aspDeps[$id] -notmatch ('^\[?' + [regex]::Escape($Version) + '(, \))?\]?$')) { throw "AspNetCore nuspec: $id version is '$($aspDeps[$id])', expected $Version" }
+}
+if ($aspMeta.SelectNodes("//*[local-name()='frameworkReference'][@name='Microsoft.AspNetCore.App']").Count -ne 1) {
+    throw 'AspNetCore nuspec lacks frameworkReference Microsoft.AspNetCore.App'
+}
+
+# OpenSlideSharp.Tool: a .NET tool with the OpenSlide and SkiaSharp native libraries of every supported platform.
+$toolNupkg = Join-Path $feed "OpenSlideSharp.Tool.$Version.nupkg"
+$toolTypes = @((Get-NuspecXml $toolNupkg).package.metadata.packageTypes.packageType | ForEach-Object { $_.name })
+if ($toolTypes -notcontains 'DotnetTool') { throw "tool nuspec package types are '$($toolTypes -join ', ')', expected DotnetTool" }
+$toolEntries = Get-NupkgEntries $toolNupkg
+$toolNative = 'tools/net10.0/any/runtimes'
+$toolEntries | Where-Object { $_ -like "$toolNative/*" } | ForEach-Object { "  tool: $_" }
+$toolRequired = @(
+    'tools/net10.0/any/DotnetToolSettings.xml',
+    "$toolNative/win-x64/native/libopenslide-1.dll",
+    "$toolNative/linux-x64/native/libopenslide-1.so",
+    "$toolNative/linux-arm64/native/libopenslide-1.so",
+    "$toolNative/osx-arm64/native/libopenslide-1.dylib",
+    "$toolNative/osx-x64/native/libopenslide-1.dylib",
+    "$toolNative/win-x64/native/libSkiaSharp.dll",
+    "$toolNative/linux-x64/native/libSkiaSharp.so",
+    "$toolNative/linux-arm64/native/libSkiaSharp.so",
+    "$toolNative/osx/native/libSkiaSharp.dylib"
+)
+foreach ($r in $toolRequired) {
+    if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
+}
+if ($toolEntries | Where-Object { $_ -like "$toolNative/*.pdb" }) { throw 'tool nupkg contains native .pdb files' }
+
+# Only the RIDs OpenSlide ships (plus SkiaSharp's universal "osx"): SkiaSharp's other RIDs could never run.
+$toolRids = @($toolEntries | Where-Object { $_ -like "$toolNative/*" } | ForEach-Object { ($_.Substring($toolNative.Length + 1) -split '/')[0] } | Sort-Object -Unique)
+$extraRids = @($toolRids | Where-Object { $_ -notin 'win-x64', 'linux-x64', 'linux-arm64', 'osx', 'osx-x64', 'osx-arm64' })
+if ($extraRids.Count -gt 0) { throw "tool nupkg has native assets for unsupported RIDs: $($extraRids -join ', ')" }
+
+# The tool redistributes LGPL-2.1 OpenSlide (with openslide-bin's statically linked libraries), SkiaSharp and Skia,
+# and the OpenSeadragon viewer files: their licenses must travel with it, and the license expression must name them.
+$toolEntries | Where-Object { $_ -like 'licenses/*' } | ForEach-Object { "  tool: $_" }
+if ($toolEntries -notcontains 'licenses/openslide-bin/VERSIONS.md') { throw "tool nupkg is missing 'licenses/openslide-bin/VERSIONS.md'" }
+if ($toolEntries -notcontains 'licenses/openslide-bin/OpenSlide/COPYING.LESSER') { throw "tool nupkg is missing OpenSlide's license, 'licenses/openslide-bin/OpenSlide/COPYING.LESSER'" }
+if ($toolEntries | Where-Object { $_ -match '^licenses/openslide-bin/([^/]+)/\1/' }) { throw 'tool nupkg has doubled directories under licenses/openslide-bin/' }
+$openslideBinLicenses = @($toolEntries | Where-Object { $_ -match '^licenses/openslide-bin/[^/]+/.' })
+$runtimeLicenses = @($entries | Where-Object { $_ -match '^licenses/[^/]+/.' })
+if ($openslideBinLicenses.Count -ne $runtimeLicenses.Count) {
+    throw "tool nupkg has $($openslideBinLicenses.Count) files under licenses/openslide-bin/, the runtime nupkg $($runtimeLicenses.Count) under licenses/"
+}
+if (-not ($openslideBinLicenses | Where-Object { $_ -match '/(COPYING|LICENSE)[^/]*$' })) { throw 'tool nupkg has no COPYING or LICENSE file under licenses/openslide-bin/' }
+foreach ($r in 'licenses/viewer/LICENSE.openseadragon', 'licenses/viewer/LICENSE.openseadragon-scalebar', 'licenses/skiasharp/LICENSE.txt', 'licenses/skiasharp/THIRD-PARTY-NOTICES.txt') {
+    if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
+}
+$toolMeta = (Get-NuspecXml $toolNupkg).package.metadata
+$toolLicense = 'MIT AND LGPL-2.1-only AND BSD-3-Clause'
+if ($toolMeta.license.type -ne 'expression' -or $toolMeta.license.InnerText -ne $toolLicense) {
+    throw "tool nuspec license is '$($toolMeta.license.InnerText)' ($($toolMeta.license.type)), expected the expression '$toolLicense'"
+}
+if ($toolMeta.description -notmatch 'openslide-bin source tarball') { throw "tool nuspec description does not name the OpenSlide source: $($toolMeta.description)" }
+$toolSize = (Get-Item $toolNupkg).Length
+Write-Host ("tool nupkg size: {0:N1} MB ({1} bytes)" -f ($toolSize / 1MB), $toolSize)
+
 # 3. Consume the packages from an isolated global cache.
-$env:NUGET_PACKAGES = Join-Path $artifacts 'smoke-packages'
+$env:NUGET_PACKAGES = $packages
 
 # Builds the smoke project; returns the output folder and the captured build log.
 function Build-Smoke {
@@ -181,6 +265,8 @@ function Invoke-Smoke {
 
 # The net10.0 assembly must stay AnyCPU so it also runs on arm64 hosts.
 Invoke-Smoke -Name 'net10.0' -Tfm 'net10.0' -Extra @() -ExpectedArch 'anycpu' -ExpectedExit 0 -ExpectedText 'vendor=aperio'
+# An ASP.NET Core app that serves the slide through OpenSlideSharp.AspNetCore and fetches a DZI, a tile and zarr.json.
+Invoke-Smoke -Name 'aspnetcore' -Tfm 'net10.0' -Extra @('-p:SmokeAspNetCore=true') -ExpectedArch 'anycpu' -ExpectedExit 0 -ExpectedText 'aspnetcore=ok'
 if ($IsWindows) {
     Invoke-Smoke -Name 'net48' -Tfm 'net48' -Extra @() -ExpectedArch 'x64' -ExpectedExit 0 -ExpectedText 'vendor=aperio'
     # A default .NET Framework console app: AnyCPU, for which the SDK infers the win-x86 RuntimeIdentifier.
@@ -196,7 +282,26 @@ if ($IsWindows) {
 # 4. Without the runtime package the core must explain what is missing.
 Invoke-Smoke -Name 'no-runtime' -Tfm 'net10.0' -Extra @('-p:WithoutRuntime=true') -ExpectedArch 'anycpu' -ExpectedExit 3 -ExpectedText 'OpenSlideSharp.runtime'
 
-# 5. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
+# 5. The tool, installed from the feed the way users install it, exports Deep Zoom tiles.
+Write-Host '== smoke: openslide-sharp tool'
+# Keep the tool path short: Windows does not load a native library whose path is longer than MAX_PATH (260).
+$toolTemp = Join-Path ($env:RUNNER_TEMP ? $env:RUNNER_TEMP : [IO.Path]::GetTempPath()) ('oss-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+try {
+    $toolPath = Join-Path $toolTemp 'bin'
+    Invoke-Native dotnet @('tool', 'install', 'OpenSlideSharp.Tool', '--tool-path', $toolPath, '--add-source', $feed, '--version', $Version)
+    $toolExe = Join-Path $toolPath $(if ($IsWindows) { 'openslide-sharp.exe' } else { 'openslide-sharp' })
+    $toolOut = Join-Path $toolTemp 'small'
+    Invoke-Native $toolExe @('deepzoom', $fixture, '-o', $toolOut)
+    if (-not (Test-Path -PathType Leaf "$toolOut.dzi")) { throw "[tool] $toolOut.dzi was not written" }
+    $tiles = @(Get-ChildItem "${toolOut}_files" -Recurse -File -Filter '*.jpeg' -ErrorAction SilentlyContinue)
+    if ($tiles.Count -eq 0) { throw "[tool] no .jpeg tiles under ${toolOut}_files" }
+    Write-Host "PASS: tool ($($tiles.Count) tiles)"
+}
+finally {
+    Remove-Item $toolTemp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# 6. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
 if ($IsWindows) {
     $cppProj = Join-Path $root 'test/NativeCppSmoke'
     $nuget = Join-Path $artifacts 'tools/nuget.exe'

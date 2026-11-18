@@ -20,4 +20,12 @@
     <PackageReference Include="OpenSlideSharp.runtime" Version="$(OpenSlideSharpVersion)" Condition="'$(WithoutRuntime)' != 'true'" />
   </ItemGroup>
 
+  <!-- -p:SmokeAspNetCore=true (net10.0): also serve the slide through OpenSlideSharp.AspNetCore (AspNetCoreSmoke.cs). -->
+  <PropertyGroup Condition="'$(SmokeAspNetCore)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <DefineConstants>$(DefineConstants);SMOKE_ASPNETCORE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(SmokeAspNetCore)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="OpenSlideSharp.AspNetCore" Version="$(OpenSlideSharpVersion)" />
+  </ItemGroup>
+
 </Project>

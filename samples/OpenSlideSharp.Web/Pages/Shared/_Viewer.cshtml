@@ -1,0 +1,55 @@
+@model SlideView
+@* Three panes as in openslide-python's slide-multipane.html: images, viewer, properties. *@
+<main class="viewer-page">
+    <nav id="images">
+        <h1>View</h1>
+        <div class="current-slide">
+            <a class="load-slide" href="#" data-url="@Model.DeepZoomUrl" data-mpp="@Model.Mpp">Slide</a>
+        </div>
+        <h2>Associated images</h2>
+        @if (Model.Associated.Count > 0)
+        {
+            <ul class="associated-images">
+                @foreach (var image in Model.Associated)
+                {
+                    <li><a class="load-slide" href="#" data-url="@image.Value" data-mpp="0">@image.Key</a></li>
+                }
+            </ul>
+        }
+        else
+        {
+            <span class="associated-images notice">None</span>
+        }
+        @if (!ViewData.ContainsKey("SingleMode"))
+        {
+            <p><a href="@Url.Content("~/")">All slides</a></p>
+        }
+    </nav>
+    <div id="view" data-prefix-url="@Url.Content("~/lib/images/")" data-url="@Model.DeepZoomUrl" data-mpp="@Model.Mpp"></div>
+    <section id="properties">
+        <h1>Slide properties</h1>
+        @if (Model.Properties.Count > 0)
+        {
+            <div id="properties-inner">
+                <dl>
+                    @foreach (var property in Model.Properties)
+                    {
+                        <dt>@property.Key</dt>
+                        <dd>@property.Value</dd>
+                    }
+                </dl>
+            </div>
+        }
+        else
+        {
+            <span class="notice">None</span>
+        }
+    </section>
+    <footer id="zarr">
+        OME-Zarr: <a href="@Model.OmeZarrUrl">@Model.OmeZarrUrl</a>
+        &middot; <a href="@Model.VizarrUrl" target="_blank" rel="noopener">Open in vizarr</a>
+    </footer>
+</main>
+<script src="@Url.Content("~/lib/openseadragon.min.js")"></script>
+<script src="@Url.Content("~/lib/openseadragon-scalebar.js")"></script>
+<script src="@Url.Content("~/viewer/viewer.js")"></script>

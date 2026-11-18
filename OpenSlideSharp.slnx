@@ -1,10 +1,18 @@
 <Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/OpenSlideSharp.Web/OpenSlideSharp.Web.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj" />
     <Project Path="src/OpenSlideSharp/OpenSlideSharp.csproj" />
     <Project Path="src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj" />
+    <Project Path="src/OpenSlideSharp.AspNetCore/OpenSlideSharp.AspNetCore.csproj" />
+    <Project Path="src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/OpenSlideSharp.Tests/OpenSlideSharp.Tests.csproj" />
+    <Project Path="test/OpenSlideSharp.AspNetCore.Tests/OpenSlideSharp.AspNetCore.Tests.csproj" />
+    <Project Path="test/OpenSlideSharp.Web.Tests/OpenSlideSharp.Web.Tests.csproj" />
+    <Project Path="test/OpenSlideSharp.Tool.Tests/OpenSlideSharp.Tool.Tests.csproj" />
   </Folder>
 </Solution>

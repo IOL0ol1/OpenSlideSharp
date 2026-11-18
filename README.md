@@ -14,6 +14,8 @@
 | `OpenSlideSharp` | Managed API over P/Invoke bindings generated from the OpenSlide headers with ClangSharp. Targets `netstandard2.0`, `netstandard2.1` and `net10.0`. |
 | `OpenSlideSharp.SkiaSharp` | JPEG and PNG encoding of `PixelImage` and ICC to sRGB conversion, built on SkiaSharp. |
 | `OpenSlideSharp.runtime` | Native OpenSlide libraries from [openslide-bin](https://github.com/openslide/openslide-bin) for `win-x64`, `linux-x64`, `linux-arm64`, `osx-arm64` and `osx-x64`. Also works with .NET Framework (64-bit process) and Visual Studio C++ projects (x64). |
+| `OpenSlideSharp.AspNetCore` | ASP.NET Core endpoints that serve slides as Deep Zoom and OME-Zarr, with a shared slide cache. Targets `net10.0`. |
+| `OpenSlideSharp.Tool` | `openslide-sharp`, a .NET tool that exports slides as Deep Zoom tiles or OME-Zarr. Includes the native libraries. |
 
 ## Versioning
 
@@ -86,6 +88,47 @@ byte[] jpeg = thumbnail.Encode(ImageFormat.Jpeg, quality: 85);
 ```
 
 OpenSlide errors surface as `OpenSlideException`. They are sticky: after the first one, every later call on that slide throws.
+
+### ASP.NET Core
+
+With `OpenSlideSharp.AspNetCore` (plus `OpenSlideSharp.runtime`, or your own OpenSlide), an app serves slides to OpenSeadragon and OME-Zarr viewers:
+
+```csharp
+using OpenSlideSharp.AspNetCore;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddOpenSlide();
+
+var app = builder.Build();
+var slides = new DirectorySlideResolver("/data/slides");
+app.MapDeepZoom("/dz", slides);    // /dz/{slide}.dzi, /dz/{slide}_files/{level}/{col}_{row}.jpeg
+app.MapOmeZarr("/zarr", slides);   // /zarr/{slide}.zarr/{key}
+app.Run();
+```
+
+Options, URLs and color handling are in [its README](src/OpenSlideSharp.AspNetCore/README.md).
+
+### Command-line tool
+
+```sh
+dotnet tool install -g OpenSlideSharp.Tool
+openslide-sharp deepzoom slide.svs        # slide.dzi and slide_files/, like deepzoom_tile.py
+openslide-sharp deepzoom slide.svs -r     # slide/ with an HTML viewer
+openslide-sharp omezarr slide.svs         # slide.zarr/
+```
+
+Options are in [its README](src/OpenSlideSharp.Tool/README.md).
+
+## Web sample
+
+[`samples/OpenSlideSharp.Web`](samples/OpenSlideSharp.Web/README.md) shows one slide, or a directory of slides, in OpenSeadragon, like openslide-python's `deepzoom_server.py` and `deepzoom_multiserver.py`, and serves each slide as OME-Zarr too. From a checkout:
+
+```sh
+pwsh eng/Get-OpenSlide.ps1
+dotnet run -c Release --project samples/OpenSlideSharp.Web -- /path/to/slide.svs    # or a directory
+```
+
+Then open <http://127.0.0.1:5000/>. Give an absolute path: under `dotnet run` the working directory is the project directory.
 
 ## Known issues
 

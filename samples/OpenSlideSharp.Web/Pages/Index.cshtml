@@ -1,0 +1,24 @@
+@page
+@model IndexModel
+@if (Model.Slide is not null)
+{
+    ViewData["Title"] = "Slide Viewer";
+    ViewData["BodyClass"] = "viewer";
+    ViewData["SingleMode"] = true;
+    <partial name="_Viewer" model="Model.Slide" />
+}
+else
+{
+    ViewData["Title"] = "Available Slides";
+    <h1>Available Slides</h1>
+    @if (Model.Slides.Count > 0)
+    {
+        <div class="slide-list">
+            <partial name="_Tree" model="Model.Slides" />
+        </div>
+    }
+    else
+    {
+        <p class="notice">None</p>
+    }
+}

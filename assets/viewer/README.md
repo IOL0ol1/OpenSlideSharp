@@ -1,0 +1,61 @@
+# Viewer assets
+
+Third-party browser assets for the `OpenSlideSharp.Web` sample. They are vendored unmodified, so the sample has no CDN dependency.
+
+| File | Source |
+|---|---|
+| `openseadragon.min.js`, `images/` | npm `openseadragon@6.1.1` (`package/build/openseadragon/`), tarball sha256 `b4ab2942f33b90e0448e4d20fc5ed14cee049f1f3ae49d70afd4b05e9a2f92d0` |
+| `openseadragon-scalebar.js` | https://github.com/usnistgov/OpenSeadragonScalebar at commit `e30716c06939e1dbccaeba7472ba1b98a1f047da` |
+| `licenses/LICENSE.openseadragon` | `LICENSE.txt` of the `openseadragon@6.1.1` package (BSD-3-Clause; openslide-python's copy differs only in the copyright year) |
+| `licenses/LICENSE.openseadragon-scalebar` | openslide-python `examples/deepzoom/licenses/LICENSE.openseadragon-scalebar` (NIST public-domain notice) |
+
+The `.map` file of OpenSeadragon is not vendored, so browsers may log a missing source map when developer tools are open.
+
+## sha256 of the committed files
+
+```
+14d587cd3ee7c4861f1a41077ce642029364a21029956ba635bd8fb1202cf9ad *openseadragon.min.js
+23805b610b9b7d17835c9c7c595adb763fbe4af4836941e30c1e693362c72964 *openseadragon-scalebar.js
+17da96b26ac706d2cbd06d4555dedb43026782f4943faf0156fe7acf89454228 *licenses/LICENSE.openseadragon
+a06f10f659e32bdbe9a1855cd6690435542291bf64efcbbc5f58f806649c098f *licenses/LICENSE.openseadragon-scalebar
+2e64df18c27b1a51955c47cbe7535fa2a25548cefb7d1a2de625b59f31853cb6 *images/button_grouphover.png
+b1086485b0d055d468a729f5a6a79f78fc06fdfa814710dedb7021a7d6206fde *images/button_hover.png
+01f1c05bdee216ec417e3475552cd053ce3199bfd2c9e1660f2c7cdc60d0be11 *images/button_pressed.png
+5c693c3b03e6efc5c491ab2e8e1ba81800de423a16da8c7f348c19ae8924d142 *images/button_rest.png
+4fd7b938cc4c9130e479d4d10d86c2f30365729693643621b8c1453d2af24333 *images/flip_grouphover.png
+8ba844f9109df84e914603952518f56d1c6ef5431b6d77e65ae0b0882688b1d0 *images/flip_hover.png
+736c5718b4ec4dad0873ae3f0517cb24f8199156627ee85f0490ec5088aebdc4 *images/flip_pressed.png
+e32e934c0b244c0422ec4677a87a4ff7e0617687cd9c4a59f1f91e3edfde5315 *images/flip_rest.png
+f96415fcf86eff56b664f2328ffd61972b98738874d995e077091344f59fc26b *images/fullpage_grouphover.png
+3cc954037484edb4a74d97a374605301b4da04c034981af70ec0ec3e1bb509a8 *images/fullpage_hover.png
+7b3d188695ec59993a09cf27dde280b1da93fd43360f721642b42229b9e5e817 *images/fullpage_pressed.png
+1b7ae93b3fe5d0df99e196bfe22b93c7f05d2d5e0fdf97b8b8e957e5476ff586 *images/fullpage_rest.png
+2f2dfd6ed6fd11c1aec5491c36f071cf51a96712ddac54b803a8fee917ce27d8 *images/home_grouphover.png
+170fc906037fe8707d3757775ea4ccb3ebbf883329c44473cd247d0f22c320d9 *images/home_hover.png
+e8a08eb8d9862e63c8df96fbe508956ae031b09d85533adf83e094c5b187833c *images/home_pressed.png
+6fd27483f507bf8b4a15d6c60d43e9bb3bd14b84959973d61a622bbb4777dfc9 *images/home_rest.png
+e7c76fb2c8a792a63efe2ad76da276fd079f50ec0df2b03b04bfc36cfc217103 *images/next_grouphover.png
+67210c1194693f480cfe9935281fd447a86c46b65e67ce182632cb518dfd2bb9 *images/next_hover.png
+95afb05783b4c599eec66a21a2b98ea09d6b0be41cce42ed512239cede37a1ab *images/next_pressed.png
+d9b1965f3bcddd3db23e63037a27152c1b7528811582c68b7b4bf25b8673fe07 *images/next_rest.png
+c7e82a94049ff615a7dc6f78ae3758d7d33eab41a69093d9c1101c164c07fe8b *images/previous_grouphover.png
+94126f0047e7901b3d2e408abb58b20744a7251786746d7508624db5b4c81bce *images/previous_hover.png
+b80145c436ff5cd94c3f672eed9f1723fcd13077870337874171e99dee9f9929 *images/previous_pressed.png
+56999fcbe41a0ebb5d701fb463caea0e3850478d1f869e2e7a73b7dc363ca2e2 *images/previous_rest.png
+35d3cf9efe958bd88ae0c532648403824df252fa6835aa586301b19c80c264e3 *images/rotateleft_grouphover.png
+59fee051c2aff4c8491255be664f87671c089db4863f933989b10263818cf435 *images/rotateleft_hover.png
+97d28095eb471109d0aee65f9f4dc5ee6dba6d7fed433e3a910dcda69ca4a977 *images/rotateleft_pressed.png
+ab4731e3c7d7a4b40ea07c16269e8117ce58506177dc438cc00cdf837f513f09 *images/rotateleft_rest.png
+ebdaf54f82601db210a5ac2e0a54790c0decd8dea5bd115f7d6d0d2bf04c5e00 *images/rotateright_grouphover.png
+a9124016ebe30ec16f3691a16cc57997174652f480f3002d45beaf918b1230c1 *images/rotateright_hover.png
+a75e74dab723a0587d365e4b076572d1440df9f31c424ef4a6be62f3a45d472b *images/rotateright_pressed.png
+c201ce35f6651e824eee3eb5ca3e42fc40035d2070eec9ce1261c8b7bc126526 *images/rotateright_rest.png
+ecd40589890cdfd81911752c4af02c691a201c21d74bbad5f3d9336463b52604 *images/zoomin_grouphover.png
+6a2c08cf07b12162f73e80417d6e49e7da4b219981c9929abf89fbd1a18b58a2 *images/zoomin_hover.png
+b9eb902ca333aaabd8cf77c1184a6aa24311bcba0d836dc6ebded4c5d7146475 *images/zoomin_pressed.png
+674258f78d924bfe2454a637ecf912fe7069105ab68980f69674ff5c25521ed9 *images/zoomin_rest.png
+b582631f7ede7c640c46a29d74728814d3b7332b14748054ae460aa9be929e77 *images/zoomout_grouphover.png
+b752facaf76d197e235dd789929e86577339ffa280b6a51621388f2cad9900e1 *images/zoomout_hover.png
+99ce17d25e10d07ebe3a21642eb350bfd80c603cbb6a4b0af705fbcdf8ca57dc *images/zoomout_pressed.png
+a4ff50ab46d8de87c720cb9cbccc9b4bef1cdda1394b9c8a2b4e6fb2f63e13aa *images/zoomout_rest.png
+```

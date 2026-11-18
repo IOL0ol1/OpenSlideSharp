@@ -26,7 +26,11 @@ internal static class Program
             }
 
             Console.WriteLine("png=ok");
+#if SMOKE_ASPNETCORE
+            return AspNetCoreSmoke.RunAsync(args[0]).GetAwaiter().GetResult();
+#else
             return 0;
+#endif
         }
         catch (DllNotFoundException ex)
         {

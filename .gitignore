@@ -347,3 +347,6 @@ test/NativeCppSmoke/packages/
 test/NativeCppSmoke/Release/
 test/NativeCppSmoke/x64/
 test/NativeCppSmoke/Win32/
+
+# Copied from assets/viewer by the sample build
+samples/OpenSlideSharp.Web/wwwroot/lib/
