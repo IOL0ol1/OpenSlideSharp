@@ -139,16 +139,7 @@ pwsh eng/Get-OpenSlide.ps1
 dotnet run -c Release --project samples/OpenSlideSharp.Viewer -- /path/to/slide.svs    # or File → Open, or drop a file
 ```
 
-| Input | Action |
-|---|---|
-| Drag | Pan |
-| Wheel | Zoom at the pointer |
-| Shift + drag | Select a rectangle |
-| Arrow keys, `W` `A` `S` `D` | Pan by 100 pixels |
-| `+` or `=`, `-` | Zoom in, out |
-| `Z` | Fit the slide to the window |
-| `1` | Zoom to 1:1 (level 0) |
-| Space | Center the slide |
+Its README lists the shortcuts, the `--check` mode and the self-contained publish.
 
 ## Known issues
 
