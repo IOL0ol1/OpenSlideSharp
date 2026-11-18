@@ -1,11 +1,13 @@
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
 namespace OpenSlideSharp.Viewer;
 
-/// <summary>The Avalonia application: the Fluent theme (App.axaml) and the main window.</summary>
+/// <summary>
+/// The Avalonia application: the Fluent theme (App.axaml) and the main window, which opens the slide given as the
+/// first command-line argument.
+/// </summary>
 public partial class App : Application
 {
     public override void Initialize()
@@ -17,8 +19,13 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Placeholder until the main window exists.
-            desktop.MainWindow = new Window { Title = "OpenSlide Viewer", Width = 1024, Height = 768 };
+            var window = new MainWindow();
+            desktop.MainWindow = window;
+            if (desktop.Args is [string path, ..])
+            {
+                // A slide that cannot be opened is reported in the window, not thrown.
+                _ = window.OpenAsync(path);
+            }
         }
 
         base.OnFrameworkInitializationCompleted();
