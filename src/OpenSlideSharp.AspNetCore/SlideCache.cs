@@ -25,7 +25,8 @@ namespace OpenSlideSharp.AspNetCore;
 /// <para>
 /// A slide leaves the cache when it is the least recently used one and room is needed, or through
 /// <see cref="Evict(string)"/>. It is closed once it has left the cache and every lease on it has been disposed, so
-/// requests still using it are not disturbed. All members are thread-safe.
+/// requests still using it are not disturbed. All slides share one OpenSlide tile cache of
+/// <see cref="OpenSlideServerOptions.TileCacheSize"/> MiB. All members are thread-safe.
 /// </para>
 /// </remarks>
 public sealed class SlideCache : IDisposable
@@ -36,6 +37,7 @@ public sealed class SlideCache : IDisposable
     private readonly OpenSlideServerOptions _options;
     private readonly ILogger<SlideCache> _logger;
     private readonly int _capacity;
+    private readonly Lazy<OpenSlideCache?> _tileCache;
     private readonly Lock _lock = new();
 
     // Every slide in the cache, open or still being opened; only open ones are in _recency and count towards the
@@ -44,24 +46,32 @@ public sealed class SlideCache : IDisposable
     private readonly LinkedList<CacheItem> _recency = new(); // open slides, most recently used first
     private bool _disposed;
     private int _openCount;
+    private int _tileCacheAssignments;
 
     /// <summary>Creates a slide cache.</summary>
-    /// <param name="options">The server options; the cache uses them as they are when it is created.</param>
+    /// <param name="options">
+    /// The server options. They are validated and copied: later changes to the options object have no effect on
+    /// this cache.
+    /// </param>
     /// <param name="logger">Receives a debug message for each slide that cannot be opened, and color warnings.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> or <paramref name="logger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><see cref="OpenSlideServerOptions.SlideCacheSize"/> is less than 1.</exception>
     /// <exception cref="OptionsValidationException">The options are not valid.</exception>
     public SlideCache(IOptions<OpenSlideServerOptions> options, ILogger<SlideCache> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
-        _options = options.Value;
+        OpenSlideServerOptions value = options.Value;
+        ArgumentNullException.ThrowIfNull(value, nameof(options));
+        OpenSlideServerOptionsValidator.ThrowIfInvalid(value);
+        _options = value.Clone();
         _logger = logger;
         _capacity = _options.SlideCacheSize;
-        if (_capacity < 1)
-        {
-            throw new ArgumentException("SlideCacheSize must be at least 1.", nameof(options));
-        }
+
+        // Created with the first slide, so that a cache that never opens one never loads the native library.
+        long tileCacheBytes = _options.TileCacheSize * 1024L * 1024L;
+        _tileCache = new Lazy<OpenSlideCache?>(
+            () => tileCacheBytes == 0 ? null : new OpenSlideCache(tileCacheBytes),
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary>Gets the number of slides in the cache, including ones still being opened.</summary>
@@ -78,6 +88,9 @@ public sealed class SlideCache : IDisposable
 
     /// <summary>Gets how many times <see cref="OpenSlide.Open"/> has been called. For tests.</summary>
     internal int OpenCount => Volatile.Read(ref _openCount);
+
+    /// <summary>Gets how many slides were given the shared tile cache. For tests.</summary>
+    internal int TileCacheAssignments => Volatile.Read(ref _tileCacheAssignments);
 
     /// <summary>Leases a slide, opening it if it is not in the cache.</summary>
     /// <param name="filePath">Path of the slide file.</param>
@@ -212,6 +225,12 @@ public sealed class SlideCache : IDisposable
         {
             item.Release();
         }
+
+        // Slides that use the tile cache keep their own reference to it.
+        if (_tileCache.IsValueCreated)
+        {
+            _tileCache.Value?.Dispose();
+        }
     }
 
     private static bool TryGetKey(string filePath, [NotNullWhen(true)] out string? key, [NotNullWhen(false)] out Exception? error)
@@ -298,6 +317,26 @@ public sealed class SlideCache : IDisposable
             // OpenSlideUnsupportedFormatException covers missing files; ArgumentException a NUL in the path.
             Log.CannotOpenSlide(_logger, filePath, e);
             return null;
+        }
+
+        try
+        {
+            if (_tileCache.Value is { } tileCache)
+            {
+                slide.SetCache(tileCache);
+                Interlocked.Increment(ref _tileCacheAssignments);
+            }
+        }
+        catch (OpenSlideException e)
+        {
+            slide.Dispose();
+            Log.CannotOpenSlide(_logger, filePath, e);
+            return null;
+        }
+        catch
+        {
+            slide.Dispose();
+            throw;
         }
 
         return new SlideEntry(filePath, slide, _options, _logger);

@@ -33,13 +33,14 @@ public static class DeepZoomEndpointRouteBuilderExtensions
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><c>AddOpenSlide</c> was not called.</exception>
     public static IEndpointConventionBuilder MapDeepZoom(this IEndpointRouteBuilder endpoints, string prefix, ISlideResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(prefix);
         ArgumentNullException.ThrowIfNull(resolver);
 
-        ILogger logger = EndpointSupport.CreateLogger(endpoints, "OpenSlideSharp.AspNetCore.DeepZoom");
+        ILogger logger = EndpointSupport.Prepare(endpoints, nameof(MapDeepZoom), "OpenSlideSharp.AspNetCore.DeepZoom");
         string pattern = prefix.TrimEnd('/') + "/{**path}";
         return endpoints.MapMethods(
             pattern,

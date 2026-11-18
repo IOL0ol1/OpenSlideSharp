@@ -269,6 +269,55 @@ public class SlideCacheTests
     }
 
     [Fact]
+    public void SlideCache_Constructor_ValidatesOptions()
+    {
+        var options = new OpenSlideServerOptions();
+        options.DeepZoom.TileSize = 0;
+
+        var e = Assert.Throws<OptionsValidationException>(() => new SlideCache(Options.Create(options), NullLogger<SlideCache>.Instance));
+        Assert.Contains("TileSize", e.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SlideCache_Constructor_SnapshotsOptions()
+    {
+        var options = new OpenSlideServerOptions();
+        using var cache = new SlideCache(Options.Create(options), NullLogger<SlideCache>.Instance);
+
+        // Changes after the cache was created have no effect, valid or not.
+        options.SlideCacheSize = 0;
+        options.ColorMode = ColorMode.Embed;
+        options.DeepZoom.TileSize = 126;
+        options.OmeZarr.ChunkSize = 64;
+
+        using SlideLease lease = cache.TryAcquire(TestFiles.Get("boxes.tiff"))!;
+        Assert.Equal(ColorMode.Ignore, lease.Entry.EncodeMode(null));
+        Assert.Equal(254, lease.Entry.GetDeepZoom(null).TileSize);
+        Assert.Equal(512, lease.Entry.GetOmeZarr(null).ChunkSize);
+    }
+
+    [Fact]
+    public void SlideCache_Evict_ReopensNextTime()
+    {
+        using SlideCache cache = CreateCache();
+        string path = TestFiles.Get("boxes.tiff");
+
+        SlideEntry before;
+        using (SlideLease lease = cache.TryAcquire(path)!)
+        {
+            before = lease.Entry;
+        }
+
+        cache.Evict(path);
+        Assert.Equal(0, cache.Count);
+
+        using SlideLease after = cache.TryAcquire(path)!;
+        Assert.NotSame(before, after.Entry);
+        Assert.Equal(2, cache.OpenCount);
+        Assert.Throws<ObjectDisposedException>(() => before.Slide.ReadRegion(0, 0, 0, 2, 2));
+    }
+
+    [Fact]
     public void SlideCache_EvictByStaleLease_KeepsNewerInstance()
     {
         using SlideCache cache = CreateCache();
@@ -299,24 +348,26 @@ public class SlideCacheTests
     }
 
     [Fact]
-    public void SlideCache_Evict_ReopensNextTime()
+    public void SlideCache_TileCache_IsSetOnEverySlide()
     {
-        using SlideCache cache = CreateCache();
-        string path = TestFiles.Get("boxes.tiff");
-
-        SlideEntry before;
-        using (SlideLease lease = cache.TryAcquire(path)!)
+        using (SlideCache cache = CreateCache())
         {
-            before = lease.Entry;
+            using SlideLease boxes = cache.TryAcquire(TestFiles.Get("boxes.tiff"))!;
+            using SlideLease small = cache.TryAcquire(TestFiles.Get("small.svs"))!;
+            Assert.Null(cache.TryAcquire(TestFiles.Get("unopenable.tiff")));
+
+            Assert.Equal(2, cache.TileCacheAssignments);
+            Assert.Equal(16, boxes.Entry.Slide.ReadRegion(0, 0, 0, 2, 2).Data.Length);
+            Assert.Equal(16, small.Entry.Slide.ReadRegion(0, 0, 0, 2, 2).Data.Length);
         }
 
-        cache.Evict(path);
-        Assert.Equal(0, cache.Count);
-
-        using SlideLease after = cache.TryAcquire(path)!;
-        Assert.NotSame(before, after.Entry);
-        Assert.Equal(2, cache.OpenCount);
-        Assert.Throws<ObjectDisposedException>(() => before.Slide.ReadRegion(0, 0, 0, 2, 2));
+        // 0 keeps OpenSlide's own cache of each slide.
+        using (SlideCache cache = CreateCache(o => o.TileCacheSize = 0))
+        using (SlideLease boxes = cache.TryAcquire(TestFiles.Get("boxes.tiff"))!)
+        {
+            Assert.Equal(0, cache.TileCacheAssignments);
+            Assert.Equal(16, boxes.Entry.Slide.ReadRegion(0, 0, 0, 2, 2).Data.Length);
+        }
     }
 
     [Fact]
@@ -517,6 +568,7 @@ public class SlideCacheTests
     [InlineData("GzipLevel", -1)]
     [InlineData("GzipLevel", 10)]
     [InlineData("RenderCacheSize", -1)]
+    [InlineData("TileCacheSize", -1)]
     public void Options_Invalid_ThrowOnResolve(string setting, int value)
     {
         var services = new ServiceCollection();
@@ -525,6 +577,7 @@ public class SlideCacheTests
             switch (setting)
             {
                 case "SlideCacheSize": o.SlideCacheSize = value; break;
+                case "TileCacheSize": o.TileCacheSize = value; break;
                 case "TileSize": o.DeepZoom.TileSize = value; break;
                 case "Overlap": o.DeepZoom.Overlap = value; break;
                 case "Quality": o.DeepZoom.Quality = value; break;
@@ -549,6 +602,7 @@ public class SlideCacheTests
         OpenSlideServerOptions options = provider.GetRequiredService<IOptions<OpenSlideServerOptions>>().Value;
 
         Assert.Equal(10, options.SlideCacheSize);
+        Assert.Equal(128, options.TileCacheSize);
         Assert.Equal(ColorMode.Default, options.ColorMode);
         Assert.Equal(254, options.DeepZoom.TileSize);
         Assert.Equal(1, options.DeepZoom.Overlap);
@@ -573,6 +627,7 @@ public class SlideCacheTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["SlideCacheSize"] = "3",
+                ["TileCacheSize"] = "64",
                 ["ColorMode"] = "embed",
                 ["DeepZoom:TileSize"] = "510",
                 ["DeepZoom:Format"] = "png",
@@ -587,6 +642,7 @@ public class SlideCacheTests
         OpenSlideServerOptions options = provider.GetRequiredService<IOptions<OpenSlideServerOptions>>().Value;
 
         Assert.Equal(3, options.SlideCacheSize);
+        Assert.Equal(64, options.TileCacheSize);
         Assert.Equal(ColorMode.Embed, options.ColorMode);
         Assert.Equal(510, options.DeepZoom.TileSize);
         Assert.Equal(ImageFormat.Png, options.DeepZoom.Format);

@@ -44,13 +44,14 @@ public static class OmeZarrEndpointRouteBuilderExtensions
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><c>AddOpenSlide</c> was not called.</exception>
     public static IEndpointConventionBuilder MapOmeZarr(this IEndpointRouteBuilder endpoints, string prefix, ISlideResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(prefix);
         ArgumentNullException.ThrowIfNull(resolver);
 
-        ILogger logger = EndpointSupport.CreateLogger(endpoints, "OpenSlideSharp.AspNetCore.OmeZarr");
+        ILogger logger = EndpointSupport.Prepare(endpoints, nameof(MapOmeZarr), "OpenSlideSharp.AspNetCore.OmeZarr");
         string pattern = prefix.TrimEnd('/') + "/{**path}";
         return endpoints.MapMethods(
             pattern,
