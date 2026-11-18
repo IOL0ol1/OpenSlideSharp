@@ -7,7 +7,8 @@ below, each under its own license.
 
 Where a component's NuGet package ships license or notice files, the publish copies them into a folder named
 after the package, next to this file. The licenses of the other components are reproduced at the end of this
-file.
+file. OpenSlideSharp.runtime's LICENSE.txt is left out: it describes the layout of that package, and item 1 and
+SOURCE.md say the same for this folder.
 
 
 1. OpenSlide and the libraries linked into it (openslide-bin)

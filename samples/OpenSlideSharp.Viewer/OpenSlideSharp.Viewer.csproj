@@ -102,6 +102,12 @@
       <_ViewerPackage Include="@(_ViewerPackageFile->'%(PackageDir)'->Distinct())" Condition="'%(_ViewerPackageFile.PackageDir)' != ''" />
       <_ViewerPackageLicense Include="%(_ViewerPackage.Identity)LICENSE*;%(_ViewerPackage.Identity)THIRD-PARTY-NOTICES*"
                              PackageId="%(_ViewerPackage.NuGetPackageId)" />
+      <!--
+        Not OpenSlideSharp.runtime's LICENSE.txt: it describes that package's layout (licenses/<platform>/,
+        runtimes/), not this folder's. What it says is in THIRD-PARTY-NOTICES.txt (item 1) and SOURCE.md, and the
+        license texts are under openslide-bin/.
+      -->
+      <_ViewerPackageLicense Remove="@(_ViewerPackageLicense)" Condition="'%(_ViewerPackageLicense.PackageId)' == 'OpenSlideSharp.runtime'" />
 
       <_OpenSlideBinLicense Include="$(_OpenSlideBinDir)/licenses/$(_OpenSlideBinLicenseDir)**" />
 

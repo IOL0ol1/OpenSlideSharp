@@ -6,7 +6,8 @@
   the native OpenSlide library from the OpenSlideSharp.runtime package in a local feed.
 .DESCRIPTION
   Then checks the publish folder: only the executable and licenses/, with exactly the notices of the openslide-bin
-  archive the RID's library comes from (as the runtime package has them), and a licenses/SOURCE.md that names the
+  archive the RID's library comes from (as the runtime package has them), without the runtime package's own
+  LICENSE.txt (it describes the nupkg's layout), and a licenses/SOURCE.md that names the
   openslide-bin build of eng/openslide.json, its source tarball and the OpenSlideSharp release v<Version>.
   When -Rid is this machine's, also runs the executable with --check on test/OpenSlideSharp.Tests/Fixtures/small.svs
   (it reads the slide without a window) and checks that the native libraries came out of the bundle.
@@ -102,6 +103,9 @@ foreach ($required in 'licenses/THIRD-PARTY-NOTICES.txt', 'licenses/SOURCE.md', 
     "licenses/openslide-bin/$binKey/VERSIONS.md", "licenses/openslide-bin/$binKey/OpenSlide/COPYING.LESSER") {
     if ($paths -notcontains $required) { throw "[viewer] $required is not in $publish" }
 }
+# The runtime package's own LICENSE.txt describes the nupkg's layout, which this folder does not have.
+$runtimeLicense = @($paths | Where-Object { $_ -like 'licenses/OpenSlideSharp.runtime/*' })
+if ($runtimeLicense.Count -gt 0) { throw "[viewer] $($runtimeLicense -join ', ') must not be in $publish" }
 $zip = [IO.Compression.ZipFile]::OpenRead($runtimeNupkg)
 try { $runtimeEntries = @($zip.Entries | ForEach-Object { [Uri]::UnescapeDataString($_.FullName) }) }
 finally { $zip.Dispose() }
