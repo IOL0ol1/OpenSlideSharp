@@ -45,7 +45,7 @@ public class TileLoaderTests
         var reader = new FakeReader(blocked: true);
         using var cache = new TileCache(1 << 20);
         var loaded = new ConcurrentQueue<TileKey>();
-        var loader = new TileLoader(reader.Read, cache, 1, loaded.Enqueue);
+        using var loader = new TileLoader(reader.Read, cache, 1, loaded.Enqueue);
         var first = new TileKey(0, 0, 0);
 
         loader.Request([first]);
@@ -97,14 +97,16 @@ public class TileLoaderTests
         var reader = new FakeReader(blocked: true);
         using var cache = new TileCache(1 << 20);
         int loaded = 0, failed = 0;
-        var loader = new TileLoader(reader.Read, cache, 2, _ => Interlocked.Increment(ref loaded));
+        using var loader = new TileLoader(reader.Read, cache, 2, _ => Interlocked.Increment(ref loaded));
         loader.Failed += _ => Interlocked.Increment(ref failed);
         TileKey[] keys = [new(0, 0, 0), new(0, 1, 0), new(0, 2, 0)];
         loader.Request(keys);
         Assert.True(reader.Entered.Wait(Timeout, Token) && reader.Entered.Wait(Timeout, Token), "the reads did not start");
 
         Task dispose = Task.Run(loader.Dispose, Token);
-        await Task.WhenAny(dispose, Task.Delay(200, Token));
+        // Dispose drops the queued third tile at once, then waits for the two reads in flight. Releasing the reads
+        // before that could let a worker start the third tile.
+        Wait.Until(() => loader.Pending == 2, "Dispose drops the queued tile");
         Assert.False(dispose.IsCompleted, "Dispose returned while reads were still running");
         reader.Release();
         await dispose.WaitAsync(Timeout, Token); // throws if it does not return, or if it threw
@@ -126,7 +128,7 @@ public class TileLoaderTests
         var reader = new FakeReader(blocked: true);
         using var cache = new TileCache(1 << 20);
         int loaded = 0, failed = 0;
-        var loader = new TileLoader(reader.Read, cache, 1, _ => Interlocked.Increment(ref loaded))
+        using var loader = new TileLoader(reader.Read, cache, 1, _ => Interlocked.Increment(ref loaded))
         {
             DisposeTimeout = TimeSpan.FromMilliseconds(100),
         };
@@ -169,6 +171,55 @@ public class TileLoaderTests
         Assert.Equal(new[] { a, b }.ToHashSet(), reader.Reads.ToHashSet()); // the queued tile was dropped
         Assert.Empty(loaded);
         Assert.Single(failures);
+    }
+
+    [Fact]
+    public void Loader_ThrowingLoadedHandler_KeepsLoading()
+    {
+        var reader = new FakeReader();
+        using var cache = new TileCache(1 << 20);
+        var loaded = new ConcurrentQueue<TileKey>();
+        var failures = new ConcurrentQueue<Exception>();
+        using var loader = new TileLoader(reader.Read, cache, 1, key =>
+        {
+            loaded.Enqueue(key);
+            throw new InvalidOperationException("a bug in the handler");
+        });
+        loader.Failed += failures.Enqueue;
+
+        loader.Request([new TileKey(0, 0, 0), new TileKey(0, 1, 0)]);
+        Wait.Until(() => loaded.Count == 2 && loader.Pending == 0, "both tiles are loaded");
+
+        // The handler's exception is not a read failure: the worker survives and the loader still takes requests.
+        loader.Request([new TileKey(0, 2, 0)]);
+        Wait.Until(() => loaded.Count == 3 && loader.Pending == 0, "the next request is loaded");
+        Assert.Empty(failures);
+        Assert.Equal(3, cache.Count);
+        Assert.Equal(2, loader.Generation);
+    }
+
+    [Fact]
+    public void Loader_ThrowingFailedHandler_DoesNotEscapeTheWorker()
+    {
+        var error = new OpenSlideException("boom");
+        var reader = new FakeReader { Fail = _ => error };
+        using var cache = new TileCache(1 << 20);
+        var calls = new ConcurrentQueue<string>();
+        using var loader = new TileLoader(reader.Read, cache, 1, _ => { });
+        loader.Failed += _ =>
+        {
+            calls.Enqueue("first");
+            throw new InvalidOperationException("a bug in the handler");
+        };
+        loader.Failed += _ => calls.Enqueue("second");
+
+        loader.Request([new TileKey(0, 0, 0)]);
+
+        // An exception escaping the worker thread would end the test process; the handlers after it still run.
+        Wait.Until(() => calls.Count == 2 && loader.Pending == 0, "both handlers run");
+        Assert.Equal(["first", "second"], calls);
+        loader.Dispose();
+        Assert.True(loader.IsDisposed);
     }
 
     /// <summary>A read function whose calls can be held at a gate, counted and made to fail.</summary>

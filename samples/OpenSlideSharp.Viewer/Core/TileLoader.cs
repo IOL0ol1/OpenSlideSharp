@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -18,6 +19,11 @@ namespace OpenSlideSharp.Viewer.Core;
 /// A worker reads a tile, adds it to the cache, then calls <c>loaded</c> on its own thread; the UI layer switches
 /// to the UI thread itself. The first exception from a read raises <see cref="Failed"/> once, on a worker thread,
 /// and the loader then ignores further requests.
+/// </para>
+/// <para>
+/// An exception thrown by <c>loaded</c> or by a <see cref="Failed"/> handler is a bug in the caller, not a read
+/// failure: it is traced and swallowed, so it neither ends the process from a worker thread nor stops the loader,
+/// and the other <see cref="Failed"/> handlers still run.
 /// </para>
 /// <para>
 /// <see cref="Dispose"/> stops taking requests, drops the queued ones and waits for the reads in flight, for at most
@@ -86,6 +92,18 @@ internal sealed class TileLoader : IDisposable
         }
     }
 
+    /// <summary>Gets whether <see cref="Dispose"/> has been called.</summary>
+    public bool IsDisposed
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _disposed;
+            }
+        }
+    }
+
     /// <summary>Gets or sets how long <see cref="Dispose"/> waits for the reads in flight.</summary>
     internal TimeSpan DisposeTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
@@ -148,17 +166,6 @@ internal sealed class TileLoader : IDisposable
         }
     }
 
-    private bool IsDisposed
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _disposed;
-            }
-        }
-    }
-
     private void Work()
     {
         while (true)
@@ -208,14 +215,29 @@ internal sealed class TileLoader : IDisposable
             }
 
             _cache.Add(key, tile);
-            if (!IsDisposed)
-            {
-                _loaded(key);
-            }
         }
         catch (Exception e)
         {
             Fail(e);
+            return;
+        }
+
+        if (!IsDisposed)
+        {
+            Notify(_loaded, key, "loaded");
+        }
+    }
+
+    // Runs a callback on a worker thread: what it throws must not end the process or pass for a read failure.
+    private static void Notify<T>(Action<T> callback, T argument, string name)
+    {
+        try
+        {
+            callback(argument);
+        }
+        catch (Exception e)
+        {
+            Trace.TraceError($"TileLoader: the {name} callback threw: {e}");
         }
     }
 
@@ -235,6 +257,15 @@ internal sealed class TileLoader : IDisposable
             failed = Failed;
         }
 
-        failed?.Invoke(e);
+        if (failed is null)
+        {
+            return;
+        }
+
+        // Each handler on its own, so that one that throws does not keep the others from running.
+        foreach (Action<Exception> handler in failed.GetInvocationList())
+        {
+            Notify(handler, e, nameof(Failed));
+        }
     }
 }
