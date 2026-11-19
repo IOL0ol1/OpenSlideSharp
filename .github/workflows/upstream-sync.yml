@@ -8,7 +8,7 @@ name: Upstream sync
 #   ci              tests that commit (ci.yml).
 #   merge           fast-forwards master to it and deletes the branch. If master moved meanwhile, or cannot be
 #                   updated, it opens a pull request from the branch instead, keeps the branch and nothing is released.
-#   release         releases the merged commit (release.yml: a dry run while the NUGET_API_KEY secret is not set).
+#   release         releases the merged commit (release.yml: a dry run while the NUGET_USER variable is not set).
 #   report-failure  after a failure: opens one issue per build, or comments on the open one, and deletes the branch
 #                   (eng/Report-SyncFailure.ps1). Nothing reaches master before ci passed on the commit.
 # Pushes made with the workflow token start no other workflow, which is why this one calls ci.yml and release.yml.
@@ -297,17 +297,18 @@ jobs:
     needs: merge
     if: needs.merge.outputs.merged == 'true'
     uses: ./.github/workflows/release.yml
-    # release.yml's publish job asks for contents: write (tag and release). GitHub checks a called workflow's
-    # permissions when the run starts, whether that job runs or not, so this is needed for its dry runs too.
+    # release.yml's publish job asks for contents: write (tag and release) and id-token: write (nuget.org Trusted
+    # Publishing). GitHub checks a called workflow's permissions when the run starts, whether that job runs or not, so
+    # both are needed for its dry runs too. release.yml uses no secret: it reads the NUGET_USER repository variable.
     # release.yml runs in the concurrency group publish-<ref>, here publish-refs/heads/master, shared with the releases
     # of pushes to master; only one run waits in it: if another release of master is queued while this call waits,
     # GitHub cancels this call. It then ends "cancelled", which is no failure, so report-failure does not run. master
     # has the commit, so a later release includes it; run the Release workflow on master to release it at once.
     permissions:
       contents: write
+      id-token: write
     with:
       ref: ${{ needs.merge.outputs.sha }}
-    secrets: inherit
 
   report-failure:
     needs: [detect, update, ci, merge, release]

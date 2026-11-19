@@ -1,32 +1,45 @@
 # 计划 5 遗留事项（供以后使用）
 
-来源：计划 5（上游同步与发布）各任务审阅、整体终审及其修复轮。下列事项都已评估为**不阻塞计划 5 合并**。终审中要求在合并前、以及在设置 `NUGET_API_KEY` 之前修复的项目，已在修复轮中处理：
+来源：计划 5（上游同步与发布）各任务审阅、整体终审及其修复轮。下列事项都已评估为**不阻塞计划 5 合并**。终审中要求在合并前、以及在启用 nuget.org 推送之前修复的项目，已在修复轮中处理：
 - `deepzoom` 的 `-s`/`-e` 过大时，先检查再动旧输出；
-- README 写明快进之后发布失败的情况，以及没有 key 时同步仍会更新 `master`；
+- README 写明快进之后发布失败的情况，以及未启用发布时同步仍会更新 `master`；
 - 查看器归档不再带 runtime 包描述 nupkg 布局的 `LICENSE.txt`；
 - release notes 按通道措辞，正式版紧接 nightly 发布时注明 `Native` 层可能少了只有 nightly 才有的函数；
 - 三个查看器归档各自在本平台上运行 `--check`；
 - 每个 ref 一个发布并发组；
 - 同步回退 PR 的说明、文档与注释等小项。
 
-## 设置 `NUGET_API_KEY` 之前（维护者操作）
+## 启用发布之前（维护者操作）
 
-- **nuget.org 上的包 ID。** 预留 `OpenSlideSharp` ID 前缀，或先手动占住 4 个新 ID：`OpenSlideSharp.SkiaSharp`、`OpenSlideSharp.runtime`、`OpenSlideSharp.AspNetCore`、`OpenSlideSharp.Tool`。`OpenSlideSharp` 的 owner 是 `kiolp`。
-- **创建 key。** 由 `kiolp` 账号创建，glob 为 `OpenSlideSharp*`，勾选 “Push new packages and package versions”，存为仓库 secret `NUGET_API_KEY`。
-- **可以考虑 `environment: release`。** 把 key 放进一个部署分支只允许 `master` 的 environment，并给 release.yml 的 publish job 加上 `environment: release`。这样“只有 master 能拿到 key”由平台保证。
-- **旧包弃用。** 在 nuget.org 上把 README “Old packages” 一节列出的 6 个 1.x 包标记为弃用，并指向替代包：
+推送改用 nuget.org Trusted Publishing（GitHub OIDC）：publish job 在推送前用 OIDC token 换取有效期 1 小时的临时 key，仓库不再保存 key，`NUGET_API_KEY` secret 已删除。
+
+2026-11-19 已完成：
+
+- **旧包弃用。** README “Old packages” 一节列出的 6 个 1.x 包已在 nuget.org 上标记为弃用（原因 legacy，全部版本）：
   - `OpenSlideSharp.Interop`
   - `OpenSlideSharp.Windows`
   - `OpenSlideSharp.runtime.win`
   - `OpenSlideSharp.BitmapExtensions`
   - `OpenSlideSharp.OpenCVExtensions`
   - `OpenSlideSharp.BruTile`
-- **如果要重建仓库历史，必须在设置 key 之前完成。**
+- **Trusted Publishing 策略。** 由包 owner `kiolp` 创建：
+  - 范围：“Push new packages and package versions”、“Stage packages”、“Unlist or relist package versions”；glob 为 `OpenSlideSharp*`；
+  - 仓库 `IOL0ol1/OpenSlideSharp`，workflow 文件 `release.yml`，environment `production`；
+  - nuget.org 校验 OIDC token 的 `job_workflow_ref`，所以 upstream-sync.yml 调用 release.yml 时同样匹配。
+
+仍待处理：
+
+- **设置仓库变量 `NUGET_USER=kiolp`，启用发布。**
+  - 必须是仓库变量（Settings > Secrets and variables > Actions > Variables），不能只设在 environment 里：判定演练的 version job 不在 environment 中运行。
+  - 删除这个变量即回到演练。
+- **可以考虑把 GitHub environment `production` 的部署分支限制为 `master`。** 这样“只有 `master` 上的运行能拿到 nuget.org 接受的 token”由平台保证。限制之后，在其他分支上 dispatch 的 Release 即使提交已在 `master` 上，publish job 也会被拒绝；在 `master` 上运行即可。
+- **首次发布之前，尽量预留 `OpenSlideSharp` ID 前缀**（发邮件到 account@nuget.org）。4 个新 ID（`OpenSlideSharp.SkiaSharp`、`OpenSlideSharp.runtime`、`OpenSlideSharp.AspNetCore`、`OpenSlideSharp.Tool`）要到首次发布时才第一次推送，在此之前可能被他人占用。
+- **如果要重建仓库历史，必须在启用发布之前完成。**
   - v1.0.1.3、v1.1.0、v1.1.1 所指的提交必须仍是新 `master` 的祖先，或者删除、移动这三个 tag。否则 `Test-ReleaseCommit` 会让每一次发布都失败（“does not contain the latest release”）。
   - 一旦开始发布 4.x，再改写历史会让 4.x 的 tag 也失效。
 - **保持仓库设置 “Allow GitHub Actions to create and approve pull requests” 开启。** `master` 在同步期间移动时，同步改为开 PR，这一步需要该设置。
 
-## 合并之后、设置 key 之前
+## 合并之后、启用发布之前
 
 - 合并触发的 push 运行本身就是一次 Release 演练：确认它为绿色，并且没有 tag、Release 或包。
 - 在 `master` 上分别 dispatch 一次 Release 和 Upstream sync，都设 `dry_run=true`。sync 的预期结果是 detect 输出 `[]`。
@@ -35,7 +48,7 @@
   - Windows 上的 ProductVersion、应用清单和 GUI 子系统都通过检查。
   - win-x64 归档是在 Linux 上交叉发布的。.NET 8 起，SDK 在任何主机上都会把版本资源和清单写进 Windows 可执行文件，不再给出 NETSDK1074。这里第一次在 CI 中实际验证这一点。
   - 再下载 `viewer-win-x64` artifact，在 Windows 桌面上打开一次并查看文件属性；在 Mac 上运行一次 osx-arm64 归档，包括 Gatekeeper 的提示。
-- 合并后，第一次遇到上游新构建的每日同步就会以 IOL0ol1 身份向 `master` 提交。sync 的 update → ci → merge → release → report-failure 整条链路，要等上游出现新的 nightly 才会第一次真实运行；没有 key 时，其中的 release 是演练。
+- 合并后，第一次遇到上游新构建的每日同步就会以 IOL0ol1 身份向 `master` 提交。sync 的 update → ci → merge → release → report-failure 整条链路，要等上游出现新的 nightly 才会第一次真实运行；未设置 `NUGET_USER` 时，其中的 release 是演练。
 
 ## 以后处理
 
@@ -46,10 +59,10 @@
   - 但 `master` 上 push 触发的发布和 sync 调用的发布仍在同一组。被取消的 sync 调用以 cancelled 结束，不会开 issue。
   - GitHub 已支持 `concurrency.queue: max`（最多 100 个排队）。actionlint 1.7.12 还不认识这个键，等 actionlint 支持后可以改用。
 - **`gh release view … 2> /dev/null` 把所有错误都当成 “Release 不存在”。** 判断附件是否已上传时，只比较文件名，不比较 state 和 size。
-- **key 和写权限 token 的暴露面。**
-  - key 的判空在 checkout 之后，此前已经运行了仓库里的代码。
-  - publish job 的 checkout 把写权限 token 留在 `.git/config`。
-  - 可以改为：把判空放到第一步；publish 用 `persist-credentials: false`，只在打 tag 的那一步传入 token。
+- **OIDC 和写权限 token 的暴露面。**
+  - version job 不再接触任何凭据；临时 key 只在 publish job 的登录步骤之后存在。
+  - 但 publish job 带 `id-token: write`，登录之前运行的仓库脚本（`Get-ReleaseFiles`、`Test-ReleaseCommit`）也能申请 OIDC token 去换 key。
+  - publish job 的 checkout 把写权限 token 留在 `.git/config`。可以改为 `persist-credentials: false`，只在打 tag 的那一步传入 token。
 - **正式版版本号末段为 `.0` 时，NuGet 会规范化文件名**（`X.Y.Z.0` 写成 `X.Y.Z`）。`Get-ReleaseFiles` 和 `Test-Packages` 会在推送之前失败。openslide-bin 4.x 迄今没有这样的版本。
 - **部分推送后点错重跑按钮的窄缝。**
   - 较新提交的发布只推了一部分包、tag 尚未推送时，对旧提交的运行点 “Re-run all jobs” 看不到这次部分发布。

@@ -34,7 +34,7 @@ Releases are made by GitHub Actions:
 - A push to `master` that changes `src/**`, `eng/openslide.json` or `Directory.*.props` releases that commit.
 - Other changes, such as to the viewer sample or the `eng/` scripts, are released by running the Release workflow by hand.
 
-A release tests the commit on all platforms, pushes the five packages to nuget.org, tags the commit `v<version>` and creates a GitHub release with the packages, the viewer archives and the openslide-bin source tarball. Without the `NUGET_API_KEY` secret it is a dry run: it builds and checks everything, publishes nothing and lists what it would release in the run summary. Only the release is a dry run then: the daily sync still commits each newer build (as IOL0ol1) and fast-forwards `master` to it.
+A release tests the commit on all platforms, pushes the five packages to nuget.org, tags the commit `v<version>` and creates a GitHub release with the packages, the viewer archives and the openslide-bin source tarball. The packages are pushed with nuget.org Trusted Publishing: the publishing job runs in the GitHub environment `production` and trades its OIDC token for an API key that is valid for one hour, so no key is stored. The repository variable `NUGET_USER`, the nuget.org profile name, turns releases on. Without it a release is a dry run: it builds and checks everything, publishes nothing and lists what it would release in the run summary. Only the release is a dry run then: the daily sync still commits each newer build (as IOL0ol1) and fast-forwards `master` to it.
 
 ## Install
 
