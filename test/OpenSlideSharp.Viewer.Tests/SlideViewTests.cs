@@ -351,7 +351,9 @@ public class SlideViewTests
             TileLoader oldLoader = host.View.Loader!;
             TileCache oldCache = host.View.Cache!;
             TileBitmapCache oldBitmaps = host.View.Bitmaps!;
-            Assert.True(oldCache.Count > 0 && oldBitmaps.Count > 0);
+            // Bitmaps are made when a frame is drawn, which can come after the last tile has loaded.
+            HeadlessSession.PumpUntil(() => oldBitmaps.Count > 0, "a frame is drawn with the loaded tiles");
+            Assert.True(oldCache.Count > 0);
             var key = new TileKey(0, 0, 0);
             Assert.True(oldCache.TryGet(key, out TileImage? tile));
             Bitmap bitmap = oldBitmaps.Get(key, tile!)!;
