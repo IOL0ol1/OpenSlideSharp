@@ -46,11 +46,12 @@ Every key of the store is written as a file, with `/` in the key as directories.
 ## Behavior
 
 - Outputs are relative to the current directory unless a path is given.
-- Every output directory (`<name>_files/`, the `-r` directory `<name>/`, each `.zarr` store, the `_associated` directory) gets an empty `.openslide-sharp-output` marker file before anything else. Existing output is replaced, but an existing output directory only if it holds that marker or is empty. Any other existing directory, or a file where an output directory would go (such as an extensionless slide with `-r`), stops the export with exit code 1 and nothing is deleted. Root directories, the current directory and its ancestors, directories holding the slide, and a MIRAX slide's data directory (`name/` next to `name.mrxs`) are never deleted.
+- Every output directory (`<name>_files/`, the `-r` directory `<name>/`, each `.zarr` store, the `_associated` directory) gets an empty `.openslide-sharp-output` marker file before anything else. Existing output is replaced, but an existing output directory only if it holds that marker or is empty. Any other existing directory, a symbolic link or junction where an output directory would go (even one to a directory with the marker), or a file there (such as an extensionless slide with `-r`), stops the export with exit code 1 and nothing is deleted. Root directories, the current directory and its ancestors, directories holding the slide, and a MIRAX slide's data directory (`name/` next to `name.mrxs`) are never deleted.
 - An output directory being replaced is first renamed to `.<name>.openslide-sharp-old-<id>` next to it, in one step; then the old `<name>.dzi` is deleted, before any new file is written, and the renamed directory is deleted. If the rename fails (on Windows, while a program has a file in it open), the export stops with exit code 1 and nothing has changed. If only the delete fails, a warning names what is left and the export goes on; the next export to the same output deletes it (only while it still holds the marker, which is deleted last).
 - Every file is written to `.<file>.tmp` next to it and then moved into place, so no file is ever partially written. The `.dzi` is written after the tiles, and the OME-Zarr root metadata (`zarr.json`, or `.zgroup` and `.zattrs`) after every chunk and level, so an interrupted export is not mistaken for a complete one.
 - Progress goes to stderr, at most once a second: `Tiling <image>: <done>/<total> tiles`. Warnings (see [Color](#color)) and errors go to stderr too, prefixed with `openslide-sharp:`.
 - Ctrl+C stops the export once the files being written are complete.
+- Before anything is written, `deepzoom` checks that each tile, and the slide region read for it, fits in a .NET array (`width × height × 4` bytes, just under 2 GiB); with an `-s` or `-e` too large for that it stops with exit code 2. A tile never extends past its level, so a tile size larger than the slide is fine.
 - Exit codes: 0 on success, 1 if the slide cannot be opened or the export fails, 2 for invalid arguments, 130 when canceled.
 - `-j` above 4 × the processor count is lowered to that, with a note on stderr.
 
@@ -63,13 +64,14 @@ Each worker holds one tile or chunk at a time, and OpenSlide keeps a tile cache 
 
 ## Licenses
 
-The tool's own code is under the MIT license. The package also contains, each under its own license, which are in the package's `licenses/` folder:
+The tool's own code is under the MIT license. The package also contains, each under its own license, which are in the package's `licenses/` folder or in `LICENSE.txt`:
 
-- OpenSlide 4.x from [openslide-bin](https://github.com/openslide/openslide-bin), LGPL-2.1, with the libraries built into it (`licenses/openslide-bin/`, and `VERSIONS.md` listing their versions). The source is the openslide-bin source tarball of the same version.
+- OpenSlide 4.x from [openslide-bin](https://github.com/openslide/openslide-bin), LGPL-2.1, with the libraries built into it (`licenses/openslide-bin/<platform>/`, each with a `VERSIONS.md` listing their versions). The source is the openslide-bin source tarball named in `licenses/openslide-bin/openslide-bin.json` (URL and sha256). The same file, `openslide-bin-<binVersion>.tar.gz`, is attached to the [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) of the package's version (tag `v<version>`), which keeps it after a nightly openslide-bin build is removed; check it against that sha256.
 - [SkiaSharp](https://github.com/mono/SkiaSharp), MIT, with Skia (BSD-3-Clause) and the libraries in its native build (`licenses/skiasharp/`).
 - [OpenSeadragon](https://openseadragon.github.io/), BSD-3-Clause, and its [scale bar plugin](https://github.com/usnistgov/OpenSeadragonScalebar), in the public domain (NIST), written with `-r` (`licenses/viewer/`).
+- [System.CommandLine](https://github.com/dotnet/command-line-api), MIT.
 
-The package license expression is `MIT AND LGPL-2.1-only AND BSD-3-Clause`.
+The package license is `LICENSE.txt`, which states these terms and where each license text is.
 
 ## Color
 

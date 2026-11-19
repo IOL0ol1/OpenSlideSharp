@@ -5,6 +5,14 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  # The release and upstream sync workflows test the commit they are about to release or merge.
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch, tag or commit to test. Empty tests the commit of the calling workflow's event.
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -24,6 +32,8 @@ jobs:
         os: [windows-latest, ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -43,6 +53,8 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -111,6 +123,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -141,6 +155,8 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -159,6 +175,10 @@ jobs:
           name: packages
           path: artifacts/smoke-feed/*.nupkg
           if-no-files-found: error
+          # A called ci.yml uploads into the caller's run, and the upstream sync calls it twice in one run (for the sync
+          # branch, then through release.yml). The two calls run one after the other, so the second replaces the first's
+          # packages before its package-unix jobs download them.
+          overwrite: true
 
   package-unix:
     name: package-unix (${{ matrix.os }})
@@ -171,6 +191,8 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -181,3 +203,45 @@ jobs:
       - name: Smoke-test the packed packages
         shell: pwsh
         run: ./eng/Test-Packages.ps1 -SkipPack -Version 0.0.0-ci.${{ github.run_number }}
+
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Self-test the release version script
+        shell: pwsh
+        run: ./eng/Get-ReleaseVersion.ps1 -SelfTest
+      - name: Self-test the upstream update script
+        shell: pwsh
+        run: ./eng/Find-UpstreamUpdate.ps1 -SelfTest
+      - name: Self-test the upstream sync failure report
+        shell: pwsh
+        run: ./eng/Report-SyncFailure.ps1 -SelfTest
+
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Lint the workflows
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          # The sha256 of actionlint_1.7.12_linux_amd64.tar.gz in that release's actionlint_1.7.12_checksums.txt.
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # actionlint also runs shellcheck, which the runner has, on the bash run: scripts.
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"
+          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color

@@ -19,6 +19,12 @@
     <ProjectReference Include="..\..\src\OpenSlideSharp.SkiaSharp\OpenSlideSharp.SkiaSharp.csproj" />
   </ItemGroup>
 
+  <!-- What AssemblyVersionTests expects of the core assembly, which is built with the same global properties. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="Build.Version" Value="$(Version)" />
+    <AssemblyMetadata Include="Build.OpenSlideUpstreamVersion" Value="$(OpenSlideUpstreamVersion)" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Oracles\**" CopyToOutputDirectory="PreserveNewest" />

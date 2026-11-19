@@ -7,6 +7,13 @@ using SkiaSharp;
 namespace OpenSlideSharp.SkiaSharp;
 
 /// <summary>Creates <see cref="IColorTransform"/> instances that convert ICC profiles to sRGB with SkiaSharp.</summary>
+/// <remarks>
+/// <see cref="Create"/> copies the profile.
+/// <see cref="PixelImageExtensions.Encode(PixelImage, ImageFormat, int, ColorMode)"/> with
+/// <see cref="ColorMode.Default"/> instead caches the transform it makes for a profile, keyed by the array that holds
+/// <see cref="PixelImage.IccProfile"/> (by reference, not by content): do not change that array after passing it to a
+/// <see cref="PixelImage"/>, or later encodes keep applying the transform made for the old bytes.
+/// </remarks>
 public static class SkiaColorTransform
 {
     // One decision per slide: the core hands every tile the same backing array of the profile.
@@ -52,6 +59,12 @@ public static class SkiaColorTransform
     }
 
     /// <summary>Like <see cref="Create"/>, but remembers the result per backing array of the profile.</summary>
+    /// <remarks>
+    /// The key is the array itself, compared by reference and held weakly, and only a profile that spans its whole
+    /// array is cached (any other is converted every time). The bytes are not copied, so a caller must not change the
+    /// array afterwards: the cached transform would still be the one made for the old bytes. The profiles OpenSlide
+    /// returns are never changed; a caller's own profile given to a <see cref="PixelImage"/> must not be either.
+    /// </remarks>
     internal static IColorTransform? GetCached(ReadOnlyMemory<byte> iccProfile)
     {
         if (iccProfile.IsEmpty)

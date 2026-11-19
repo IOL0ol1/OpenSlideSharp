@@ -6,9 +6,14 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
     <PackageId>OpenSlideSharp.runtime</PackageId>
-    <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
+    <!--
+      OpenSlide is LGPL-2.1-only, and each platform's library statically links components under further licenses, so
+      the package states its terms in LICENSE.txt, which points to the full texts in licenses/<platform>/.
+    -->
+    <PackageLicenseExpression></PackageLicenseExpression>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <PackageTags>openslide wsi native</PackageTags>
-    <Description>Native OpenSlide 4.x libraries from openslide-bin (https://github.com/openslide/openslide-bin); source: openslide-bin source tarball of the same version.</Description>
+    <Description>Native OpenSlide 4.x libraries from openslide-bin (https://github.com/openslide/openslide-bin), LGPL-2.1, with the licenses of the components linked into each platform's library in licenses/; source: the openslide-bin source tarball named in openslide-bin.json.</Description>
     <OpenSlideNativeRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../artifacts/native'))</OpenSlideNativeRoot>
   </PropertyGroup>
 
@@ -18,6 +23,8 @@
     <OpenSlideNativeFile Include="linux-arm64/libopenslide-1.so" />
     <OpenSlideNativeFile Include="osx-arm64/libopenslide-1.dylib" />
     <OpenSlideNativeFile Include="osx-x64/libopenslide-1.dylib" />
+    <!-- The licenses folder of each openslide-bin archive (manifest asset key). -->
+    <OpenSlideLicenseDir Include="windows-x64;linux-x86_64;linux-aarch64;macos-arm64-x86_64" />
   </ItemGroup>
 
   <!-- Per-RID packaging, written out explicitly so each file lands in runtimes/<rid>/native/. -->
@@ -38,10 +45,14 @@
     <None Include="$(OpenSlideNativeRoot)/include/openslide/*.h" Pack="true" PackagePath="build/native/include/openslide/" Visible="false" />
     <None Include="$(OpenSlideNativeRoot)/msvc/x64/libopenslide.lib" Pack="true" PackagePath="build/native/lib/x64/" Visible="false" />
 
-    <!-- NuGet appends each file's RecursiveDir to a PackagePath that ends in '/': licenses/<project>/<file>. -->
+    <!--
+      Each platform's licenses and VERSIONS.md, as eng/Get-OpenSlide.ps1 stages them. NuGet appends each file's
+      RecursiveDir to a PackagePath that ends in '/': licenses/<platform>/<component>/<file>.
+    -->
     <None Include="$(OpenSlideNativeRoot)/licenses/**" Pack="true" PackagePath="licenses/" Visible="false" />
-    <None Include="$(OpenSlideNativeRoot)/VERSIONS.md" Pack="true" PackagePath="/" Visible="false" />
-    <None Include="$(OpenSlideNativeRoot)/versions.json" Pack="true" PackagePath="/" Visible="false" />
+    <!-- The openslide-bin build and its source tarball (url and sha256). -->
+    <None Include="$(OpenSlideNativeRoot)/openslide-bin.json" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="LICENSE.txt" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 
   <!-- Only packing needs every RID; plain builds (CI test jobs download one platform) must not fail. -->
@@ -50,8 +61,10 @@
            Text="Missing native binary '$(OpenSlideNativeRoot)/%(OpenSlideNativeFile.Identity)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
     <Error Condition="!Exists('$(OpenSlideNativeRoot)/msvc/x64/libopenslide.lib') or !Exists('$(OpenSlideNativeRoot)/include/openslide/openslide.h') or !Exists('$(OpenSlideNativeRoot)/include/openslide/openslide-features.h')"
            Text="Missing msvc/x64/libopenslide.lib or include/openslide/*.h under '$(OpenSlideNativeRoot)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
-    <Error Condition="!Exists('$(OpenSlideNativeRoot)/licenses') or !Exists('$(OpenSlideNativeRoot)/VERSIONS.md') or !Exists('$(OpenSlideNativeRoot)/versions.json')"
-           Text="Missing licenses/, VERSIONS.md or versions.json under '$(OpenSlideNativeRoot)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
+    <Error Condition="!Exists('$(OpenSlideNativeRoot)/licenses/%(OpenSlideLicenseDir.Identity)/VERSIONS.md')"
+           Text="Missing licenses/%(OpenSlideLicenseDir.Identity)/VERSIONS.md under '$(OpenSlideNativeRoot)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
+    <Error Condition="!Exists('$(OpenSlideNativeRoot)/openslide-bin.json')"
+           Text="Missing openslide-bin.json under '$(OpenSlideNativeRoot)'. Run 'pwsh eng/Get-OpenSlide.ps1 -Platform all' first." />
   </Target>
 
 </Project>

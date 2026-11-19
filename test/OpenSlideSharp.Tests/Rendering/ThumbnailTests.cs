@@ -49,6 +49,25 @@ public class ThumbnailTests
         }
     }
 
+    [Theory]
+    [InlineData(100_000, 50_000, "maxWidth")]
+    [InlineData(50_000, 100_000, "maxHeight")]
+    public void GetThumbnail_LevelTooLargeToRead_NamesTheLimitingMaximumBeforeAllocating(long width, long height, string param)
+    {
+        // A slide with one level of 5e9 pixels: any thumbnail reads that level whole, which needs more bytes than a
+        // .NET array holds. The maximum whose ratio picks the level is the one to lower. Nothing may be allocated
+        // first: the 4000 x 2000 output would be 32 MB.
+        var source = FakeRenderSource.SingleLevel(width, height);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => OpenSlide.RenderThumbnail(source, 4000, 4000));
+
+        Assert.True(GC.GetAllocatedBytesForCurrentThread() - before < 1_000_000, "the output was allocated before the check");
+        Assert.Equal(param, ex.ParamName);
+        Assert.Contains($"{width} x {height}", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(0, source.ReadCount);
+    }
+
     [Fact]
     public void GetThumbnail_InvalidSize_Throws()
     {

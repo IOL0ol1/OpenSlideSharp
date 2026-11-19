@@ -1,0 +1,383 @@
+name: Release
+
+# Releases one commit after CI passed on it: the five NuGet packages go to nuget.org, the commit is tagged v<version>
+# and a GitHub release gets the packages, the desktop viewer archives and the openslide-bin source tarball.
+# Without the NUGET_API_KEY secret, with dry_run, or for a commit that is not on master, it is a dry run: it tests and
+# builds everything, pushes nothing (no package, tag or release) and lists what it would release in the run summary.
+# It fails for a commit that is released already or older than the latest release (eng/Test-ReleaseCommit.ps1).
+# After a failure, use "Re-run failed jobs": it finishes the same release, skipping packages already on nuget.org and
+# keeping a tag or release of the same commit. "Re-run all jobs" starts a new release, which fails once the commit is
+# tagged and, before that, would give it a new version.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'eng/openslide.json'
+      - 'Directory.*.props'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run (build everything, push no package, tag or release)
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch, tag or commit to release
+        type: string
+        required: true
+      dry_run:
+        description: Dry run (build everything, push no package, tag or release)
+        type: boolean
+        default: false
+    secrets:
+      NUGET_API_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+# One group per ref: a dry run dispatched on a branch must not take the queue slot of a release of master (GitHub keeps
+# one running and one pending run per group, and a newer pending run cancels the older). When called, github.ref is the
+# caller's, so the upstream sync's calls and pushes to master share publish-refs/heads/master and run one at a time.
+# Not release-${{ github.ref }}: group names are case insensitive, and ci.yml, called below, takes the group
+# ${{ github.workflow }}-${{ github.ref }}, which is Release-refs/heads/... here; the call would wait for this run.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.version.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      informational-version: ${{ steps.version.outputs.informational-version }}
+      upstream-version: ${{ steps.version.outputs.upstream-version }}
+      release-name: ${{ steps.version.outputs.release-name }}
+      notes: ${{ steps.version.outputs.notes }}
+      dry-run: ${{ steps.mode.outputs.dry-run }}
+      dry-run-reason: ${{ steps.mode.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          # Every branch and tag: the version counts the v* tags, and only commits on master are released.
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Check that the commit is not released and comes after the latest release
+        shell: pwsh
+        run: ./eng/Test-ReleaseCommit.ps1 -Sha HEAD
+      - name: Compute the version
+        id: version
+        shell: pwsh
+        run: |
+          # Every later job builds, tests and tags this commit, even if the branch moves meanwhile.
+          $sha = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          # Fails if the version is not higher than every version on nuget.org.
+          $json = pwsh -NoProfile -File ./eng/Get-ReleaseVersion.ps1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $info = ($json -join "`n") | ConvertFrom-Json
+          if ($info.informationalVersion -cne "$($info.version)+openslide.$($info.openslideUpstreamVersion)") {
+            throw "informationalVersion '$($info.informationalVersion)' is not the one the build writes for $($info.version) and $($info.openslideUpstreamVersion)."
+          }
+          $eof = "EOF_$([Guid]::NewGuid().ToString('N'))"
+          @(
+            "sha=$sha"
+            "version=$($info.version)"
+            "tag=$($info.tag)"
+            "prerelease=$($info.prerelease ? 'true' : 'false')"
+            "informational-version=$($info.informationalVersion)"
+            "upstream-version=$($info.openslideUpstreamVersion)"
+            "release-name=$($info.releaseName)"
+            "notes<<$eof"
+            $info.notes
+            $eof
+          ) | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "OpenSlideSharp $($info.version) ($($info.informationalVersion)) from $sha"
+      - name: Choose between release and dry run
+        id: mode
+        shell: pwsh
+        env:
+          # Only checked for being empty, never printed.
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          $reasons = @()
+          if ($env:DRY_RUN -eq 'true') { $reasons += 'a dry run was asked for' }
+          if ([string]::IsNullOrEmpty($env:NUGET_API_KEY)) { $reasons += 'the NUGET_API_KEY secret is not set' }
+          git merge-base --is-ancestor $env:SHA refs/remotes/origin/master
+          if ($LASTEXITCODE -eq 1) { $reasons += "commit $env:SHA is not on master" }
+          elseif ($LASTEXITCODE -ne 0) { throw "git merge-base failed with exit code $LASTEXITCODE." }
+          if ($reasons.Count -gt 0) {
+            $reason = $reasons -join '; '
+            Write-Host "::notice title=Dry run::Nothing will be pushed to nuget.org, tagged or released: $reason."
+            "dry-run=true", "reason=$reason" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8
+          }
+          else {
+            Write-Host 'Release: the packages go to nuget.org, the commit is tagged and the GitHub release is created.'
+            'dry-run=false' | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8
+          }
+          exit 0
+
+  ci:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+
+  pack:
+    needs: [version, ci]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Download and verify the native OpenSlide of every platform
+        shell: pwsh
+        run: ./eng/Get-OpenSlide.ps1 -Platform all -Force -Verify
+      - name: Pack
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          UPSTREAM_VERSION: ${{ needs.version.outputs.upstream-version }}
+        run: ./eng/Test-Packages.ps1 -PackOnly -Version $env:VERSION -OpenSlideUpstreamVersion $env:UPSTREAM_VERSION
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nupkgs
+          path: artifacts/smoke-feed/*.nupkg
+          if-no-files-found: error
+
+  viewer:
+    name: viewer (${{ matrix.rid }})
+    needs: [version, pack]
+    # Cross-published: on any host the SDK signs the macOS executable ad hoc and, since .NET 8, writes the Windows
+    # executable's resources itself (no NETSDK1074). viewer-check runs each archive on its own platform.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        rid: [win-x64, linux-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: nupkgs
+          path: artifacts/release-feed
+      - name: Publish and archive the viewer
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.version.outputs.version }}
+          UPSTREAM_VERSION: ${{ needs.version.outputs.upstream-version }}
+        run: >-
+          ./eng/Publish-Viewer.ps1 -Rid $env:RID -Version $env:VERSION -OpenSlideUpstreamVersion $env:UPSTREAM_VERSION
+          -Feed artifacts/release-feed -ArchiveDirectory artifacts/release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: viewer-${{ matrix.rid }}
+          path: artifacts/release/OpenSlideSharp.Viewer-*
+          if-no-files-found: error
+
+  viewer-check:
+    name: viewer check (${{ matrix.rid }})
+    needs: [version, viewer]
+    # Each archive, published on Linux above, is extracted and run with --check on its own platform before anything
+    # is released. On Windows this also checks the version resource, application manifest and GUI subsystem that the
+    # SDK copies into the executable (an SDK that cannot do that on a Linux host warns NETSDK1074 and leaves them out).
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: osx-arm64
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: viewer-${{ matrix.rid }}
+          path: artifacts/release
+      - name: Run the viewer from its archive
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.version.outputs.version }}
+          INFORMATIONAL_VERSION: ${{ needs.version.outputs.informational-version }}
+        run: >-
+          ./eng/Test-ViewerArchive.ps1 -Path artifacts/release -Rid $env:RID -Version $env:VERSION
+          -InformationalVersion $env:INFORMATIONAL_VERSION
+
+  publish:
+    needs: [version, pack, viewer, viewer-check]
+    if: needs.version.outputs.dry-run == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      SHA: ${{ needs.version.outputs.sha }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+      RELEASE_NAME: ${{ needs.version.outputs.release-name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: nupkgs
+          path: artifacts/release
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: viewer-*
+          merge-multiple: true
+          path: artifacts/release
+      - name: Add the openslide-bin source tarball and check the release files
+        shell: pwsh
+        run: |
+          '## Release files' | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          ./eng/Get-ReleaseFiles.ps1 -Path artifacts/release -Version $env:VERSION
+      - name: Check that the commit can still be released as this version
+        # Before anything is pushed: no higher version on nuget.org, and the tag and the packages already there (from
+        # an earlier attempt of this release) are of this commit.
+        shell: pwsh
+        run: ./eng/Test-ReleaseCommit.ps1 -Sha $env:SHA -Version $env:VERSION -Path artifacts/release
+      - name: Push the packages to nuget.org
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.runtime', 'OpenSlideSharp.AspNetCore', 'OpenSlideSharp.Tool') {
+            dotnet nuget push "artifacts/release/$id.$env:VERSION.nupkg" --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if ($LASTEXITCODE -ne 0) { throw "Pushing $id $env:VERSION failed with exit code $LASTEXITCODE." }
+          }
+      - name: Tag the commit
+        run: |
+          set -euo pipefail
+          # The commit the tag points at, if it exists: the last line is the commit an annotated tag peels to.
+          existing=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -n 1 | cut -f 1)
+          if [ -z "$existing" ]; then
+            git -c user.name=IOL0ol1 -c user.email=1353839731@qq.com tag -a "$TAG" -m "$RELEASE_NAME" "$SHA"
+            git push origin "refs/tags/$TAG"
+          elif [ "$existing" = "$SHA" ]; then
+            echo "$TAG points at $SHA already (an earlier attempt pushed it)."
+          else
+            echo "::error::$TAG exists already and points at $existing, not at $SHA."
+            exit 1
+          fi
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          set -euo pipefail
+          files=(artifacts/release/*)
+          if gh release view "$TAG" --json isDraft,assets > "$RUNNER_TEMP/release.json" 2> /dev/null; then
+            if [ "$(jq -r .isDraft "$RUNNER_TEMP/release.json")" = true ]; then
+              echo "::error::A draft release of $TAG exists. Delete or publish it, then run this job again."
+              exit 1
+            fi
+            # An earlier attempt created the release: add the files it lacks.
+            missing=()
+            for file in "${files[@]}"; do
+              if ! jq -e --arg name "$(basename "$file")" 'any(.assets[]; .name == $name)' "$RUNNER_TEMP/release.json" > /dev/null; then
+                missing+=("$file")
+              fi
+            done
+            if [ ${#missing[@]} -gt 0 ]; then
+              gh release upload "$TAG" "${missing[@]}"
+            fi
+            echo "The release $TAG exists already; uploaded ${#missing[@]} missing file(s)."
+          else
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/release-notes.md"
+            prerelease=()
+            if [ "$PRERELEASE" = true ]; then prerelease=(--prerelease); fi
+            gh release create "$TAG" "${files[@]}" --verify-tag --target "$SHA" --title "$RELEASE_NAME" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" "${prerelease[@]}"
+          fi
+          {
+            echo "## Released $RELEASE_NAME"
+            echo
+            echo "- Commit: \`$SHA\`, tagged \`$TAG\`"
+            echo "- GitHub release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+            echo "- nuget.org: https://www.nuget.org/packages/OpenSlideSharp/$VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  dry-run-summary:
+    needs: [version, pack, viewer, viewer-check]
+    if: needs.version.outputs.dry-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: nupkgs
+          path: artifacts/release
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: viewer-*
+          merge-multiple: true
+          path: artifacts/release
+      - name: Check the release files and list what the release would be
+        shell: pwsh
+        env:
+          SHA: ${{ needs.version.outputs.sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          INFORMATIONAL_VERSION: ${{ needs.version.outputs.informational-version }}
+          REASON: ${{ needs.version.outputs.dry-run-reason }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          @(
+            "## Dry run: OpenSlideSharp $env:VERSION"
+            ''
+            "Nothing was pushed to nuget.org, tagged or released: $env:REASON."
+            ''
+            "- Commit: ``$env:SHA``"
+            "- Tag: ``$env:TAG``$($env:PRERELEASE -eq 'true' ? ', a prerelease' : '')"
+            "- InformationalVersion: ``$env:INFORMATIONAL_VERSION``"
+            ''
+            '### Release files'
+            ''
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          ./eng/Get-ReleaseFiles.ps1 -Path artifacts/release -Version $env:VERSION
+          @('', '### Release notes', '', $env:NOTES) | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8

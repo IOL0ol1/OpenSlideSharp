@@ -68,6 +68,17 @@ internal static class ExportSupport
     public static void EnsureReplaceableDirectory(string path, string slide)
     {
         string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+        // A symbolic link or junction (to a directory, a file or nothing): replacing it would move the link aside
+        // and then delete, through it, the contents of whatever it points to.
+        FileSystemInfo entry = Directory.Exists(full) ? new DirectoryInfo(full) : new FileInfo(full);
+        if (entry.LinkTarget is { } linkTarget)
+        {
+            throw new IOException(
+                $"Refusing to write the output directory '{full}': it is a link (to '{linkTarget}'). " +
+                "Remove the link or choose another output.");
+        }
+
         if (File.Exists(full))
         {
             // For example the slide itself: -r names its directory after the slide without its extension.
@@ -111,8 +122,9 @@ internal static class ExportSupport
     /// </summary>
     /// <remarks>
     /// An existing directory is replaced only if it holds the marker (an earlier output, complete or not) or is empty.
-    /// Nothing is deleted if a file has that name (such as the slide), or if the directory has no marker, is a root
-    /// directory, holds the current directory or the slide, or holds a MIRAX slide's data directory.
+    /// Nothing is deleted if the path is a symbolic link or junction, if a file has that name (such as the slide), or
+    /// if the directory has no marker, is a root directory, holds the current directory or the slide, or holds a
+    /// MIRAX slide's data directory.
     /// </remarks>
     /// <param name="path">The output directory.</param>
     /// <param name="slide">The slide being exported.</param>

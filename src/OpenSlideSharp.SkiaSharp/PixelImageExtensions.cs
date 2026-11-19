@@ -65,6 +65,11 @@ public static class PixelImageExtensions
     }
 
     /// <summary>Encodes the image as JPEG or PNG.</summary>
+    /// <remarks>
+    /// With <see cref="ColorMode.Default"/>, the transform made for a profile is cached, keyed by the array that holds
+    /// <see cref="PixelImage.IccProfile"/> (by reference): do not change that array once an image with it has been
+    /// encoded.
+    /// </remarks>
     /// <param name="image">The image to encode.</param>
     /// <param name="format">The output format.</param>
     /// <param name="quality">Quality from 0 to 100; ignored for PNG.</param>

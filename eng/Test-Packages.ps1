@@ -6,18 +6,34 @@ an ASP.NET Core app, net48 x64 and AnyCPU, no-runtime, the installed tool, the d
 self-contained as one executable with its licenses for this machine's RID, and a Visual Studio C++ project), plus
 the 32-bit build warning.
 
+Packing first checks, with eng/Get-OpenSlide.ps1 -Platform all -Verify, that artifacts/native holds exactly the
+binaries and notices eng/openslide.json pins. Every restore of an OpenSlideSharp package (the tool pack, the smoke
+builds, the tool install, the viewer) takes it from artifacts/smoke-feed only, never from nuget.org, and is checked to
+have got the feed's nupkg.
+
 -SkipPack reuses the nupkgs already in artifacts/smoke-feed (CI downloads them
 there) instead of packing; everything else, including the nupkg content
 assertions, still runs. net48 and the C++ stage only run on Windows.
+
+-PackOnly packs and checks the nupkg contents, as the release does, and runs no
+smoke test: the five nupkgs are left in artifacts/smoke-feed.
+
+-OpenSlideUpstreamVersion is passed to every pack (see Directory.Build.props),
+and every OpenSlideSharp assembly in the nupkgs must then have the
+InformationalVersion <Version>+openslide.<OpenSlideUpstreamVersion>.
 #>
 [CmdletBinding()]
 param(
     [string]$Version = "0.0.0-smoke.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))",
-    [switch]$SkipPack
+    [switch]$SkipPack,
+    [switch]$PackOnly,
+    [string]$OpenSlideUpstreamVersion
 )
 
 $ErrorActionPreference = 'Stop'
+if ($SkipPack -and $PackOnly) { throw '-SkipPack and -PackOnly cannot be used together.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+Import-Module (Join-Path $PSScriptRoot 'LocalFeed.psm1') -Force
 
 $root = Split-Path -Parent $PSScriptRoot
 $artifacts = Join-Path $root 'artifacts'
@@ -46,17 +62,25 @@ if ($SkipPack) {
     }
 }
 else {
+    # Pack only what eng/openslide.json pins: every platform's binaries, licenses and openslide-bin.json.
+    & (Join-Path $PSScriptRoot 'Get-OpenSlide.ps1') -Platform all -Verify
+
+    $versionProps = @("-p:Version=$Version")
+    if ($OpenSlideUpstreamVersion) { $versionProps += "-p:OpenSlideUpstreamVersion=$OpenSlideUpstreamVersion" }
     foreach ($proj in 'src/OpenSlideSharp/OpenSlideSharp.csproj', 'src/OpenSlideSharp.SkiaSharp/OpenSlideSharp.SkiaSharp.csproj', 'src/OpenSlideSharp.runtime/OpenSlideSharp.runtime.csproj', 'src/OpenSlideSharp.AspNetCore/OpenSlideSharp.AspNetCore.csproj') {
-        Invoke-Native dotnet @('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed, "-p:Version=$Version")
+        Invoke-Native dotnet (@('pack', (Join-Path $root $proj), '-c', 'Release', '-o', $feed) + $versionProps)
     }
 
     # The tool carries the native library of every RID through OpenSlideSharp.runtime, restored from the feed just
-    # packed. It restores into the isolated cache, so smoke versions never reach the user's NuGet cache, and builds
-    # into its own artifacts folder, so the regular build output keeps its own restore.
+    # packed, and from nowhere else (see eng/LocalFeed.psm1). It restores into the isolated cache, so smoke versions
+    # never reach the user's NuGet cache, and builds into its own artifacts folder, so the regular build output keeps
+    # its own restore.
     $env:NUGET_PACKAGES = $packages
-    Invoke-Native dotnet @('pack', (Join-Path $root 'src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj'), '-c', 'Release', '-o', $feed,
-        "-p:Version=$Version", '-p:UseOpenSlideRuntimePackage=true', "-p:RestoreAdditionalProjectSources=$feed",
-        '--artifacts-path', (Join-Path $artifacts 'smoke/pack-tool'))
+    $toolArtifacts = Join-Path $artifacts 'smoke/pack-tool'
+    $nugetConfig = New-LocalFeedConfig -Feed $feed -Path (Join-Path $toolArtifacts 'NuGet.config')
+    Invoke-Native dotnet (@('pack', (Join-Path $root 'src/OpenSlideSharp.Tool/OpenSlideSharp.Tool.csproj'), '-c', 'Release', '-o', $feed) +
+        $versionProps + @('-p:UseOpenSlideRuntimePackage=true', "-p:RestoreConfigFile=$nugetConfig", '--artifacts-path', $toolArtifacts))
+    Assert-RestoredFromFeed -AssetsFile (Join-Path $toolArtifacts 'obj/OpenSlideSharp.Tool/project.assets.json') -Feed $feed -Require 'OpenSlideSharp.runtime'
 }
 
 # 2. Assert nupkg contents.
@@ -65,6 +89,21 @@ function Get-NupkgEntries([string]$Path) {
     try { return @($zip.Entries | ForEach-Object { [Uri]::UnescapeDataString($_.FullName) }) }
     finally { $zip.Dispose() }
 }
+
+function Get-NupkgText([string]$Path, [string]$Name) {
+    $zip = [IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $e = $zip.GetEntry($Name)
+        if (-not $e) { throw "$Path has no '$Name'" }
+        $sr = New-Object IO.StreamReader($e.Open())
+        try { return $sr.ReadToEnd() } finally { $sr.Dispose() }
+    }
+    finally { $zip.Dispose() }
+}
+
+# The openslide-bin build the packages carry, and its archives (asset keys), each with its own licenses/<key>/.
+$manifest = Get-Content (Join-Path $root 'eng/openslide.json') -Raw | ConvertFrom-Json
+$binKeys = @($manifest.assets.PSObject.Properties.Name)
 
 $runtimeNupkg = Join-Path $feed "OpenSlideSharp.runtime.$Version.nupkg"
 $entries = Get-NupkgEntries $runtimeNupkg
@@ -82,15 +121,32 @@ $required = @(
     'build/native/lib/x64/libopenslide.lib',
     'lib/netstandard2.0/_._',
     'buildTransitive/net462/OpenSlideSharp.runtime.targets',
-    'VERSIONS.md', 'versions.json', 'README.md', 'openslide_logo.png'
+    'LICENSE.txt', 'openslide-bin.json', 'README.md', 'openslide_logo.png'
 )
+# Each archive's notices: licenses/<key>/ with VERSIONS.md and openslide-bin's licenses/<project>/<file> layout.
+foreach ($key in $binKeys) { $required += "licenses/$key/VERSIONS.md", "licenses/$key/OpenSlide/COPYING.LESSER" }
 foreach ($r in $required) {
     if ($entries -notcontains $r) { throw "runtime nupkg is missing '$r'" }
 }
-if (-not ($entries | Where-Object { $_ -like 'licenses/*' })) { throw "runtime nupkg has no licenses/**" }
-# openslide-bin's layout, licenses/<project>/<file>, without the project directory doubled.
-if ($entries -notcontains 'licenses/OpenSlide/COPYING.LESSER') { throw "runtime nupkg is missing 'licenses/OpenSlide/COPYING.LESSER'" }
-if ($entries | Where-Object { $_ -match '^licenses/([^/]+)/\1/' }) { throw 'runtime nupkg has doubled directories under licenses/' }
+$licenseRoots = @($entries | Where-Object { $_ -like 'licenses/*' } | ForEach-Object { ($_ -split '/')[1] } | Sort-Object -Unique)
+if (($licenseRoots -join ', ') -cne (($binKeys | Sort-Object) -join ', ')) {
+    throw "runtime nupkg has licenses/{$($licenseRoots -join ', ')}, expected one folder per openslide-bin archive: $(($binKeys | Sort-Object) -join ', ')"
+}
+if ($entries | Where-Object { $_ -match '^licenses/[^/]+/([^/]+)/\1/' }) { throw 'runtime nupkg has doubled directories under licenses/<platform>/' }
+# The old layout's single VERSIONS.md and versions.json, of whichever archive was extracted last, are gone.
+foreach ($stale in 'VERSIONS.md', 'versions.json') {
+    if ($entries -contains $stale) { throw "runtime nupkg still has '$stale' at its root" }
+}
+# openslide-bin.json describes exactly the build in eng/openslide.json, with its source tarball.
+$binJson = Get-NupkgText $runtimeNupkg 'openslide-bin.json' | ConvertFrom-Json
+$binFields = @($binJson.PSObject.Properties.Name)
+if (($binFields -join ', ') -cne 'channel, binVersion, openslideVersion, openslideCommit, date, source') { throw "runtime openslide-bin.json has the fields '$($binFields -join ', ')'" }
+foreach ($f in 'channel', 'binVersion', 'openslideVersion', 'openslideCommit', 'date') {
+    if ("$($binJson.$f)" -cne "$($manifest.$f)") { throw "runtime openslide-bin.json: $f is '$($binJson.$f)', eng/openslide.json has '$($manifest.$f)'" }
+}
+if ("$($binJson.source.url)" -cne "$($manifest.source.url)" -or "$($binJson.source.sha256)" -cne "$($manifest.source.sha256)") {
+    throw "runtime openslide-bin.json: source is '$($binJson.source.url)' ($($binJson.source.sha256)), eng/openslide.json has '$($manifest.source.url)' ($($manifest.source.sha256))"
+}
 if ($entries | Where-Object { $_ -match '\.debug$' }) { throw "runtime nupkg contains .debug files" }
 if ($entries | Where-Object { $_ -match '\.dSYM(/|$)' }) { throw "runtime nupkg contains .dSYM entries" }
 if ($entries | Where-Object { $_ -match '(^|/)slidetool' }) { throw "runtime nupkg contains slidetool" }
@@ -109,42 +165,59 @@ function Get-NuspecXml([string]$Path) {
 $rtMeta = (Get-NuspecXml $runtimeNupkg).package.metadata
 $rtDeps = @($rtMeta.dependencies.group | Where-Object { $_ -and $_.HasChildNodes })
 if ($rtMeta.dependencies -and ($rtMeta.dependencies.dependency -or $rtDeps.Count -gt 0)) { throw "runtime nuspec declares dependencies" }
-if ($rtMeta.license.InnerText -ne 'LGPL-2.1-only') { throw "runtime nuspec license is '$($rtMeta.license.InnerText)', expected LGPL-2.1-only" }
+if ($rtMeta.license.type -ne 'file' -or $rtMeta.license.InnerText -ne 'LICENSE.txt') {
+    throw "runtime nuspec license is '$($rtMeta.license.InnerText)' ($($rtMeta.license.type)), expected <license type=`"file`">LICENSE.txt</license>"
+}
 if (($rtMeta.tags -split '\s+') -notcontains 'native') { throw "runtime nuspec tags lack 'native': $($rtMeta.tags)" }
 
-$coreMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.$Version.nupkg")).package.metadata
-if ($coreMeta.SelectNodes("//*[local-name()='dependency'][@id='OpenSlideSharp.runtime']").Count -gt 0) { throw "core nuspec depends on OpenSlideSharp.runtime" }
-
-$skiaMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.SkiaSharp.$Version.nupkg")).package.metadata
-if ($skiaMeta.SelectNodes("//*[local-name()='dependency'][@id='OpenSlideSharp.runtime']").Count -gt 0) { throw "Skia nuspec depends on OpenSlideSharp.runtime" }
-if ($skiaMeta.license.InnerText -ne 'MIT') { throw "Skia nuspec license is '$($skiaMeta.license.InnerText)', expected MIT" }
-$skiaGroups = @($skiaMeta.dependencies.group)
-if ($skiaGroups.Count -lt 3) { throw "Skia nuspec has $($skiaGroups.Count) dependency groups, expected one per target framework (3)" }
-foreach ($g in $skiaGroups) {
-    $deps = @{}
-    foreach ($d in @($g.dependency)) { $deps[$d.id] = $d.version }
-    $expect = @{ 'OpenSlideSharp' = $Version; 'SkiaSharp' = '3.119.4'; 'SkiaSharp.NativeAssets.Linux.NoDependencies' = '3.119.4' }
-    foreach ($id in $expect.Keys) {
-        if (-not $deps.ContainsKey($id)) { throw "Skia nuspec group '$($g.targetFramework)' lacks a dependency on $id" }
-        # NuGet writes a minimum version as '[x, )' or 'x' depending on the packer; accept both.
-        if ($deps[$id] -notmatch ('^\[?' + [regex]::Escape($expect[$id]) + '(, \))?\]?$')) { throw "Skia nuspec group '$($g.targetFramework)': $id version is '$($deps[$id])', expected $($expect[$id])" }
+# Asserts a nuspec's dependency groups exactly: the same target frameworks as $Expected's keys, and in each group the
+# same package ids as that key's table, with those minimum versions.
+function Assert-DependencyGroups([string]$Name, $Meta, [hashtable]$Expected) {
+    $groups = @($Meta.dependencies.group | Where-Object { $_ })
+    $tfms = ($groups | ForEach-Object { $_.targetFramework } | Sort-Object) -join ', '
+    $wantTfms = ($Expected.Keys | Sort-Object) -join ', '
+    if ($tfms -cne $wantTfms) { throw "$Name nuspec has dependency groups for '$tfms', expected exactly '$wantTfms'" }
+    foreach ($g in $groups) {
+        $want = $Expected[$g.targetFramework]
+        $deps = @{}
+        foreach ($d in @($g.dependency | Where-Object { $_ })) { $deps[$d.id] = $d.version }
+        $ids = ($deps.Keys | Sort-Object) -join ', '
+        $wantIds = ($want.Keys | Sort-Object) -join ', '
+        if ($ids -cne $wantIds) { throw "$Name nuspec group '$($g.targetFramework)' depends on '$ids', expected exactly '$wantIds'" }
+        foreach ($id in $want.Keys) {
+            # NuGet writes a minimum version as '[x, )' or 'x' depending on the packer; accept both.
+            if ($deps[$id] -notmatch ('^\[?' + [regex]::Escape($want[$id]) + '(, \))?\]?$')) {
+                throw "$Name nuspec group '$($g.targetFramework)': $id version is '$($deps[$id])', expected $($want[$id])"
+            }
+        }
     }
 }
+
+# The versions the packages were built against, from central package management.
+$central = @{}
+foreach ($pv in ([xml](Get-Content (Join-Path $root 'Directory.Packages.props') -Raw)).SelectNodes('//PackageVersion')) { $central[$pv.Include] = $pv.Version }
+
+# The core and Skia packages never depend on the runtime package: the native library is the app's choice.
+$coreMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.$Version.nupkg")).package.metadata
+Assert-DependencyGroups 'core' $coreMeta @{
+    'net10.0'         = @{}
+    '.NETStandard2.0' = @{ 'System.Memory' = $central['System.Memory'] }
+    '.NETStandard2.1' = @{}
+}
+
+$skiaMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.SkiaSharp.$Version.nupkg")).package.metadata
+if ($skiaMeta.license.InnerText -ne 'MIT') { throw "Skia nuspec license is '$($skiaMeta.license.InnerText)', expected MIT" }
+$skiaDeps = @{
+    'OpenSlideSharp'                              = $Version
+    'SkiaSharp'                                   = $central['SkiaSharp']
+    'SkiaSharp.NativeAssets.Linux.NoDependencies' = $central['SkiaSharp.NativeAssets.Linux.NoDependencies']
+}
+Assert-DependencyGroups 'Skia' $skiaMeta @{ 'net10.0' = $skiaDeps; '.NETStandard2.0' = $skiaDeps; '.NETStandard2.1' = $skiaDeps }
 
 # OpenSlideSharp.AspNetCore: net10.0 only, on the core and Skia packages of the same version and the ASP.NET Core
 # shared framework. The native library is the app's choice, so no runtime package.
 $aspMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.AspNetCore.$Version.nupkg")).package.metadata
-$aspGroups = @($aspMeta.dependencies.group)
-if ($aspGroups.Count -ne 1 -or $aspGroups[0].targetFramework -ne 'net10.0') {
-    throw "AspNetCore nuspec dependency groups are '$(($aspGroups | ForEach-Object { $_.targetFramework }) -join ', ')', expected only net10.0"
-}
-$aspDeps = @{}
-foreach ($d in @($aspGroups[0].dependency)) { $aspDeps[$d.id] = $d.version }
-$aspIds = ($aspDeps.Keys | Sort-Object) -join ', '
-if ($aspIds -ne 'OpenSlideSharp, OpenSlideSharp.SkiaSharp') { throw "AspNetCore nuspec depends on '$aspIds', expected exactly OpenSlideSharp and OpenSlideSharp.SkiaSharp" }
-foreach ($id in $aspDeps.Keys) {
-    if ($aspDeps[$id] -notmatch ('^\[?' + [regex]::Escape($Version) + '(, \))?\]?$')) { throw "AspNetCore nuspec: $id version is '$($aspDeps[$id])', expected $Version" }
-}
+Assert-DependencyGroups 'AspNetCore' $aspMeta @{ 'net10.0' = @{ 'OpenSlideSharp' = $Version; 'OpenSlideSharp.SkiaSharp' = $Version } }
 if ($aspMeta.SelectNodes("//*[local-name()='frameworkReference'][@name='Microsoft.AspNetCore.App']").Count -ne 1) {
     throw 'AspNetCore nuspec lacks frameworkReference Microsoft.AspNetCore.App'
 }
@@ -179,33 +252,72 @@ $extraRids = @($toolRids | Where-Object { $_ -notin 'win-x64', 'linux-x64', 'lin
 if ($extraRids.Count -gt 0) { throw "tool nupkg has native assets for unsupported RIDs: $($extraRids -join ', ')" }
 
 # The tool redistributes LGPL-2.1 OpenSlide (with openslide-bin's statically linked libraries), SkiaSharp and Skia,
-# and the OpenSeadragon viewer files: their licenses must travel with it, and the license expression must name them.
+# System.CommandLine and the OpenSeadragon viewer files: their licenses must travel with it, and its LICENSE.txt must
+# state them.
 $toolEntries | Where-Object { $_ -like 'licenses/*' } | ForEach-Object { "  tool: $_" }
-if ($toolEntries -notcontains 'licenses/openslide-bin/VERSIONS.md') { throw "tool nupkg is missing 'licenses/openslide-bin/VERSIONS.md'" }
-if ($toolEntries -notcontains 'licenses/openslide-bin/OpenSlide/COPYING.LESSER') { throw "tool nupkg is missing OpenSlide's license, 'licenses/openslide-bin/OpenSlide/COPYING.LESSER'" }
-if ($toolEntries | Where-Object { $_ -match '^licenses/openslide-bin/([^/]+)/\1/' }) { throw 'tool nupkg has doubled directories under licenses/openslide-bin/' }
-$openslideBinLicenses = @($toolEntries | Where-Object { $_ -match '^licenses/openslide-bin/[^/]+/.' })
-$runtimeLicenses = @($entries | Where-Object { $_ -match '^licenses/[^/]+/.' })
-if ($openslideBinLicenses.Count -ne $runtimeLicenses.Count) {
-    throw "tool nupkg has $($openslideBinLicenses.Count) files under licenses/openslide-bin/, the runtime nupkg $($runtimeLicenses.Count) under licenses/"
+foreach ($r in @('LICENSE.txt', 'licenses/openslide-bin/openslide-bin.json') + @($binKeys | ForEach-Object { "licenses/openslide-bin/$_/VERSIONS.md", "licenses/openslide-bin/$_/OpenSlide/COPYING.LESSER" })) {
+    if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
 }
-if (-not ($openslideBinLicenses | Where-Object { $_ -match '/(COPYING|LICENSE)[^/]*$' })) { throw 'tool nupkg has no COPYING or LICENSE file under licenses/openslide-bin/' }
+# Exactly the runtime package's licenses/<platform>/ trees, under licenses/openslide-bin/.
+$openslideBinLicenses = @($toolEntries | Where-Object { $_ -like 'licenses/openslide-bin/*/*' } | ForEach-Object { $_.Substring('licenses/openslide-bin/'.Length) } | Sort-Object)
+$runtimeLicenses = @($entries | Where-Object { $_ -like 'licenses/*/*' } | ForEach-Object { $_.Substring('licenses/'.Length) } | Sort-Object)
+if (($openslideBinLicenses -join "`n") -cne ($runtimeLicenses -join "`n")) {
+    throw "tool nupkg has $($openslideBinLicenses.Count) files under licenses/openslide-bin/<platform>/, not the runtime nupkg's $($runtimeLicenses.Count) under licenses/<platform>/"
+}
 foreach ($r in 'licenses/viewer/LICENSE.openseadragon', 'licenses/viewer/LICENSE.openseadragon-scalebar', 'licenses/skiasharp/LICENSE.txt', 'licenses/skiasharp/THIRD-PARTY-NOTICES.txt') {
     if ($toolEntries -notcontains $r) { throw "tool nupkg is missing '$r'" }
 }
 $toolMeta = (Get-NuspecXml $toolNupkg).package.metadata
-$toolLicense = 'MIT AND LGPL-2.1-only AND BSD-3-Clause'
-if ($toolMeta.license.type -ne 'expression' -or $toolMeta.license.InnerText -ne $toolLicense) {
-    throw "tool nuspec license is '$($toolMeta.license.InnerText)' ($($toolMeta.license.type)), expected the expression '$toolLicense'"
+if ($toolMeta.license.type -ne 'file' -or $toolMeta.license.InnerText -ne 'LICENSE.txt') {
+    throw "tool nuspec license is '$($toolMeta.license.InnerText)' ($($toolMeta.license.type)), expected <license type=`"file`">LICENSE.txt</license>"
 }
 if ($toolMeta.description -notmatch 'openslide-bin source tarball') { throw "tool nuspec description does not name the OpenSlide source: $($toolMeta.description)" }
+# Both license files point to the OpenSlide source: the tarball openslide-bin.json names, and its copy on the
+# OpenSlideSharp GitHub release (nightly openslide-bin builds are removed after a while).
+foreach ($license in @(@{ Name = 'runtime'; Text = Get-NupkgText $runtimeNupkg 'LICENSE.txt' }, @{ Name = 'tool'; Text = Get-NupkgText $toolNupkg 'LICENSE.txt' })) {
+    foreach ($phrase in 'source.sha256', 'openslide-bin-<binVersion>.tar.gz', 'https://github.com/IOL0ol1/OpenSlideSharp/releases') {
+        if (-not $license.Text.Contains($phrase)) { throw "$($license.Name) LICENSE.txt does not mention '$phrase'" }
+    }
+}
+foreach ($phrase in 'LGPL-2.1-only', 'licenses/openslide-bin/<platform>/OpenSlide/COPYING.LESSER', 'licenses/skiasharp/', 'licenses/viewer/', 'System.CommandLine') {
+    if (-not (Get-NupkgText $toolNupkg 'LICENSE.txt').Contains($phrase)) { throw "tool LICENSE.txt does not mention '$phrase'" }
+}
 $toolSize = (Get-Item $toolNupkg).Length
 Write-Host ("tool nupkg size: {0:N1} MB ({1} bytes)" -f ($toolSize / 1MB), $toolSize)
+
+# With -OpenSlideUpstreamVersion every OpenSlideSharp assembly in the packages names the OpenSlide it was released with.
+if ($OpenSlideUpstreamVersion) {
+    $wantInfo = "$Version+openslide.$OpenSlideUpstreamVersion"
+    $infoDir = Join-Path $artifacts 'smoke/informational-version'
+    New-Item -ItemType Directory -Force $infoDir | Out-Null
+    foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.AspNetCore', 'OpenSlideSharp.Tool') {
+        $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $feed "$id.$Version.nupkg"))
+        try {
+            $dlls = @($zip.Entries | Where-Object { $_.FullName -match '(^|/)OpenSlideSharp[^/]*\.dll$' })
+            if ($dlls.Count -eq 0) { throw "$id nupkg has no OpenSlideSharp assembly" }
+            foreach ($dll in $dlls) {
+                $file = Join-Path $infoDir "$([Guid]::NewGuid().ToString('N')).dll"
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($dll, $file)
+                # ProductVersion is the InformationalVersion (from the version resource on Windows, the metadata elsewhere).
+                $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($file).ProductVersion
+                if ($info -cne $wantInfo) { throw "$id nupkg: $($dll.FullName) has InformationalVersion '$info', expected '$wantInfo'" }
+            }
+            Write-Host "$id nupkg: $($dlls.Count) assemblies with InformationalVersion $wantInfo"
+        }
+        finally { $zip.Dispose() }
+    }
+}
+
+if ($PackOnly) {
+    Write-Host "Packed and checked the packages in $feed (-PackOnly: no smoke tests)."
+    exit 0
+}
 
 # 3. Consume the packages from an isolated global cache.
 $env:NUGET_PACKAGES = $packages
 
-# Builds the smoke project; returns the output folder and the captured build log.
+# Builds the smoke project; returns the output folder and the captured build log. Its NuGet.config maps OpenSlideSharp*
+# to the feed only; the packages it restored must be the feed's.
 function Build-Smoke {
     param([string]$Name, [string]$Tfm, [string[]]$Extra)
     $out = Join-Path $artifacts "smoke/$Name"
@@ -213,6 +325,7 @@ function Build-Smoke {
     $code = $LASTEXITCODE
     Write-Host $log
     if ($code -ne 0) { throw "[$Name] dotnet build failed with exit code $code" }
+    Assert-RestoredFromFeed -AssetsFile (Join-Path $out 'obj/PackageSmoke/project.assets.json') -Feed $feed -Require 'OpenSlideSharp'
     return [pscustomobject]@{ Bin = (Join-Path $out "bin/PackageSmoke/release_$Tfm"); Log = $log }
 }
 
@@ -289,7 +402,13 @@ Write-Host '== smoke: openslide-sharp tool'
 $toolTemp = Join-Path ($env:RUNNER_TEMP ? $env:RUNNER_TEMP : [IO.Path]::GetTempPath()) ('oss-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 try {
     $toolPath = Join-Path $toolTemp 'bin'
-    Invoke-Native dotnet @('tool', 'install', 'OpenSlideSharp.Tool', '--tool-path', $toolPath, '--add-source', $feed, '--version', $Version)
+    # From the feed only: a tool package has no dependencies, so the feed is its only source.
+    Invoke-Native dotnet @('tool', 'install', 'OpenSlideSharp.Tool', '--tool-path', $toolPath, '--source', $feed, '--version', $Version)
+    $lower = "openslidesharp.tool/$($Version.ToLowerInvariant())"
+    $installed = Join-Path $toolPath ".store/$lower/$lower/openslidesharp.tool.$($Version.ToLowerInvariant()).nupkg"
+    if ((Get-NupkgSha512 $installed) -cne (Get-NupkgSha512 (Join-Path $feed "OpenSlideSharp.Tool.$Version.nupkg"))) {
+        throw "[tool] the installed $installed is not the feed's OpenSlideSharp.Tool.$Version.nupkg"
+    }
     $toolExe = Join-Path $toolPath $(if ($IsWindows) { 'openslide-sharp.exe' } else { 'openslide-sharp' })
     $toolOut = Join-Path $toolTemp 'small'
     Invoke-Native $toolExe @('deepzoom', $fixture, '-o', $toolOut)
@@ -302,72 +421,35 @@ finally {
     Remove-Item $toolTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 6. The desktop viewer, published the way its releases will be: self-contained, one executable and its licenses, for
-# this machine's RID, with the native OpenSlide library from the runtime package in the feed. --check reads the slide
-# without a window.
+# 6. The desktop viewer, published the way its releases are (eng/Publish-Viewer.ps1): self-contained, one executable
+# and its licenses, for this machine's RID, with the native OpenSlide library from the runtime package in the feed,
+# and run with --check, which reads the slide without a window.
 Write-Host '== smoke: viewer (self-contained single file)'
-$hostArch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-# Picked the way eng/Get-OpenSlide.ps1 picks this machine's binaries.
-$viewerRid = if ($IsWindows -and $hostArch -eq 'X64') { 'win-x64' }
-elseif ($IsLinux -and $hostArch -eq 'X64') { 'linux-x64' }
-elseif ($IsLinux -and $hostArch -eq 'Arm64') { 'linux-arm64' }
-elseif ($IsMacOS -and $hostArch -eq 'Arm64') { 'osx-arm64' }
-elseif ($IsMacOS -and $hostArch -eq 'X64') { 'osx-x64' }
-else { throw "[viewer] OpenSlide publishes no binaries for this platform ($hostArch)" }
-$viewerOut = Join-Path $artifacts 'smoke/viewer'
-Invoke-Native dotnet @('publish', (Join-Path $root 'samples/OpenSlideSharp.Viewer'), '-c', 'Release', '-r', $viewerRid, '--self-contained',
-    '-p:PublishSingleFile=true', '-p:UseOpenSlideRuntimePackage=true', "-p:OpenSlideSharpVersion=$Version",
-    "-p:RestoreAdditionalProjectSources=$feed", '--artifacts-path', $viewerOut)
-$viewerPublish = Join-Path $viewerOut "publish/OpenSlideSharp.Viewer/release_$viewerRid"
-$viewerName = $IsWindows ? 'OpenSlideSharp.Viewer.exe' : 'OpenSlideSharp.Viewer'
-# The publish folder is exactly what a release archives: the executable, with the native libraries inside it, and
-# licenses/ with the notices of what it contains.
-$published = @(Get-ChildItem $viewerPublish -Recurse -File | ForEach-Object {
-        [pscustomobject]@{ Path = [IO.Path]::GetRelativePath($viewerPublish, $_.FullName) -replace '\\', '/'; Length = $_.Length }
-    })
-$published | ForEach-Object { Write-Host ("published: {0} ({1:N1} KB)" -f $_.Path, ($_.Length / 1KB)) }
-$paths = @($published | ForEach-Object Path)
-$unexpected = @($paths | Where-Object { $_ -ne $viewerName -and -not $_.StartsWith('licenses/') })
-if ($paths -notcontains $viewerName -or $unexpected.Count -gt 0) {
-    throw "[viewer] expected $viewerName and licenses/ in $viewerPublish, found: $($paths -join ', ')"
-}
-foreach ($required in 'licenses/THIRD-PARTY-NOTICES.txt', 'licenses/SOURCE.md', 'licenses/openslide-bin/VERSIONS.md') {
-    if ($paths -notcontains $required) { throw "[viewer] $required is not in $viewerPublish" }
-}
-# The license texts of OpenSlide and of the libraries linked into it, from the runtime package.
-if (-not ($paths | Where-Object { $_ -like 'licenses/openslide-bin/OpenSlide/*' })) { throw "[viewer] OpenSlide's license is not in licenses/openslide-bin/" }
-$binLicenses = @($paths | Where-Object { $_ -like 'licenses/openslide-bin/*/*' })
-Write-Host "licenses/openslide-bin: $($binLicenses.Count) license files"
-# The bundle extracts its native libraries when it starts; a fresh extraction directory shows they came from it.
-$viewerExtract = Join-Path $viewerOut 'extract'
-$env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = $viewerExtract
-try {
-    # Piped, so that PowerShell waits for the viewer, a GUI program on Windows, and captures what it prints.
-    $output = & (Join-Path $viewerPublish $viewerName) --check $fixture 2>&1 | Out-String
-    $code = $LASTEXITCODE
-}
-finally {
-    Remove-Item Env:DOTNET_BUNDLE_EXTRACT_BASE_DIR -ErrorAction SilentlyContinue
-}
-Write-Host $output
-if ($code -ne 0) { throw "[viewer] --check exited with code $code, expected 0" }
-foreach ($line in 'openslide=4.', 'slide=16x16') {
-    if ($output -notmatch [regex]::Escape($line)) { throw "[viewer] --check output does not contain '$line'" }
-}
-$extracted = @(Get-ChildItem $viewerExtract -Recurse -File | ForEach-Object { $_.Name })
-$extracted | ForEach-Object { Write-Host "extracted: $_" }
-foreach ($lib in 'libopenslide-1', 'libSkiaSharp', 'libHarfBuzzSharp') {
-    if (-not ($extracted | Where-Object { [IO.Path]::GetFileNameWithoutExtension($_) -eq $lib })) { throw "[viewer] $lib is not in the bundle" }
-}
-Write-Host "PASS: viewer ($viewerRid)"
+& (Join-Path $PSScriptRoot 'Publish-Viewer.ps1') -Version $Version -Feed $feed -OpenSlideUpstreamVersion $OpenSlideUpstreamVersion `
+    -ArtifactsPath (Join-Path $artifacts 'smoke/viewer')
 
 # 7. Native C++ consumer (Visual Studio vcxproj via packages.config), Windows only.
 if ($IsWindows) {
     $cppProj = Join-Path $root 'test/NativeCppSmoke'
+    # nuget.exe is pinned to one release (see https://dist.nuget.org/tools.json) and used only with this sha256.
+    $nugetVersion = '8.0.0'
+    $nugetSha256 = 'd4ddb222cb8fca8200b59e82286c0cba9c29b4fce6f9835fdfa54e67c9483d07'
     $nuget = Join-Path $artifacts 'tools/nuget.exe'
+    if ((Test-Path $nuget) -and (Get-FileHash $nuget -Algorithm SHA256).Hash -ne $nugetSha256) {
+        Write-Host "Cached $nuget is not nuget.exe $nugetVersion; downloading again."
+        Remove-Item $nuget -Force
+    }
     if (-not (Test-Path $nuget)) {
         New-Item -ItemType Directory -Force (Split-Path $nuget) | Out-Null
-        Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $nuget
+        $part = "$nuget.part"
+        try { Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/v$nugetVersion/nuget.exe" -OutFile $part }
+        catch { Remove-Item $part -Force -ErrorAction SilentlyContinue; throw }
+        $actual = (Get-FileHash $part -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $nugetSha256) {
+            Remove-Item $part -Force
+            throw "nuget.exe $nugetVersion has sha256 $actual, expected $nugetSha256. The download was deleted."
+        }
+        Move-Item $part $nuget -Force
     }
 
     Write-Host '== smoke: native C++ (x64)'

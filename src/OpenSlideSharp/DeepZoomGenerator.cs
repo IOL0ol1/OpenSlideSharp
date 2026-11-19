@@ -26,12 +26,15 @@ public sealed class DeepZoomGenerator
 
     /// <summary>Creates a generator for a slide.</summary>
     /// <param name="slide">The slide.</param>
-    /// <param name="tileSize">Width and height of a tile; <c>tileSize + 2 * overlap</c> should be a power of two for best viewer performance.</param>
+    /// <param name="tileSize">
+    /// Width and height of a tile; <c>tileSize + 2 * overlap</c> should be a power of two for best viewer performance.
+    /// Any size is accepted, as in openslide-python; <see cref="GetTile"/> rejects a tile too large to render.
+    /// </param>
     /// <param name="overlap">Extra pixels added to each interior edge of a tile.</param>
     /// <param name="limitBounds"><see langword="true"/> to render only the non-empty slide region.</param>
     /// <param name="colorTransform">Converts tiles to sRGB; if given, tiles carry no ICC profile.</param>
     /// <exception cref="ArgumentNullException"><paramref name="slide"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public DeepZoomGenerator(OpenSlide slide, int tileSize = 254, int overlap = 1, bool limitBounds = false, IColorTransform? colorTransform = null)
@@ -45,7 +48,7 @@ public sealed class DeepZoomGenerator
     /// <param name="overlap">Extra pixels added to each interior edge of a tile.</param>
     /// <param name="colorTransform">Converts tiles to sRGB; if given, tiles carry no ICC profile.</param>
     /// <exception cref="ArgumentNullException"><paramref name="image"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative or too large.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileSize"/> is less than 1, or <paramref name="overlap"/> is negative.</exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state.</exception>
     public DeepZoomGenerator(AssociatedImage image, int tileSize = 254, int overlap = 1, IColorTransform? colorTransform = null)
@@ -74,11 +77,6 @@ public sealed class DeepZoomGenerator
         if (overlap < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(overlap), overlap, "The overlap must not be negative.");
-        }
-
-        if ((long)tileSize + (2L * overlap) > int.MaxValue / 4)
-        {
-            throw new ArgumentOutOfRangeException(nameof(overlap), overlap, "The tile size plus twice the overlap is too large.");
         }
 
         _source = source;
@@ -138,8 +136,8 @@ public sealed class DeepZoomGenerator
     /// <param name="row">The tile row within the level.</param>
     /// <returns>The tile.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// The level, column or row is out of range, or the tile, or the slide region it is rendered from, needs more
-    /// bytes than a .NET array can hold.
+    /// The level, column or row is out of range; or, reported for <paramref name="level"/>, the tile, or the slide
+    /// region it is rendered from, needs more bytes than a .NET array can hold (a large tile size or overlap).
     /// </exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
@@ -147,9 +145,16 @@ public sealed class DeepZoomGenerator
     {
         _ensureUsable?.Invoke();
         TileInfo info = GetTileInfo(level, column, row);
-        var data = new byte[OpenSlide.CheckedPixelBytes(info.Width, info.Height, "tile")];
-        _renderer.Render(info.Exponent, info.X, info.Y, info.Width, info.Height, data);
-        return new PixelImage(info.Width, info.Height, PixelFormat.Bgra32Opaque, data, _iccProfile);
+
+        // Both are checked before anything is allocated or read. A tile that fits has at most Array.MaxLength / 4
+        // pixels and is at least 1 x 1, so each side fits in an int.
+        long length = OpenSlide.CheckedPixelBytes(info.Width, info.Height, "tile", nameof(level));
+        OpenSlide.CheckedPixelBytes(Math.Max(info.Region.Width, 0), Math.Max(info.Region.Height, 0), "slide region", nameof(level));
+        int width = (int)info.Width;
+        int height = (int)info.Height;
+        var data = new byte[length];
+        _renderer.Render(info.Exponent, info.X, info.Y, width, height, data);
+        return new PixelImage(width, height, PixelFormat.Bgra32Opaque, data, _iccProfile);
     }
 
     /// <summary>Returns the <c>OpenSlide.ReadRegion</c> arguments for a tile.</summary>
@@ -244,8 +249,9 @@ public sealed class DeepZoomGenerator
         long y = ((long)TileSize * row) - overlapTop;
         SourceRegion region = _geometry.Map(exponent, x, y, width, height);
         return new TileInfo(
-            new TileRegion(region.X, region.Y, region.Level, region.Width, region.Height), (int)width, (int)height, exponent, x, y);
+            new TileRegion(region.X, region.Y, region.Level, region.Width, region.Height), width, height, exponent, x, y);
     }
 
-    private readonly record struct TileInfo(TileRegion Region, int Width, int Height, int Exponent, long X, long Y);
+    // Width and Height are long: the tile size plus twice the overlap can exceed int.MaxValue.
+    private readonly record struct TileInfo(TileRegion Region, long Width, long Height, int Exponent, long X, long Y);
 }

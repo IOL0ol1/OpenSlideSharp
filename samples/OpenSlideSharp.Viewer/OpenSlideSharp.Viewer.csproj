@@ -52,43 +52,180 @@
 
   <!--
     Every publish has licenses/ next to the executable, with the notices of what it contains:
-    - openslide-bin/: OpenSlide's and its libraries' licenses and VERSIONS.md, from OpenSlideSharp.runtime (or, without
-      it, from artifacts/native);
+    - openslide-bin/: <platform>/ with the licenses of OpenSlide and of the libraries linked into it, and VERSIONS.md,
+      for the openslide-bin build of the publish's RID only (all four for a publish without a RID, which carries every
+      platform's library), and openslide-bin.json (the build and its source tarball), from OpenSlideSharp.runtime
+      (or, without it, from artifacts/native);
     - <package id>/: the LICENSE* and THIRD-PARTY-NOTICES* files of each NuGet package (the .NET runtime pack of a
       self-contained publish among them) with a file in the publish;
-    - OpenSlideSharp/LICENSE, THIRD-PARTY-NOTICES.txt (a list of the components and their licenses) and SOURCE.md
-      (where OpenSlide's source is, and how to use another OpenSlide build).
+    - OpenSlideSharp/LICENSE, THIRD-PARTY-NOTICES.txt (a list of the components and their licenses) and SOURCE.md,
+      written from openslide-bin.json (the exact openslide-bin build, where its source is, and how to use another
+      OpenSlide build).
     They stay out of a single-file bundle.
   -->
   <Target Name="PublishLicenses" AfterTargets="PublishWithoutSymbols;ComputeResolvedFilesToPublishList">
     <PropertyGroup>
       <_OpenSlideBinDir Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">$(PkgOpenSlideSharp_runtime)</_OpenSlideBinDir>
       <_OpenSlideBinDir Condition="'$(UseOpenSlideRuntimePackage)' != 'true'">$(MSBuildThisFileDirectory)..\..\artifacts\native</_OpenSlideBinDir>
+      <!--
+        The RID whose OpenSlide library the publish holds: the publish RID, from the runtime package; this machine's,
+        from artifacts/native (eng/OpenSlideNative.targets). Then the openslide-bin archive that library comes from.
+      -->
+      <_OpenSlideBinRid Condition="'$(UseOpenSlideRuntimePackage)' == 'true'">$(RuntimeIdentifier)</_OpenSlideBinRid>
+      <_OpenSlideBinRid Condition="'$(UseOpenSlideRuntimePackage)' != 'true'">$(OpenSlideNativeRid)</_OpenSlideBinRid>
+      <_OpenSlideBinKey Condition="'$(_OpenSlideBinRid)' == 'win-x64'">windows-x64</_OpenSlideBinKey>
+      <_OpenSlideBinKey Condition="'$(_OpenSlideBinRid)' == 'linux-x64'">linux-x86_64</_OpenSlideBinKey>
+      <_OpenSlideBinKey Condition="'$(_OpenSlideBinRid)' == 'linux-arm64'">linux-aarch64</_OpenSlideBinKey>
+      <_OpenSlideBinKey Condition="$(_OpenSlideBinRid.StartsWith('osx-'))">macos-arm64-x86_64</_OpenSlideBinKey>
+      <!-- The folder to copy, under the source's licenses/ and the publish's licenses/openslide-bin/. -->
+      <_OpenSlideBinLicenseDir Condition="'$(_OpenSlideBinKey)' != ''">$(_OpenSlideBinKey)/</_OpenSlideBinLicenseDir>
+      <_ViewerSourceNotice>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'licenses', 'SOURCE.md'))</_ViewerSourceNotice>
     </PropertyGroup>
-    <Error Condition="!Exists('$(_OpenSlideBinDir)/VERSIONS.md') or !Exists('$(_OpenSlideBinDir)/licenses')"
-           Text="OpenSlide's licenses/ and VERSIONS.md are not in '$(_OpenSlideBinDir)'." />
+    <Error Condition="!Exists('$(_OpenSlideBinDir)/openslide-bin.json') or !Exists('$(_OpenSlideBinDir)/licenses')"
+           Text="OpenSlide's licenses/ and openslide-bin.json are not in '$(_OpenSlideBinDir)'." />
+    <Error Condition="'$(_OpenSlideBinRid)' != '' and '$(_OpenSlideBinKey)' == ''"
+           Text="openslide-bin has no build for the runtime identifier '$(_OpenSlideBinRid)'. Publish for win-x64, linux-x64, linux-arm64, osx-arm64 or osx-x64." />
+    <Error Condition="'$(_OpenSlideBinKey)' != '' and !Exists('$(_OpenSlideBinDir)/licenses/$(_OpenSlideBinKey)/VERSIONS.md')"
+           Text="The notices of openslide-bin's $(_OpenSlideBinKey) build, licenses/$(_OpenSlideBinKey)/VERSIONS.md, are not in '$(_OpenSlideBinDir)'." />
+
+    <WriteOpenSlideSourceNotice BinInfo="$(_OpenSlideBinDir)/openslide-bin.json"
+                                Platform="$(_OpenSlideBinKey)"
+                                PackageVersion="$(OpenSlideSharpVersion)"
+                                OutputFile="$(_ViewerSourceNotice)" />
+
     <ItemGroup>
+      <FileWrites Include="$(_ViewerSourceNotice)" />
+
       <!-- The folder of each package with a file in the publish: the part of the file's path up to <id>/<version>/. -->
       <_ViewerPackageFile Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.NuGetPackageId)' != ''"
                           PackageDir="$([System.Text.RegularExpressions.Regex]::Match('%(ResolvedFileToPublish.FullPath)', '(?i)^.*[\\/]%(ResolvedFileToPublish.NuGetPackageId)[\\/]%(ResolvedFileToPublish.NuGetPackageVersion)[\\/]').Value)" />
       <_ViewerPackage Include="@(_ViewerPackageFile->'%(PackageDir)'->Distinct())" Condition="'%(_ViewerPackageFile.PackageDir)' != ''" />
       <_ViewerPackageLicense Include="%(_ViewerPackage.Identity)LICENSE*;%(_ViewerPackage.Identity)THIRD-PARTY-NOTICES*"
                              PackageId="%(_ViewerPackage.NuGetPackageId)" />
+      <!--
+        Not OpenSlideSharp.runtime's LICENSE.txt: it describes that package's layout (licenses/<platform>/,
+        runtimes/), not this folder's. What it says is in THIRD-PARTY-NOTICES.txt (item 1) and SOURCE.md, and the
+        license texts are under openslide-bin/.
+      -->
+      <_ViewerPackageLicense Remove="@(_ViewerPackageLicense)" Condition="'%(_ViewerPackageLicense.PackageId)' == 'OpenSlideSharp.runtime'" />
 
-      <_OpenSlideBinLicense Include="$(_OpenSlideBinDir)/licenses/**" />
+      <_OpenSlideBinLicense Include="$(_OpenSlideBinDir)/licenses/$(_OpenSlideBinLicenseDir)**" />
 
       <_ViewerLicense Include="@(_OpenSlideBinLicense)"
-                      RelativePath="licenses/openslide-bin/%(_OpenSlideBinLicense.RecursiveDir)%(_OpenSlideBinLicense.Filename)%(_OpenSlideBinLicense.Extension)" />
-      <_ViewerLicense Include="$(_OpenSlideBinDir)/VERSIONS.md" RelativePath="licenses/openslide-bin/VERSIONS.md" />
+                      RelativePath="licenses/openslide-bin/$(_OpenSlideBinLicenseDir)%(_OpenSlideBinLicense.RecursiveDir)%(_OpenSlideBinLicense.Filename)%(_OpenSlideBinLicense.Extension)" />
+      <_ViewerLicense Include="$(_OpenSlideBinDir)/openslide-bin.json" RelativePath="licenses/openslide-bin/openslide-bin.json" />
       <_ViewerLicense Include="@(_ViewerPackageLicense)"
                       RelativePath="licenses/%(_ViewerPackageLicense.PackageId)/%(_ViewerPackageLicense.Filename)%(_ViewerPackageLicense.Extension)" />
       <_ViewerLicense Include="$(MSBuildThisFileDirectory)..\..\LICENSE" RelativePath="licenses/OpenSlideSharp/LICENSE" />
       <_ViewerLicense Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.txt" RelativePath="licenses/THIRD-PARTY-NOTICES.txt" />
-      <_ViewerLicense Include="$(MSBuildThisFileDirectory)SOURCE.md" RelativePath="licenses/SOURCE.md" />
+      <_ViewerLicense Include="$(_ViewerSourceNotice)" RelativePath="licenses/SOURCE.md" />
 
       <ResolvedFileToPublish Include="@(_ViewerLicense)" RelativePath="%(_ViewerLicense.RelativePath)"
                              CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     </ItemGroup>
   </Target>
+
+  <!--
+    Writes licenses/SOURCE.md from openslide-bin.json, which eng/Get-OpenSlide.ps1 writes with plain string values
+    ("url" and "sha256" are those of "source"): the exact openslide-bin build, its source tarball (file name, sha256,
+    the openslide-bin URL, and the copy on the OpenSlideSharp GitHub release of PackageVersion), and how to load another
+    OpenSlide build. Platform is the openslide-bin archive whose notices the publish holds, or empty for all of them.
+    The file is rewritten only when its text changes.
+  -->
+  <UsingTask TaskName="WriteOpenSlideSourceNotice" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <BinInfo ParameterType="System.String" Required="true" />
+      <Platform ParameterType="System.String" />
+      <PackageVersion ParameterType="System.String" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string json = File.ReadAllText(BinInfo);
+        var values = new Dictionary<string, string>();
+        var missing = new List<string>();
+        foreach (string name in new[] { "channel", "binVersion", "openslideVersion", "openslideCommit", "date", "url", "sha256" })
+        {
+            Match match = Regex.Match(json, "\"" + name + "\"\\s*:\\s*\"([^\"\\\\]+)\"");
+            if (match.Success)
+            {
+                values[name] = match.Groups[1].Value;
+            }
+            else
+            {
+                missing.Add(name);
+            }
+        }
+
+        if (missing.Count > 0)
+        {
+            Log.LogError("{0} has no plain string value for {1}.", BinInfo, string.Join(", ", missing));
+        }
+        else if (!Regex.IsMatch(values["sha256"], "^[0-9a-f]{64}$"))
+        {
+            Log.LogError("{0}: source.sha256 '{1}' is not a lowercase sha256.", BinInfo, values["sha256"]);
+        }
+        else
+        {
+            string folder = "openslide-bin/" + (string.IsNullOrEmpty(Platform) ? "<platform>" : Platform) + "/";
+            string releases = "https://github.com/IOL0ol1/OpenSlideSharp/releases";
+            string kept = values["channel"] == "nightly" ? " (nightly builds are kept there for a limited time)" : "";
+            string[] lines =
+            {
+                "# OpenSlide: source code and replacing the library",
+                "",
+                "The viewer contains a build of [OpenSlide](https://openslide.org/) from",
+                "[openslide-bin](https://github.com/openslide/openslide-bin): `libopenslide-1.dll` on Windows, `libopenslide-1.so` on",
+                "Linux and `libopenslide-1.dylib` on macOS, which the executable extracts when it first starts.",
+                "",
+                "- openslide-bin build: `" + values["binVersion"] + "` (" + values["channel"] + ", " + values["date"] + ")",
+                "- OpenSlide: `" + values["openslideVersion"] + "` (commit `" + values["openslideCommit"] + "`)",
+                "",
+                "OpenSlide is licensed under the GNU Lesser General Public License 2.1, and the libraries linked into it under",
+                "their own licenses: see `" + folder + "`, and `" + folder + "VERSIONS.md` for their versions.",
+                "`openslide-bin/openslide-bin.json` records this build and its source archive.",
+                "",
+                "## Source code",
+                "",
+                "The corresponding source code is the openslide-bin source archive of this build. It holds the source code of",
+                "OpenSlide and of every library linked into it, and the scripts that build them.",
+                "",
+                "- File: `openslide-bin-" + values["binVersion"] + ".tar.gz`",
+                "- sha256: `" + values["sha256"] + "`",
+                "- From openslide-bin: <" + values["url"] + ">" + kept,
+                "- From OpenSlideSharp: attached to the GitHub release of version `" + PackageVersion + "`,",
+                "  <" + releases + "/tag/v" + PackageVersion + ">, which keeps it (all releases: <" + releases + ">)",
+                "",
+                "Check a download by its file name and against the sha256 above (`source.sha256` in",
+                "`openslide-bin/openslide-bin.json`).",
+                "",
+                "## Using another OpenSlide build",
+                "",
+                "Set the `OPENSLIDE_LIBRARY_PATH` environment variable to the full path of another build of the OpenSlide 4.x library,",
+                "for example one built from the source above, changed or not. The viewer then loads that library instead of the one it",
+                "contains:",
+                "",
+                "```sh",
+                "OPENSLIDE_LIBRARY_PATH=/path/to/libopenslide.so.1 ./OpenSlideSharp.Viewer slide.svs",
+                "```",
+                "",
+                "```powershell",
+                "$env:OPENSLIDE_LIBRARY_PATH = 'C:\\path\\to\\libopenslide-1.dll'",
+                ".\\OpenSlideSharp.Viewer.exe slide.svs",
+                "```",
+                "",
+                "`OpenSlideSharp.Viewer --check slide.svs` prints the version of the library it loaded (`openslide=...`).",
+            };
+            string text = string.Join("\n", lines) + "\n";
+            if (!File.Exists(OutputFile) || File.ReadAllText(OutputFile) != text)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(OutputFile));
+                File.WriteAllText(OutputFile, text);
+            }
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
 
 </Project>

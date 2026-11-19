@@ -9,6 +9,25 @@ dotnet run -c Release --project samples/OpenSlideSharp.Viewer -- /path/to/slide.
 
 Open a slide from the command line, with File → Open, or by dropping it on the window. A file that cannot be opened is reported in the status bar, and the slide shown stays.
 
+## Download
+
+Each 4.x [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) has the viewer for three platforms:
+
+| Platform | Archive |
+|---|---|
+| Windows x64 | `OpenSlideSharp.Viewer-<version>-win-x64.zip` |
+| Linux x64 | `OpenSlideSharp.Viewer-<version>-linux-x64.tar.gz` |
+| macOS on Apple silicon | `OpenSlideSharp.Viewer-<version>-osx-arm64.tar.gz` |
+
+An archive holds the self-contained executable (`OpenSlideSharp.Viewer.exe` on Windows, `OpenSlideSharp.Viewer` on Linux and macOS), which runs without .NET installed, and `licenses/`, at its root. Extract it into a folder of its own and start the executable.
+
+The macOS executable is signed ad hoc only: it has no Developer ID signature and is not notarized. If macOS blocks a downloaded copy, remove its quarantine attribute and start it again:
+
+```sh
+xattr -d com.apple.quarantine OpenSlideSharp.Viewer
+./OpenSlideSharp.Viewer
+```
+
 ## Features
 
 - Pan and zoom; tiles are read in the background, and coarser levels show until the finer ones arrive.
@@ -48,13 +67,21 @@ dotnet publish samples/OpenSlideSharp.Viewer -c Release -r win-x64 --self-contai
   -p:UseOpenSlideRuntimePackage=true -p:OpenSlideSharpVersion=<version>
 ```
 
-`artifacts/publish/OpenSlideSharp.Viewer/release_win-x64/` then holds `OpenSlideSharp.Viewer.exe`, which runs without .NET installed, and `licenses/`. The other runtime identifiers are `linux-x64`, `linux-arm64`, `osx-arm64` and `osx-x64`. OpenSlide comes from the `OpenSlideSharp.runtime` package of that version, restored from nuget.org or from a folder given with `-p:RestoreAdditionalProjectSources=<folder>`, as `eng/Test-Packages.ps1` does.
+`artifacts/publish/OpenSlideSharp.Viewer/release_win-x64/` then holds `OpenSlideSharp.Viewer.exe`, which runs without .NET installed, and `licenses/`. The other runtime identifiers are `linux-x64`, `linux-arm64`, `osx-arm64` and `osx-x64`. OpenSlide comes from the `OpenSlideSharp.runtime` package of that version, restored from nuget.org.
+
+To publish with an `OpenSlideSharp.runtime` package in a local folder instead, such as the one `pwsh eng/Test-Packages.ps1 -PackOnly -Version <version>` packs into `artifacts/smoke-feed` (after `pwsh eng/Get-OpenSlide.ps1 -Platform all`), use the script the releases use:
+
+```sh
+pwsh eng/Publish-Viewer.ps1 -Rid win-x64 -Version <version> -Feed artifacts/smoke-feed
+```
+
+It restores `OpenSlideSharp*` packages from that folder only, checks that the runtime package came from it, checks the publish folder (under `artifacts/viewer/<rid>/`) and, for this machine's runtime identifier, runs `--check`. Do not add the folder to `dotnet publish` as a second package source (for example with `-p:RestoreAdditionalProjectSources`): with the same package and version in two sources, NuGet may take either one.
 
 The native libraries are inside the executable. It extracts them on first start to `%TEMP%\.net` on Windows and `~/.net` on Linux and macOS (or to `DOTNET_BUNDLE_EXTRACT_BASE_DIR`), and reuses them after that. The folders that older versions of the viewer extracted there can be deleted.
 
 ## Licenses
 
-`licenses/` holds the license and notice files of what the executable contains: OpenSlide and the libraries linked into it (LGPL-2.1 and others, with their versions in `VERSIONS.md`), SkiaSharp, HarfBuzzSharp, ANGLE, Avalonia, the .NET runtime and the Inter font. `THIRD-PARTY-NOTICES.txt` lists them, and `SOURCE.md` says where OpenSlide's source code is and how to run the viewer with another OpenSlide build (`OPENSLIDE_LIBRARY_PATH`). Keep the folder with the executable. The planned GitHub release builds will ship this publish folder, executable and `licenses/`, as one archive per platform.
+`licenses/` holds the license and notice files of what the executable contains: OpenSlide and the libraries linked into it (LGPL-2.1 and others, under `openslide-bin/<platform>/` for the openslide-bin build of the publish's platform, with their versions in its `VERSIONS.md`), SkiaSharp, HarfBuzzSharp, ANGLE, Avalonia, the .NET runtime and the Inter font. `THIRD-PARTY-NOTICES.txt` lists them. `SOURCE.md`, written at publish time from `openslide-bin/openslide-bin.json`, names the exact openslide-bin build and its source tarball (file name, sha256, the openslide-bin download URL, and the copy attached to the [GitHub release](https://github.com/IOL0ol1/OpenSlideSharp/releases) of the same version), and says how to run the viewer with another OpenSlide build (`OPENSLIDE_LIBRARY_PATH`). Keep the folder with the executable. The release archives (see [Download](#download)) are this publish folder: the executable and `licenses/`.
 
 ## Known issue on Windows
 

@@ -7,18 +7,23 @@ below, each under its own license.
 
 Where a component's NuGet package ships license or notice files, the publish copies them into a folder named
 after the package, next to this file. The licenses of the other components are reproduced at the end of this
-file.
+file. OpenSlideSharp.runtime's LICENSE.txt is left out: it describes the layout of that package, and item 1 and
+SOURCE.md say the same for this folder.
 
 
 1. OpenSlide and the libraries linked into it (openslide-bin)
    License:  OpenSlide: LGPL-2.1-only. The libraries statically linked into it (cairo, glib, libdicom, libffi,
              libjpeg-turbo, libpng, libtiff, libxml2, OpenJPEG, pixman, proxy-libintl, SQLite, uthash, zlib-ng,
-             Zstandard, as listed in VERSIONS.md) are each under their own license.
+             Zstandard, as listed in each platform's VERSIONS.md) are each under their own license.
    Upstream: https://openslide.org/
              https://github.com/openslide/openslide-bin
-   Files:    openslide-bin/VERSIONS.md (the components and their versions)
-             openslide-bin/<component>/ (their license texts)
-   Source code, and how to use another OpenSlide build instead: SOURCE.md.
+   Files:    openslide-bin/<platform>/VERSIONS.md (the components and their versions)
+             openslide-bin/<platform>/<component>/ (their license texts)
+             openslide-bin/openslide-bin.json (the openslide-bin build and its source tarball)
+             <platform> is the openslide-bin build of the executable's platform: windows-x64,
+             linux-x86_64, linux-aarch64 or macos-arm64-x86_64.
+   Source code (the exact build, its source tarball with its sha256, and where to download it), and
+   how to use another OpenSlide build instead: SOURCE.md.
 
 2. SkiaSharp and Skia
    License:  SkiaSharp: MIT. Skia: BSD-3-Clause, and the licenses of the code it includes.
@@ -44,11 +49,11 @@ file.
    Upstream: https://github.com/AvaloniaUI/Avalonia
 
 6. MicroCom.Runtime
-   License:  MIT. Copyright 2021 Nikita Tsukanov.
+   License:  MIT; the text is below.
    Upstream: https://github.com/kekekeks/MicroCom
 
 7. Tmds.DBus.Protocol (Linux)
-   License:  MIT. Copyright Tom Deseyn.
+   License:  MIT; the text is below.
    Upstream: https://github.com/tmds/Tmds.DBus
 
 8. .NET runtime
@@ -87,6 +92,59 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+-------------------------------------------------------------------------------
+MicroCom.Runtime license (https://github.com/kekekeks/MicroCom/blob/master/LICENSE)
+-------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2021 Nikita Tsukanov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+Tmds.DBus.Protocol license (https://github.com/tmds/Tmds.DBus/blob/main/COPYING)
+-------------------------------------------------------------------------------
+
+Copyright 2006 Alp Toker <alp@atoker.com>
+Copyright 2010 Other Contributors
+Copyright 2016 Tom Deseyn <tom.deseyn@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 -------------------------------------------------------------------------------
 Inter license (https://github.com/rsms/inter/blob/master/LICENSE.txt)

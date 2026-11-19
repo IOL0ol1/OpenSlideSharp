@@ -337,8 +337,8 @@ public sealed class OpenSlide : IDisposable
     /// A <see cref="PixelFormat.Bgra32Opaque"/> image whose <see cref="PixelImage.IccProfile"/> is <see cref="ColorProfile"/>.
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="maxWidth"/> or <paramref name="maxHeight"/> is less than 1, or the level to read would not fit
-    /// in a .NET array.
+    /// <paramref name="maxWidth"/> or <paramref name="maxHeight"/> is less than 1; or the level to read would not fit
+    /// in a .NET array, reported for the maximum whose ratio chose that level (checked before anything is allocated).
     /// </exception>
     /// <exception cref="ObjectDisposedException">The slide has been disposed.</exception>
     /// <exception cref="OpenSlideException">The slide is in the error state, or reading failed.</exception>
@@ -354,25 +354,40 @@ public sealed class OpenSlide : IDisposable
             throw new ArgumentOutOfRangeException(nameof(maxHeight), maxHeight, "The maximum height must be at least 1.");
         }
 
-        SlideSize dimensions = Dimensions;
-        double downsample = Math.Max((double)dimensions.Width / maxWidth, (double)dimensions.Height / maxHeight);
-        int level = GetBestLevelForDownsample(downsample);
-        SlideSize levelSize = _levelDimensions[level];
+        return RenderThumbnail(new SlideRenderSource(this), maxWidth, maxHeight);
+    }
 
-        // An empty level, or one that already fits, is not scaled. Otherwise the size is at most the maximum.
+    /// <summary>The body of <see cref="GetThumbnail"/>, for any render source, after its arguments are checked.</summary>
+    internal static PixelImage RenderThumbnail(IRenderSource source, int maxWidth, int maxHeight)
+    {
+        SlideSize dimensions = source.LevelDimensions[0];
+        double downsample = Math.Max((double)dimensions.Width / maxWidth, (double)dimensions.Height / maxHeight);
+        int level = source.GetBestLevelForDownsample(downsample);
+        SlideSize levelSize = source.LevelDimensions[level];
+
+        // The whole level is read, so it must fit in a .NET array: checked before anything is allocated. Reported for
+        // the maximum whose ratio chose the level, the one to lower for a smaller level (if the slide has one).
+        string limiting = (double)dimensions.Width / maxWidth >= (double)dimensions.Height / maxHeight
+            ? nameof(maxWidth)
+            : nameof(maxHeight);
+        CheckedPixelBytes(levelSize.Width, levelSize.Height, "level, which the thumbnail is made from,", limiting);
+
+        // An empty level, or one that already fits, is not scaled. Otherwise the size is at most the maximum. So the
+        // output is never larger than the level, and fits in an array too; only an empty level can have a side too
+        // long for a PixelImage.
         (long Width, long Height) size =
             ThumbnailSize.Compute(levelSize.Width, levelSize.Height, maxWidth, maxHeight)
             ?? (levelSize.Width, levelSize.Height);
         if (size.Width > int.MaxValue / 4 || size.Height > int.MaxValue)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(maxWidth), $"A {size.Width} x {size.Height} thumbnail is too large for a PixelImage.");
+                size.Width > int.MaxValue / 4 ? nameof(maxWidth) : nameof(maxHeight),
+                $"A {size.Width} x {size.Height} thumbnail is too large for a PixelImage.");
         }
 
         int width = (int)size.Width;
         int height = (int)size.Height;
         var data = new byte[CheckedPixelBytes(width, height, "thumbnail")];
-        var source = new SlideRenderSource(this);
         Compositor.TryParseBackground(
             source.GetProperty(OpenSlideProperties.BackgroundColor), out byte red, out byte green, out byte blue);
         RegionRenderer.RenderRegion(
@@ -383,7 +398,7 @@ public sealed class OpenSlide : IDisposable
             width,
             height,
             data);
-        return new PixelImage(width, height, PixelFormat.Bgra32Opaque, data, ColorProfile);
+        return new PixelImage(width, height, PixelFormat.Bgra32Opaque, data, source.ColorProfile);
     }
 
     /// <summary>
@@ -408,7 +423,15 @@ public sealed class OpenSlide : IDisposable
     /// Returns <c>width * height * 4</c> after rejecting negative sizes and sizes that do not fit in a .NET array.
     /// Computed in <see langword="long"/>, so large associated image dimensions cannot overflow.
     /// </summary>
-    internal static long CheckedPixelBytes(long width, long height, string what)
+    internal static long CheckedPixelBytes(long width, long height, string what) =>
+        CheckedPixelBytes(width, height, what, nameof(width));
+
+    /// <summary>
+    /// Like <see cref="CheckedPixelBytes(long, long, string)"/>, but a size too large for a .NET array is reported
+    /// as an <see cref="ArgumentOutOfRangeException"/> for <paramref name="paramName"/>: the public parameter that
+    /// led to it.
+    /// </summary>
+    internal static long CheckedPixelBytes(long width, long height, string what, string paramName)
     {
         if (width < 0)
         {
@@ -429,7 +452,7 @@ public sealed class OpenSlide : IDisposable
         if (width != 0 && height > maxLength / 4 / width)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(width), $"A {width} x {height} {what} needs more bytes than a .NET array can hold.");
+                paramName, $"A {width} x {height} {what} needs more bytes than a .NET array can hold.");
         }
 
         return width * height * 4;

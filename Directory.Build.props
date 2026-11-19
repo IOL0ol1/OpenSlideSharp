@@ -8,6 +8,17 @@
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
   </PropertyGroup>
 
+  <!--
+    The release build passes OpenSlideUpstreamVersion, the openslide version of the bundled openslide-bin build (for
+    example v4.0.1-49-g174630bf), so the assemblies say which OpenSlide they were released with:
+    InformationalVersion is <version>+openslide.<upstream version>, without the git commit hash the SDK would append.
+    Without it the SDK default stays (<version>+<commit>).
+  -->
+  <PropertyGroup Condition="'$(OpenSlideUpstreamVersion)' != ''">
+    <InformationalVersion>$(Version)+openslide.$(OpenSlideUpstreamVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Authors>IOL0ol1</Authors>
     <Copyright>Copyright (c) IOL0ol1</Copyright>
