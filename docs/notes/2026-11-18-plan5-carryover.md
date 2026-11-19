@@ -27,16 +27,15 @@
   - 仓库 `IOL0ol1/OpenSlideSharp`，workflow 文件 `release.yml`，environment `production`；
   - nuget.org 校验 OIDC token 的 `job_workflow_ref`，所以 upstream-sync.yml 调用 release.yml 时同样匹配。
 
+- **发布已启用。**
+  - 仓库变量 `NUGET_USER=kiolp` 已设置。它必须是仓库变量（Settings > Secrets and variables > Actions > Variables），不能只设在 environment 里：判定演练的 version job 不在 environment 中运行。删除这个变量即回到演练。
+  - GitHub environment `production` 的部署分支已限制为 `master`。因此在其他分支上 dispatch 的 Release，即使提交已在 `master` 上，publish job 也会被拒绝；在 `master` 上运行即可。
+- **首次发布。** `4.0.1.3-nightly.20261102.g174630bf`（提交 `d072317`，预发布）：5 个包已推送到 nuget.org，tag 与 GitHub Release（9 个附件）已创建。4 个新 ID 由此归 `kiolp` 所有。
+
 仍待处理：
 
-- **设置仓库变量 `NUGET_USER=kiolp`，启用发布。**
-  - 必须是仓库变量（Settings > Secrets and variables > Actions > Variables），不能只设在 environment 里：判定演练的 version job 不在 environment 中运行。
-  - 删除这个变量即回到演练。
-- **可以考虑把 GitHub environment `production` 的部署分支限制为 `master`。** 这样“只有 `master` 上的运行能拿到 nuget.org 接受的 token”由平台保证。限制之后，在其他分支上 dispatch 的 Release 即使提交已在 `master` 上，publish job 也会被拒绝；在 `master` 上运行即可。
-- **首次发布之前，尽量预留 `OpenSlideSharp` ID 前缀**（发邮件到 account@nuget.org）。4 个新 ID（`OpenSlideSharp.SkiaSharp`、`OpenSlideSharp.runtime`、`OpenSlideSharp.AspNetCore`、`OpenSlideSharp.Tool`）要到首次发布时才第一次推送，在此之前可能被他人占用。
-- **如果要重建仓库历史，必须在启用发布之前完成。**
-  - v1.0.1.3、v1.1.0、v1.1.1 所指的提交必须仍是新 `master` 的祖先，或者删除、移动这三个 tag。否则 `Test-ReleaseCommit` 会让每一次发布都失败（“does not contain the latest release”）。
-  - 一旦开始发布 4.x，再改写历史会让 4.x 的 tag 也失效。
+- **可以申请预留 `OpenSlideSharp` ID 前缀**（发邮件到 account@nuget.org）。4 个新 ID 已经占住，预留前缀可以防止别人发布 `OpenSlideSharp.*` 的其他 ID。
+- **不要再改写 `master` 的历史。** 4.x 的 tag 与 v1.0.1.3、v1.1.0、v1.1.1 所指的提交都必须是 `master` 的祖先，否则 `Test-ReleaseCommit` 会让每一次发布都失败（“does not contain the latest release”）。
 - **保持仓库设置 “Allow GitHub Actions to create and approve pull requests” 开启。** `master` 在同步期间移动时，同步改为开 PR，这一步需要该设置。
 
 ## 合并之后、启用发布之前
