@@ -18,6 +18,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+Import-Module (Join-Path $PSScriptRoot 'NuGetVersion.psm1') -Force
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $OutFile) { $OutFile = Join-Path $repoRoot 'eng/openslide.json' }
@@ -33,7 +34,10 @@ $assetSuffixes = [ordered]@{
 function Invoke-GitHubApi([string]$Path) {
     $headers = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'OpenSlideSharp-manifest' }
     if ($env:GITHUB_TOKEN) { $headers.Authorization = "Bearer $($env:GITHUB_TOKEN)" }
-    Invoke-RestMethod -Uri "https://api.github.com/$Path" -Headers $headers
+    $url = "https://api.github.com/$Path"
+    $r = Invoke-WebRequestWithRetry -Uri $url -Headers $headers
+    if ($r.StatusCode -ne 200) { throw "GET $url returned HTTP $($r.StatusCode)." }
+    $r.Content | ConvertFrom-Json
 }
 
 function Get-Sha256([string]$Path) { (Get-FileHash $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
@@ -77,7 +81,10 @@ function Get-VerifiedAsset($Asset) {
         # Download to .part and rename only after the hash checks out, so a failed download is never cached.
         $part = "$path.part"
         Remove-Item $part -Force -ErrorAction SilentlyContinue
-        try { Invoke-WebRequest -Uri $url -OutFile $part }
+        try {
+            $response = Invoke-WebRequestWithRetry -Uri $url -OutFile $part
+            if ($response.StatusCode -ne 200) { throw "GET $url returned HTTP $($response.StatusCode)." }
+        }
         catch { Remove-Item $part -Force -ErrorAction SilentlyContinue; throw }
         $actual = Get-Sha256 $part
         if ($actual -ne $expected) {
