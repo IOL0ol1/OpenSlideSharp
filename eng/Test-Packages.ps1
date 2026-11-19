@@ -374,6 +374,7 @@ function Invoke-Smoke {
     if ($code -ne $ExpectedExit) { throw "[$Name] expected exit code $ExpectedExit, got $code" }
     if ($text -notmatch [regex]::Escape($ExpectedText)) { throw "[$Name] output does not contain '$ExpectedText'" }
     if ($ExpectedExit -eq 0 -and $text -notmatch 'png=ok') { throw "[$Name] output does not contain 'png=ok'" }
+    if ($ExpectedExit -eq 0 -and $text -notmatch 'zarr=ok') { throw "[$Name] output does not contain 'zarr=ok'" }
     Write-Host "PASS: $Name"
 }
 
