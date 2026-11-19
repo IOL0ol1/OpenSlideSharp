@@ -9,7 +9,7 @@
   and than the highest version published on nuget.org. Old-series maintenance releases are therefore skipped, and the
   manifest never goes down. Output order is ascending by NuGet version, stable first. No update prints [].
   Each item: channel, tag, binVersion, version. A GitHub API failure exits non-zero; it never prints [].
-  Honours $env:GITHUB_TOKEN. -SelfTest runs built-in cases against mock data (no network) and exits 1 if one fails.
+  Transient failures (HTTP 500/502/503/504, connection errors) are retried, 3 attempts in all. Honours $env:GITHUB_TOKEN. -SelfTest runs built-in cases against mock data (no network) and exits 1 if one fails.
 #>
 [CmdletBinding()]
 param(
@@ -85,11 +85,15 @@ function Select-LatestStableRelease($Releases) {
     $best
 }
 
-function Invoke-GitHubApi([string]$Path) {
+function Invoke-GitHubApi([string]$Path, [scriptblock]$Send, [scriptblock]$Sleep) {
     $headers = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'OpenSlideSharp-upstream-sync' }
     if ($env:GITHUB_TOKEN) { $headers.Authorization = "Bearer $($env:GITHUB_TOKEN)" }
     $url = "https://api.github.com/$Path"
-    $r = Invoke-WebRequest -Uri $url -Headers $headers -SkipHttpErrorCheck
+    $retry = @{}
+    if ($Send) { $retry.Send = $Send }
+    if ($Sleep) { $retry.Sleep = $Sleep }
+    # Retries HTTP 500/502/503/504 and connection errors (3 attempts in all), never 4xx.
+    $r = Invoke-WebRequestWithRetry -Uri $url -Headers $headers @retry
     if ($r.StatusCode -ne 200) { throw "GET $url returned HTTP $($r.StatusCode)." }
     $r.Content | ConvertFrom-Json -NoEnumerate
 }
@@ -163,6 +167,52 @@ if ($SelfTest) {
     Test-Case 'Compare 4.0.1.3-nightly.20261102.g174630bf < 4.0.1.3' {
         (Compare-NuGetVersion '4.0.1.3-nightly.20261102.g174630bf' '4.0.1.3') -eq -1 }
     Test-Case 'Compare 1.1.2 < 4.0.1.2' { (Compare-NuGetVersion '1.1.2' '4.0.1.2') -eq -1 }
+
+    # GetNewClosure() copies only the variables of the scope it is called in, and on some PowerShell versions the closure
+    # cannot see the script's functions or outer variables. So each mock copies this helper into a local ($respond) first.
+    $newResponse = { param([int]$Status, [string]$Content = '[]') [pscustomobject]@{ StatusCode = $Status; Content = $Content } }
+    function New-Sender($Script) {
+        # A mock Send that serves the given statuses in order, repeating the last (a string is a thrown connection error), and counts its calls.
+        $state = @{ Calls = 0; Waits = [System.Collections.Generic.List[int]]::new() }
+        $respond = $newResponse
+        $state.Send = { param($Params) $i = $state.Calls++; $x = $Script[[Math]::Min($i, $Script.Count - 1)]; if ($x -is [string]) { throw $x }; & $respond $x }.GetNewClosure()
+        $state.Sleep = { param($Seconds) $state.Waits.Add($Seconds) }.GetNewClosure()
+        $state
+    }
+    function Get-ApiOutcome($State) {
+        # 'ok' or the error message; -WarningAction Ignore keeps the retry warnings out of the self-test output.
+        try { $null = Invoke-GitHubApi 'x' -Send $State.Send -Sleep $State.Sleep -WarningAction Ignore; 'ok' } catch { $_.Exception.Message }
+    }
+    Test-Case 'retry: 502 then 200 succeeds after exactly one retry' {
+        $s = New-Sender @(502, 200)
+        (Get-ApiOutcome $s) -eq 'ok' -and $s.Calls -eq 2 -and ($s.Waits -join ',') -eq '5' }
+    Test-Case 'retry: 502 x3 fails with HTTP 502 after 3 attempts and waits 5 s, 15 s' {
+        $s = New-Sender @(502)
+        (Get-ApiOutcome $s) -match 'returned HTTP 502\.$' -and $s.Calls -eq 3 -and ($s.Waits -join ',') -eq '5,15' }
+    Test-Case 'retry: 404 fails at once without a retry' {
+        $s = New-Sender @(404, 200)
+        (Get-ApiOutcome $s) -match 'returned HTTP 404\.$' -and $s.Calls -eq 1 -and $s.Waits.Count -eq 0 }
+    Test-Case 'retry: 403 fails at once without a retry' {
+        $s = New-Sender @(403, 200)
+        (Get-ApiOutcome $s) -match 'returned HTTP 403\.$' -and $s.Calls -eq 1 }
+    Test-Case 'retry: a connection error then 200 succeeds after one retry' {
+        $s = New-Sender @('The operation was canceled.', 200)
+        $respond = $newResponse
+        $s.Send = { param($Params) if ($s.Calls++ -eq 0) { throw 'The operation was canceled.' }; & $respond 200 }.GetNewClosure()
+        (Get-ApiOutcome $s) -eq 'ok' -and $s.Calls -eq 2 }
+    Test-Case 'retry: connection errors x3 are rethrown after 3 attempts' {
+        $s = New-Sender @('boom')
+        (Get-ApiOutcome $s) -match 'boom' -and $s.Calls -eq 3 }
+    Test-Case 'retry: nuget.org 503 then 200 succeeds' {
+        $s = New-Sender @(503)
+        $respond = $newResponse
+        $s.Send = { param($Params) if ($s.Calls++ -eq 0) { & $respond 503 } else { & $respond 200 '{"versions":["1.1.2"]}' } }.GetNewClosure()
+        $v = @(Get-PublishedNuGetVersions -Send $s.Send -Sleep $s.Sleep -WarningAction Ignore)
+        $v.Count -eq 1 -and $v[0] -eq '1.1.2' -and $s.Calls -eq 2 }
+    Test-Case 'retry: nuget.org 404 stays an error and is not retried' {
+        $s = New-Sender @(404)
+        $msg = try { $null = Get-PublishedNuGetVersions -Send $s.Send -Sleep $s.Sleep; 'no error' } catch { $_.Exception.Message }
+        $msg -match 'returned HTTP 404\.$' -and $s.Calls -eq 1 }
 
     foreach ($r in $results) { Write-Host ("{0} {1}" -f ($r.Ok ? 'PASS' : 'FAIL'), $r.Name) }
     $failed = @($results | Where-Object { -not $_.Ok }).Count
