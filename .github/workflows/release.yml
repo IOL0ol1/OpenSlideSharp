@@ -2,8 +2,15 @@ name: Release
 
 # Releases one commit after CI passed on it: the five NuGet packages go to nuget.org, the commit is tagged v<version>
 # and a GitHub release gets the packages, the desktop viewer archives and the openslide-bin source tarball.
-# Without the NUGET_API_KEY secret, with dry_run, or for a commit that is not on master, it is a dry run: it tests and
-# builds everything, pushes nothing (no package, tag or release) and lists what it would release in the run summary.
+# The packages are pushed with nuget.org Trusted Publishing, so no API key is stored anywhere. The publish job runs in
+# the environment production and, right before the push, trades its GitHub OIDC token for a temporary key (NuGet/login,
+# valid for one hour). nuget.org accepts the token through the Trusted Publishing policy of the package owner kiolp:
+# packages OpenSlideSharp*, repository IOL0ol1/OpenSlideSharp, workflow file release.yml, environment production. It
+# matches the token's job_workflow_ref, which names this file also when upstream-sync.yml calls it.
+# The repository variable NUGET_USER, the nuget.org profile name the key is issued to, turns releases on. It has to be
+# a repository variable: the version job, which reads it, runs outside the environment. Without it, with dry_run, or
+# for a commit that is not on master, it is a dry run: it tests and builds everything, pushes nothing (no package, tag
+# or release) and lists what it would release in the run summary. Deleting the variable returns to dry runs.
 # It fails for a commit that is released already or older than the latest release (eng/Test-ReleaseCommit.ps1).
 # After a failure, use "Re-run failed jobs": it finishes the same release, skipping packages already on nuget.org and
 # keeping a tag or release of the same commit. "Re-run all jobs" starts a new release, which fails once the commit is
@@ -32,9 +39,6 @@ on:
         description: Dry run (build everything, push no package, tag or release)
         type: boolean
         default: false
-    secrets:
-      NUGET_API_KEY:
-        required: false
 
 permissions:
   contents: read
@@ -106,14 +110,13 @@ jobs:
         id: mode
         shell: pwsh
         env:
-          # Only checked for being empty, never printed.
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_USER: ${{ vars.NUGET_USER }}
           DRY_RUN: ${{ inputs.dry_run }}
           SHA: ${{ steps.version.outputs.sha }}
         run: |
           $reasons = @()
           if ($env:DRY_RUN -eq 'true') { $reasons += 'a dry run was asked for' }
-          if ([string]::IsNullOrEmpty($env:NUGET_API_KEY)) { $reasons += 'the NUGET_API_KEY secret is not set' }
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_USER)) { $reasons += 'the NUGET_USER repository variable is not set' }
           git merge-base --is-ancestor $env:SHA refs/remotes/origin/master
           if ($LASTEXITCODE -eq 1) { $reasons += "commit $env:SHA is not on master" }
           elseif ($LASTEXITCODE -ne 0) { throw "git merge-base failed with exit code $LASTEXITCODE." }
@@ -241,8 +244,13 @@ jobs:
     if: needs.version.outputs.dry-run == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The Trusted Publishing policy on nuget.org accepts only OIDC tokens issued for this environment.
+    environment: production
     permissions:
+      # contents: the tag and the GitHub release.
       contents: write
+      # id-token: the OIDC token that NuGet/login trades for the temporary nuget.org key.
+      id-token: write
     env:
       SHA: ${{ needs.version.outputs.sha }}
       VERSION: ${{ needs.version.outputs.version }}
@@ -274,10 +282,18 @@ jobs:
         # an earlier attempt of this release) are of this commit.
         shell: pwsh
         run: ./eng/Test-ReleaseCommit.ps1 -Sha $env:SHA -Version $env:VERSION -Path artifacts/release
+      - name: Log in to nuget.org
+        id: login
+        # Only now, after every check: the temporary key is valid for one hour. Each run of this job, a re-run too,
+        # logs in again with a new OIDC token. The action masks the key in the log.
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
       - name: Push the packages to nuget.org
         shell: pwsh
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          # Passed through the environment, never printed.
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           foreach ($id in 'OpenSlideSharp', 'OpenSlideSharp.SkiaSharp', 'OpenSlideSharp.runtime', 'OpenSlideSharp.AspNetCore', 'OpenSlideSharp.Tool') {
             dotnet nuget push "artifacts/release/$id.$env:VERSION.nupkg" --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
