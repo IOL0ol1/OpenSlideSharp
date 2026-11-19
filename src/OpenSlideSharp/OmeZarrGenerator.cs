@@ -4,6 +4,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Threading;
 
 namespace OpenSlideSharp;
@@ -196,6 +198,11 @@ public sealed class OmeZarrOptions
 public sealed class OmeZarrGenerator
 {
     private const int ChannelCount = 3;
+
+    // Compact metadata. The documents are JSON files, never embedded in HTML, so the relaxed encoder leaves characters
+    // such as < > & ' + and most non-ASCII text as they are; it still escapes control characters, characters outside
+    // the BMP and a few other categories.
+    private static readonly JsonWriterOptions JsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private readonly IRenderSource _source;
     private readonly Action? _ensureUsable;
@@ -557,91 +564,127 @@ public sealed class OmeZarrGenerator
     {
         var keys = new List<string>();
         var content = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        void Add(string key, JsonText json)
+        void Add(string key, Action<Utf8JsonWriter> write)
         {
             keys.Add(key);
-            content.Add(key, json.ToUtf8());
+            content.Add(key, WriteJson(write));
         }
 
         if (Version == NgffVersion.V0_5)
         {
-            var group = new JsonText().StartObject()
-                .Property("zarr_format", 3)
-                .Property("node_type", "group")
-                .Name("attributes").StartObject()
-                .Name("ome").StartObject()
-                .Property("version", "0.5");
-            WriteImageAttributes(group, null, name, geometry);
-            Add("zarr.json", group.EndObject().EndObject().EndObject());
+            Add("zarr.json", json =>
+            {
+                json.WriteStartObject();
+                json.WriteNumber("zarr_format", 3);
+                json.WriteString("node_type", "group");
+                json.WriteStartObject("attributes");
+                json.WriteStartObject("ome");
+                json.WriteString("version", "0.5");
+                WriteImageAttributes(json, null, name, geometry);
+                json.WriteEndObject();
+                json.WriteEndObject();
+                json.WriteEndObject();
+            });
 
             for (int level = 0; level < LevelCount; level++)
             {
                 SlideSize size = _levelDimensions[level];
-                var array = new JsonText().StartObject()
-                    .Property("zarr_format", 3)
-                    .Property("node_type", "array")
-                    .Name("shape").Numbers(ChannelCount, size.Height, size.Width)
-                    .Property("data_type", "uint8")
-                    .Name("chunk_grid").StartObject()
-                    .Property("name", "regular")
-                    .Name("configuration").StartObject().Name("chunk_shape").Numbers(1, ChunkSize, ChunkSize).EndObject()
-                    .EndObject()
-                    .Name("chunk_key_encoding").StartObject()
-                    .Property("name", "default")
-                    .Name("configuration").StartObject().Property("separator", "/").EndObject()
-                    .EndObject()
-                    .Property("fill_value", 0)
-                    .Name("codecs").StartArray()
-                    .StartObject()
-                    .Property("name", "bytes")
-                    .Name("configuration").StartObject().Property("endian", "little").EndObject()
-                    .EndObject();
-                if (_compression == OmeZarrCompression.Gzip)
+                Add(Invariant(level) + "/zarr.json", json =>
                 {
-                    array.StartObject()
-                        .Property("name", "gzip")
-                        .Name("configuration").StartObject().Property("level", _gzipLevel).EndObject()
-                        .EndObject();
-                }
+                    json.WriteStartObject();
+                    json.WriteNumber("zarr_format", 3);
+                    json.WriteString("node_type", "array");
+                    WriteNumbers(json, "shape", ChannelCount, size.Height, size.Width);
+                    json.WriteString("data_type", "uint8");
 
-                array.EndArray()
-                    .Name("dimension_names").StartArray().Value("c").Value("y").Value("x").EndArray()
-                    .EndObject();
-                Add(Invariant(level) + "/zarr.json", array);
+                    json.WriteStartObject("chunk_grid");
+                    json.WriteString("name", "regular");
+                    json.WriteStartObject("configuration");
+                    WriteNumbers(json, "chunk_shape", 1, ChunkSize, ChunkSize);
+                    json.WriteEndObject();
+                    json.WriteEndObject();
+
+                    json.WriteStartObject("chunk_key_encoding");
+                    json.WriteString("name", "default");
+                    json.WriteStartObject("configuration");
+                    json.WriteString("separator", "/");
+                    json.WriteEndObject();
+                    json.WriteEndObject();
+
+                    json.WriteNumber("fill_value", 0);
+
+                    json.WriteStartArray("codecs");
+                    json.WriteStartObject();
+                    json.WriteString("name", "bytes");
+                    json.WriteStartObject("configuration");
+                    json.WriteString("endian", "little");
+                    json.WriteEndObject();
+                    json.WriteEndObject();
+                    if (_compression == OmeZarrCompression.Gzip)
+                    {
+                        json.WriteStartObject();
+                        json.WriteString("name", "gzip");
+                        json.WriteStartObject("configuration");
+                        json.WriteNumber("level", _gzipLevel);
+                        json.WriteEndObject();
+                        json.WriteEndObject();
+                    }
+
+                    json.WriteEndArray();
+
+                    json.WriteStartArray("dimension_names");
+                    json.WriteStringValue("c");
+                    json.WriteStringValue("y");
+                    json.WriteStringValue("x");
+                    json.WriteEndArray();
+                    json.WriteEndObject();
+                });
             }
         }
         else
         {
-            Add(".zgroup", new JsonText().StartObject().Property("zarr_format", 2).EndObject());
+            Add(".zgroup", json =>
+            {
+                json.WriteStartObject();
+                json.WriteNumber("zarr_format", 2);
+                json.WriteEndObject();
+            });
 
-            var attributes = new JsonText().StartObject();
-            WriteImageAttributes(attributes, "0.4", name, geometry);
-            Add(".zattrs", attributes.EndObject());
+            Add(".zattrs", json =>
+            {
+                json.WriteStartObject();
+                WriteImageAttributes(json, "0.4", name, geometry);
+                json.WriteEndObject();
+            });
 
             for (int level = 0; level < LevelCount; level++)
             {
                 SlideSize size = _levelDimensions[level];
-                var array = new JsonText().StartObject()
-                    .Name("chunks").Numbers(1, ChunkSize, ChunkSize)
-                    .Name("compressor");
-                if (_compression == OmeZarrCompression.Gzip)
+                Add(Invariant(level) + "/.zarray", json =>
                 {
-                    array.StartObject().Property("id", "gzip").Property("level", _gzipLevel).EndObject();
-                }
-                else
-                {
-                    array.Null();
-                }
+                    json.WriteStartObject();
+                    WriteNumbers(json, "chunks", 1, ChunkSize, ChunkSize);
+                    if (_compression == OmeZarrCompression.Gzip)
+                    {
+                        json.WriteStartObject("compressor");
+                        json.WriteString("id", "gzip");
+                        json.WriteNumber("level", _gzipLevel);
+                        json.WriteEndObject();
+                    }
+                    else
+                    {
+                        json.WriteNull("compressor");
+                    }
 
-                array.Property("dimension_separator", "/")
-                    .Property("dtype", "|u1")
-                    .Property("fill_value", 0)
-                    .Name("filters").Null()
-                    .Property("order", "C")
-                    .Name("shape").Numbers(ChannelCount, size.Height, size.Width)
-                    .Property("zarr_format", 2)
-                    .EndObject();
-                Add(Invariant(level) + "/.zarray", array);
+                    json.WriteString("dimension_separator", "/");
+                    json.WriteString("dtype", "|u1");
+                    json.WriteNumber("fill_value", 0);
+                    json.WriteNull("filters");
+                    json.WriteString("order", "C");
+                    WriteNumbers(json, "shape", ChannelCount, size.Height, size.Width);
+                    json.WriteNumber("zarr_format", 2);
+                    json.WriteEndObject();
+                });
             }
         }
 
@@ -650,9 +693,10 @@ public sealed class OmeZarrGenerator
 
     // Writes the "multiscales" and "omero" members of the image attributes; version is the 0.4 per-multiscale
     // version, or null for 0.5, which keeps it next to them instead.
-    private void WriteImageAttributes(JsonText json, string? version, string name, SlideGeometry geometry)
+    private void WriteImageAttributes(Utf8JsonWriter json, string? version, string name, SlideGeometry geometry)
     {
-        // Micrometers need both mpp values, and every number they give must be finite; otherwise level 0 pixels.
+        // Micrometers need both mpp values, and every number they give must be finite (JSON has no NaN or infinity,
+        // and the writer throws on them); otherwise level 0 pixels.
         double pixelX = 1;
         double pixelY = 1;
         bool micrometers = false;
@@ -668,77 +712,126 @@ public sealed class OmeZarrGenerator
             }
         }
 
-        json.Name("multiscales").StartArray().StartObject();
+        json.WriteStartArray("multiscales");
+        json.WriteStartObject();
         if (version is not null)
         {
-            json.Property("version", version);
+            json.WriteString("version", version);
         }
 
-        json.Property("name", name)
-            .Property("type", "lanczos")
-            .Name("metadata").StartObject()
-            .Property("method", "OpenSlideSharp")
-            .Property("description", "Rendered from OpenSlide levels with Lanczos-3 resampling")
-            .EndObject();
+        json.WriteString("name", name);
+        json.WriteString("type", "lanczos");
+        json.WriteStartObject("metadata");
+        json.WriteString("method", "OpenSlideSharp");
+        json.WriteString("description", "Rendered from OpenSlide levels with Lanczos-3 resampling");
+        json.WriteEndObject();
 
-        json.Name("axes").StartArray()
-            .StartObject().Property("name", "c").Property("type", "channel").EndObject();
+        json.WriteStartArray("axes");
+        json.WriteStartObject();
+        json.WriteString("name", "c");
+        json.WriteString("type", "channel");
+        json.WriteEndObject();
         foreach (string axis in new[] { "y", "x" })
         {
-            json.StartObject().Property("name", axis).Property("type", "space");
+            json.WriteStartObject();
+            json.WriteString("name", axis);
+            json.WriteString("type", "space");
             if (micrometers)
             {
-                json.Property("unit", "micrometer");
+                json.WriteString("unit", "micrometer");
             }
 
-            json.EndObject();
+            json.WriteEndObject();
         }
 
-        json.EndArray();
+        json.WriteEndArray();
 
-        json.Name("datasets").StartArray();
+        json.WriteStartArray("datasets");
         double downsample = 1; // 2^level, exact
         for (int level = 0; level < LevelCount; level++, downsample *= 2)
         {
-            json.StartObject()
-                .Property("path", Invariant(level))
-                .Name("coordinateTransformations").StartArray()
-                .StartObject()
-                .Property("type", "scale")
-                .Name("scale").Numbers(1.0, pixelY * downsample, pixelX * downsample)
-                .EndObject();
+            json.WriteStartObject();
+            json.WriteString("path", Invariant(level));
+            json.WriteStartArray("coordinateTransformations");
+            json.WriteStartObject();
+            json.WriteString("type", "scale");
+            WriteNumbers(json, "scale", 1.0, pixelY * downsample, pixelX * downsample);
+            json.WriteEndObject();
             if (_limitBounds)
             {
-                json.StartObject()
-                    .Property("type", "translation")
-                    .Name("translation").Numbers(0.0, geometry.OffsetY * pixelY, geometry.OffsetX * pixelX)
-                    .EndObject();
+                json.WriteStartObject();
+                json.WriteString("type", "translation");
+                WriteNumbers(json, "translation", 0.0, geometry.OffsetY * pixelY, geometry.OffsetX * pixelX);
+                json.WriteEndObject();
             }
 
-            json.EndArray().EndObject();
+            json.WriteEndArray();
+            json.WriteEndObject();
         }
 
-        json.EndArray().EndObject().EndArray();
+        json.WriteEndArray();
+        json.WriteEndObject();
+        json.WriteEndArray();
 
-        json.Name("omero").StartObject().Name("channels").StartArray();
+        json.WriteStartObject("omero");
+        json.WriteStartArray("channels");
         foreach ((string label, string color) in new[] { ("Red", "FF0000"), ("Green", "00FF00"), ("Blue", "0000FF") })
         {
-            json.StartObject()
-                .Property("label", label)
-                .Property("color", color)
-                .Name("window").StartObject()
-                .Property("start", 0).Property("end", 255).Property("min", 0).Property("max", 255)
-                .EndObject()
-                .Property("active", true)
-                .Property("coefficient", 1)
-                .Property("family", "linear")
-                .Property("inverted", false)
-                .EndObject();
+            json.WriteStartObject();
+            json.WriteString("label", label);
+            json.WriteString("color", color);
+            json.WriteStartObject("window");
+            json.WriteNumber("start", 0);
+            json.WriteNumber("end", 255);
+            json.WriteNumber("min", 0);
+            json.WriteNumber("max", 255);
+            json.WriteEndObject();
+            json.WriteBoolean("active", true);
+            json.WriteNumber("coefficient", 1);
+            json.WriteString("family", "linear");
+            json.WriteBoolean("inverted", false);
+            json.WriteEndObject();
         }
 
-        json.EndArray()
-            .Name("rdefs").StartObject().Property("model", "color").EndObject()
-            .EndObject();
+        json.WriteEndArray();
+        json.WriteStartObject("rdefs");
+        json.WriteString("model", "color");
+        json.WriteEndObject();
+        json.WriteEndObject();
+    }
+
+    // One document, as UTF-8 without a byte order mark.
+    private static byte[] WriteJson(Action<Utf8JsonWriter> write)
+    {
+        using var stream = new MemoryStream();
+        using (var json = new Utf8JsonWriter(stream, JsonOptions))
+        {
+            write(json);
+        }
+
+        return stream.ToArray();
+    }
+
+    private static void WriteNumbers(Utf8JsonWriter json, string name, params long[] values)
+    {
+        json.WriteStartArray(name);
+        foreach (long value in values)
+        {
+            json.WriteNumberValue(value);
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static void WriteNumbers(Utf8JsonWriter json, string name, params double[] values)
+    {
+        json.WriteStartArray(name);
+        foreach (double value in values)
+        {
+            json.WriteNumberValue(value);
+        }
+
+        json.WriteEndArray();
     }
 
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);

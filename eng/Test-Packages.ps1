@@ -201,8 +201,8 @@ foreach ($pv in ([xml](Get-Content (Join-Path $root 'Directory.Packages.props') 
 $coreMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.$Version.nupkg")).package.metadata
 Assert-DependencyGroups 'core' $coreMeta @{
     'net10.0'         = @{}
-    '.NETStandard2.0' = @{ 'System.Memory' = $central['System.Memory'] }
-    '.NETStandard2.1' = @{}
+    '.NETStandard2.0' = @{ 'System.Memory' = $central['System.Memory']; 'System.Text.Json' = $central['System.Text.Json'] }
+    '.NETStandard2.1' = @{ 'System.Text.Json' = $central['System.Text.Json'] }
 }
 
 $skiaMeta = (Get-NuspecXml (Join-Path $feed "OpenSlideSharp.SkiaSharp.$Version.nupkg")).package.metadata
