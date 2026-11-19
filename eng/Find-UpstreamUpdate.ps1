@@ -168,11 +168,12 @@ if ($SelfTest) {
         (Compare-NuGetVersion '4.0.1.3-nightly.20261102.g174630bf' '4.0.1.3') -eq -1 }
     Test-Case 'Compare 1.1.2 < 4.0.1.2' { (Compare-NuGetVersion '1.1.2' '4.0.1.2') -eq -1 }
 
-    function New-Response([int]$Status, [string]$Content = '[]') { [pscustomobject]@{ StatusCode = $Status; Content = $Content } }
+    # Held in a variable: GetNewClosure() captures variables, not functions, so the mocks below must not look up a function by name.
+    $newResponse = { param([int]$Status, [string]$Content = '[]') [pscustomobject]@{ StatusCode = $Status; Content = $Content } }
     function New-Sender($Script) {
         # A mock Send that serves the given statuses in order, repeating the last (a string is a thrown connection error), and counts its calls.
         $state = @{ Calls = 0; Waits = [System.Collections.Generic.List[int]]::new() }
-        $state.Send = { param($Params) $i = $state.Calls++; $x = $Script[[Math]::Min($i, $Script.Count - 1)]; if ($x -is [string]) { throw $x }; New-Response $x }.GetNewClosure()
+        $state.Send = { param($Params) $i = $state.Calls++; $x = $Script[[Math]::Min($i, $Script.Count - 1)]; if ($x -is [string]) { throw $x }; & $newResponse $x }.GetNewClosure()
         $state.Sleep = { param($Seconds) $state.Waits.Add($Seconds) }.GetNewClosure()
         $state
     }
@@ -194,14 +195,14 @@ if ($SelfTest) {
         (Get-ApiOutcome $s) -match 'returned HTTP 403\.$' -and $s.Calls -eq 1 }
     Test-Case 'retry: a connection error then 200 succeeds after one retry' {
         $s = New-Sender @('The operation was canceled.', 200)
-        $s.Send = { param($Params) if ($s.Calls++ -eq 0) { throw 'The operation was canceled.' }; New-Response 200 }.GetNewClosure()
+        $s.Send = { param($Params) if ($s.Calls++ -eq 0) { throw 'The operation was canceled.' }; & $newResponse 200 }.GetNewClosure()
         (Get-ApiOutcome $s) -eq 'ok' -and $s.Calls -eq 2 }
     Test-Case 'retry: connection errors x3 are rethrown after 3 attempts' {
         $s = New-Sender @('boom')
         (Get-ApiOutcome $s) -match 'boom' -and $s.Calls -eq 3 }
     Test-Case 'retry: nuget.org 503 then 200 succeeds' {
         $s = New-Sender @(503)
-        $s.Send = { param($Params) if ($s.Calls++ -eq 0) { New-Response 503 } else { New-Response 200 '{"versions":["1.1.2"]}' } }.GetNewClosure()
+        $s.Send = { param($Params) if ($s.Calls++ -eq 0) { & $newResponse 503 } else { & $newResponse 200 '{"versions":["1.1.2"]}' } }.GetNewClosure()
         $v = @(Get-PublishedNuGetVersions -Send $s.Send -Sleep $s.Sleep -WarningAction Ignore)
         $v.Count -eq 1 -and $v[0] -eq '1.1.2' -and $s.Calls -eq 2 }
     Test-Case 'retry: nuget.org 404 stays an error and is not retried' {
