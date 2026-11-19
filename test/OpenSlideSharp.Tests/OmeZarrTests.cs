@@ -315,11 +315,12 @@ public class OmeZarrTests
     [Fact]
     public void Metadata_EscapesName()
     {
+        // The documents are JSON files, not HTML: non-ASCII text and characters such as < > & ' + stay as they are.
         var generator = new OmeZarrGenerator(
-            FakeRenderSource.SingleLevel(10, 10), "a\"b\\c\u0001\n\t\u00e9", false, Options());
+            FakeRenderSource.SingleLevel(10, 10), "a\"b\\c\u0001\n\t\u00e9<>&'+", false, Options());
 
-        Assert.Equal("a\"b\\c\u0001\n\t\u00e9", Multiscale(generator).GetProperty("name").GetString());
-        Assert.Contains("\"name\":\"a\\\"b\\\\c\\u0001\\n\\t\u00e9\"", EntryText(generator, "zarr.json"));
+        Assert.Equal("a\"b\\c\u0001\n\t\u00e9<>&'+", Multiscale(generator).GetProperty("name").GetString());
+        Assert.Contains("\"name\":\"a\\\"b\\\\c\\u0001\\n\\t\u00e9<>&'+\"", EntryText(generator, "zarr.json"));
     }
 
     // ---- array metadata -------------------------------------------------------------------------------------

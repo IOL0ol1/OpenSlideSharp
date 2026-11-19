@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageVersion Include="System.Memory" Version="4.6.3" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.15" />
     <PackageVersion Include="SkiaSharp" Version="3.119.4" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
     <PackageVersion Include="System.CommandLine" Version="3.0.0" />
